@@ -10,8 +10,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Serve static files from public directory
-app.use(express.static(path.join(__dirname, '../public')));
+// Serve static files from frontend directory
+app.use(express.static(path.join(__dirname, '../../frontend')));
 
 // Initialize Firebase Admin
 // Make sure to set up your Firebase credentials
@@ -38,151 +38,11 @@ const db = null; // Placeholder
 
 // Routes
 
-// GET all tasks
-app.get('/api/tasks', async (req, res) => {
-    try {
-        const snapshot = await db.collection('tasks')
-            .orderBy('createdAt', 'desc')
-            .get();
-
-        const tasks = [];
-        snapshot.forEach(doc => {
-            tasks.push({
-                id: doc.id,
-                ...doc.data()
-            });
-        });
-
-        res.json({
-            success: true,
-            data: tasks
-        });
-    } catch (error) {
-        console.error('Error fetching tasks:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-// GET single task
-app.get('/api/tasks/:id', async (req, res) => {
-    try {
-        const doc = await db.collection('tasks').doc(req.params.id).get();
-
-        if (!doc.exists) {
-            return res.status(404).json({
-                success: false,
-                error: 'Task not found'
-            });
-        }
-
-        res.json({
-            success: true,
-            data: {
-                id: doc.id,
-                ...doc.data()
-            }
-        });
-    } catch (error) {
-        console.error('Error fetching task:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-// POST create task
-app.post('/api/tasks', async (req, res) => {
-    try {
-        const { title, description } = req.body;
-
-        if (!title) {
-            return res.status(400).json({
-                success: false,
-                error: 'Title is required'
-            });
-        }
-
-        const taskRef = await db.collection('tasks').add({
-            title,
-            description: description || '',
-            completed: false,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-
-        res.status(201).json({
-            success: true,
-            data: {
-                id: taskRef.id,
-                title,
-                description,
-                completed: false
-            }
-        });
-    } catch (error) {
-        console.error('Error creating task:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-// PUT update task
-app.put('/api/tasks/:id', async (req, res) => {
-    try {
-        const { title, description, completed } = req.body;
-
-        const updateData = {
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        };
-
-        if (title !== undefined) updateData.title = title;
-        if (description !== undefined) updateData.description = description;
-        if (completed !== undefined) updateData.completed = completed;
-
-        await db.collection('tasks').doc(req.params.id).update(updateData);
-
-        res.json({
-            success: true,
-            message: 'Task updated successfully'
-        });
-    } catch (error) {
-        console.error('Error updating task:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-// DELETE task
-app.delete('/api/tasks/:id', async (req, res) => {
-    try {
-        await db.collection('tasks').doc(req.params.id).delete();
-
-        res.json({
-            success: true,
-            message: 'Task deleted successfully'
-        });
-    } catch (error) {
-        console.error('Error deleting task:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
 // Health check
 app.get('/api/health', (req, res) => {
     res.json({
         success: true,
-        message: 'Server is running'
+        message: 'Backend is running'
     });
 });
 
@@ -241,13 +101,13 @@ function generateMathResponse(question) {
     return 'Great question! I\'m here to help you understand math concepts. Here are my suggestions:\n\n1. Break the problem into smaller parts\n2. Identify what you know and what you need to find\n3. Choose the appropriate formula or method\n4. Work through it step by step\n5. Double-check your answer\n\nFeel free to ask follow-up questions or clarify any specific concepts! Some topics I can help with: derivatives, solving equations, integrals, quadratic formula, limits, algebra, geometry, and trigonometry.';
 }
 
-// Serve index.html for any other route
+// Serve index.html for any other route (SPA fallback)
 app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public/index.html'));
+    res.sendFile(path.join(__dirname, '../../frontend/index.html'));
 });
 
 // Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+    console.log(`FlipAha Backend is running on http://localhost:${PORT}`);
 });

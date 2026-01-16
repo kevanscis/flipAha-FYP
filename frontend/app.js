@@ -4,6 +4,9 @@ const questionInput = document.getElementById('questionInput');
 const messagesContainer = document.getElementById('messagesContainer');
 const responseMessage = document.getElementById('responseMessage');
 
+// API Base URL
+const API_BASE_URL = 'http://localhost:3000';
+
 // Form submission
 questionForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -26,7 +29,7 @@ questionForm.addEventListener('submit', async (e) => {
 
     try {
         // Send question to backend API
-        const response = await fetch('/api/questions', {
+        const response = await fetch(`${API_BASE_URL}/api/questions`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'

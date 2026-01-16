@@ -1,15 +1,320 @@
-# FlipAha - Task Manager Application
+# FlipAha - Online Math Tutor
 
-A full-stack web application built with HTML, CSS, JavaScript (frontend), Node.js/Express (backend), and Firebase (database).
+A full-stack web application that provides personalized math tutoring. Built with HTML, CSS, JavaScript (frontend), Node.js/Express (backend), and local storage for now (Firebase ready).
 
 ## 🚀 Features
 
-- ✅ Create, read, update, and delete tasks
-- ✅ Mark tasks as completed
-- ✅ Real-time task updates with Firestore
+- ✅ Interactive chat-based math tutoring interface
+- ✅ Separated frontend and backend architecture
+- ✅ Beautiful UI with custom fonts and orange theme
+- ✅ Real-time question processing
 - ✅ Responsive design for mobile and desktop
 - ✅ RESTful API backend
-- ✅ Firebase authentication ready
+- ✅ Firebase integration ready
+- ✅ Easy deployment to multiple platforms
+
+## 📁 Project Structure
+
+```
+flipAha-FYP/
+├── frontend/                  # Frontend application
+│   ├── index.html            # Main HTML file
+│   ├── app.js                # Frontend JavaScript
+│   └── styles.css            # Styling
+├── backend/                   # Backend API
+│   ├── src/
+│   │   └── server.js         # Express server
+│   ├── package.json          # Backend dependencies
+│   └── .env                  # Environment variables
+├── SETUP.md                  # Detailed setup guide
+├── package.json              # Root dependencies (optional)
+└── README.md                 # This file
+```
+
+## 🛠️ Tech Stack
+
+- **Frontend**: HTML5, CSS3, Vanilla JavaScript
+- **Backend**: Node.js, Express.js
+- **Database**: Local Storage (Firebase Firestore ready)
+- **Styling**: Custom CSS with orange theme (#f4623a)
+- **Fonts**: Caveat (Flip) + Oswald (Aha)
+- **Deployment**: Firebase, Vercel, Heroku, etc.
+
+## 📋 Prerequisites
+
+- Node.js (v14 or higher)
+- npm (Node Package Manager)
+- Web browser with modern JavaScript support
+- Terminal/Command line access
+
+## ⚙️ Quick Start
+
+### Backend Setup (Port 3001)
+
+```bash
+cd backend
+npm install
+npm start
+```
+
+### Frontend Setup (Port 3000)
+
+In a new terminal:
+```bash
+cd frontend
+npx http-server -p 3000
+```
+
+Then open your browser to: **http://localhost:3000**
+
+## 📚 API Endpoints
+
+### POST /api/questions
+Submit a math question
+```bash
+curl -X POST http://localhost:3001/api/questions \
+  -H "Content-Type: application/json" \
+  -d '{"question":"What is the derivative of x²?"}'
+```
+
+Response:
+```json
+{
+  "success": true,
+  "question": "What is the derivative of x²?",
+  "answer": "To find the derivative of x², we use the power rule..."
+}
+```
+
+### GET /api/health
+Health check
+```bash
+curl http://localhost:3001/api/health
+```
+
+## 🎨 Customization
+
+### Change Theme Color
+Edit [frontend/styles.css](frontend/styles.css):
+```css
+background: linear-gradient(135deg, #YOUR_COLOR 0%, #DARKER_SHADE 100%);
+```
+
+### Supported Math Topics
+The backend currently supports:
+- Derivatives
+- Solving equations
+- Integrals
+- Quadratic formula
+- Limits
+- Algebra
+- Geometry
+- Trigonometry
+
+To add more topics, update `generateMathResponse()` in [backend/src/server.js](backend/src/server.js).
+
+## 🚀 Development Workflow
+
+### Running Both Servers
+
+**Terminal 1 - Backend:**
+```bash
+cd backend
+npm run dev    # With auto-reload using nodemon
+```
+
+**Terminal 2 - Frontend:**
+```bash
+cd frontend
+npx http-server -p 3000
+```
+
+## 🔧 Configuration
+
+### Backend Environment Variables (.env)
+```env
+PORT=3001
+NODE_ENV=development
+FIREBASE_DATABASE_URL=your-firebase-url
+```
+
+### Frontend API Configuration (frontend/app.js)
+```javascript
+const API_BASE_URL = 'http://localhost:3001';  // Development
+const API_BASE_URL = 'https://api.example.com'; // Production
+```
+
+## 📦 Dependencies
+
+### Backend
+- `express` - Web framework
+- `cors` - Cross-origin requests
+- `firebase-admin` - Firebase integration (commented out)
+- `dotenv` - Environment variables
+- `nodemon` - Auto-reload (dev)
+
+### Frontend
+- None! Uses vanilla JavaScript
+
+## 🌐 Deployment
+
+### Deploy Backend
+
+**Heroku:**
+```bash
+cd backend
+heroku create your-app-name
+git push heroku main
+```
+
+**AWS Lambda:**
+- Use AWS SAM or Serverless Framework
+- Set environment variables in AWS
+
+**Google Cloud Run:**
+```bash
+cd backend
+gcloud run deploy flipaha-backend --source .
+```
+
+### Deploy Frontend
+
+**Vercel:**
+```bash
+cd frontend
+vercel
+```
+
+**Netlify:**
+```bash
+cd frontend
+netlify deploy --prod --dir=.
+```
+
+**Firebase Hosting:**
+```bash
+firebase deploy --only hosting
+```
+
+## 🔐 Security
+
+- Frontend uses vanilla JavaScript (XSS protection built-in)
+- Backend validates all inputs
+- CORS enabled for cross-origin requests
+- Environment variables for sensitive data
+
+For production:
+- Enable Firebase authentication
+- Add rate limiting
+- Implement request validation
+- Use HTTPS everywhere
+
+## 🐛 Troubleshooting
+
+### Port Already in Use
+```bash
+# Kill process on port 3001
+lsof -ti:3001 | xargs kill -9
+
+# Kill process on port 3000
+lsof -ti:3000 | xargs kill -9
+```
+
+### Frontend Can't Connect to Backend
+1. Check backend is running on port 3001
+2. Verify `API_BASE_URL` in frontend/app.js
+3. Check for firewall blocks
+4. Open browser console (F12) to see errors
+
+### Module Not Found Errors
+```bash
+cd backend
+rm -rf node_modules package-lock.json
+npm install
+```
+
+## 📖 File Descriptions
+
+### Frontend Files
+
+| File | Purpose |
+|------|---------|
+| [frontend/index.html](frontend/index.html) | Main HTML structure with chat interface |
+| [frontend/app.js](frontend/app.js) | Frontend logic for chat and API calls |
+| [frontend/styles.css](frontend/styles.css) | Styling with orange theme |
+
+### Backend Files
+
+| File | Purpose |
+|------|---------|
+| [backend/src/server.js](backend/src/server.js) | Express server and API endpoints |
+| [backend/package.json](backend/package.json) | Backend dependencies |
+| [backend/.env](backend/.env) | Environment variables |
+
+## 🎓 Learning Resources
+
+- [Express.js Documentation](https://expressjs.com)
+- [Fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API)
+- [Node.js Guide](https://nodejs.org/docs)
+- [CSS Gradients](https://developer.mozilla.org/en-US/docs/Web/CSS/gradient)
+
+## 🤝 Contributing
+
+Feel free to:
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+## 📄 License
+
+This project is open source and available under the ISC License.
+
+## 📞 Support
+
+For issues or questions:
+1. Check [SETUP.md](SETUP.md) for setup issues
+2. Check browser console (F12) for frontend errors
+3. Check backend terminal output for API errors
+4. Review code comments in source files
+
+## 🚀 Next Steps
+
+### To Enhance FlipAha:
+
+1. **Add AI Integration:**
+   - Connect to OpenAI API
+   - Add Gemini API
+   - Build custom ML model
+
+2. **Add Features:**
+   - User authentication
+   - Save conversation history
+   - Step-by-step solution generation
+   - Upload image support
+
+3. **Database Integration:**
+   - Enable Firebase
+   - Add MongoDB
+   - Add PostgreSQL
+
+4. **Frontend Improvements:**
+   - Add React/Vue framework
+   - Add TypeScript
+   - Add state management
+   - Improve accessibility
+
+## 📅 Version History
+
+- **v1.0.0** (Jan 2026): Initial release with separated frontend/backend, math tutor interface
+
+---
+
+**Happy tutoring! 🧮✨**
+
+## 🚀 Features
+
+- ✅ Solve Mathematical equations
 
 ## 📁 Project Structure
 
