@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlipAha - Online Math Tutor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Oswald:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><span class="flip">Flip</span><span class="aha">Aha</span>!</h1>
+            <p>Your Personal Online Math Tutor</p>
+        </header>
+
+        <main class="tutor-main">
+            <div class="chat-section">
+                <div class="messages-container" id="messagesContainer">
+                    <div class="welcome-message">
+                        <h2>Welcome to FlipAha! 👋</h2>
+                        <p>Ask me any math question and I'll help you understand it step by step.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-section">
+                <form id="questionForm">
+                    <div class="input-wrapper">
+                        <textarea 
+                            id="questionInput" 
+                            class="question-input"
+                            placeholder="Ask your math question here...&#10;(e.g., What is the derivative of x²? or Solve 2x + 5 = 13)"
+                            rows="4"
+                        ></textarea>
+                        <button type="submit" class="btn btn-submit">
+                            <span>Get Help</span>
+                            <span class="icon">→</span>
+                        </button>
+                    </div>
+                </form>
+                <div id="responseMessage" class="response-message"></div>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 FlipAha - Math Tutoring Made Easy</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
