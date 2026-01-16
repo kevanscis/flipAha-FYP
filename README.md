@@ -86,12 +86,6 @@ Response:
 }
 ```
 
-### GET /api/health
-Health check
-```bash
-curl http://localhost:3001/api/health
-```
-
 ## 🎨 Customization
 
 ### Change Theme Color
@@ -140,7 +134,7 @@ FIREBASE_DATABASE_URL=your-firebase-url
 
 ### Frontend API Configuration (frontend/app.js)
 ```javascript
-const API_BASE_URL = 'http://localhost:3001';  // Development
+const API_BASE_URL = 'http://localhost:3000';  // Development
 const API_BASE_URL = 'https://api.example.com'; // Production
 ```
 
@@ -221,7 +215,7 @@ lsof -ti:3000 | xargs kill -9
 ```
 
 ### Frontend Can't Connect to Backend
-1. Check backend is running on port 3001
+1. Check backend is running on port 3000
 2. Verify `API_BASE_URL` in frontend/app.js
 3. Check for firewall blocks
 4. Open browser console (F12) to see errors
