@@ -29,13 +29,16 @@ const getSuggestions = async (input) => {
 
 function MessageInput({ onSubmit, disabled }) {
   const [input, setInput] = useState('')
+  const [valueStored, setValueStored] = useState('')
   const [suggestions, setSuggestions] = useState([])
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (input.trim()) {
-      onSubmit(input)
+    const fullValue = valueStored + input
+    if (fullValue.trim()) {
+      onSubmit(fullValue)
       setInput('')
+      setValueStored('')
       setSuggestions([])
     }
   }
@@ -44,9 +47,9 @@ return (
   <form className="question-form" onSubmit={handleSubmit}>
     <div className="input-wrapper">
       <div className='input-dropdown-wrapper'>
-        {input.trim() && (
+        {(valueStored + input).trim() && (
           <div className="latex-preview">
-            <InlineMath math={input} />
+            <InlineMath math={valueStored + input} />
           </div>
         )}
         <textarea
@@ -78,7 +81,8 @@ return (
                 key={index}
                 className="suggestion-item"
                 onClick={() => {
-                  setInput(latex)
+                  setValueStored(valueStored + latex)
+                  setInput('')
                   setSuggestions([])
                 }}
               >
