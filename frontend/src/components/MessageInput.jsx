@@ -15,6 +15,7 @@ const getSuggestions = (input) => {
 function MessageInput({ onSubmit, disabled }) {
   const [input, setInput] = useState('')
   const [suggestions, setSuggestions] = useState([])
+  const [lowerInput, setLowerInput] = useState('') // For Case-Insensitive
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -37,14 +38,16 @@ return (
           onChange={(e) => {
             const value = e.target.value
             setInput(value)
+            setLowerInput(value.toLowerCase())  // For Case-Insensitive
             if (value.trim() === '') {
               // if input is empty, clear suggestions
               setSuggestions([])
               return
             }
-            const result = getSuggestions(value).latex.slice(0,5)
+            const result = getSuggestions(lowerInput).latex.slice(0,5)  // Case-Insensitive Input
             setSuggestions(result)
             console.log(result)
+            console.log('Lowercase input:', value.toLowerCase())  // For Case-Insensitive
           }}
           disabled={disabled}
         />
