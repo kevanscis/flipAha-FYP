@@ -1,83 +1,35 @@
 import { useState } from 'react'
 import './MessageInput.css'
-import 'katex/dist/katex.min.css';
-import katex from 'katex';
-
-const getSuggestions = (input) => {
-  if (!input.trim()) return null
-
-  return {
-    trigger: input,
-    latex: ['x^2', 'x', '\\frac{d}{dx}x^n', '\int x^n dx', 'e^{x}', '\sqrt{x}', '\sin(x)', '\cos(x)', '\tan(x)', '\log(x)']
-  }
-}
 
 function MessageInput({ onSubmit, disabled }) {
   const [input, setInput] = useState('')
-  const [suggestions, setSuggestions] = useState([])
 
   const handleSubmit = (e) => {
     e.preventDefault()
     if (input.trim()) {
       onSubmit(input)
       setInput('')
-      setSuggestions([])
     }
   }
 
-return (
-  <form className="question-form" onSubmit={handleSubmit}>
-    <div className="input-wrapper">
-      <div className='input-dropdown-wrapper'>
+  return (
+    <form className="question-form" onSubmit={handleSubmit}>
+      <div className="input-wrapper">
         <textarea
           className="question-input"
           placeholder="Ask your math question here...&#10;(e.g., What is the derivative of x²? or Solve 2x + 5 = 13)"
-          rows="2"
+          rows="4"
           value={input}
-          onChange={(e) => {
-            const value = e.target.value
-            setInput(value)
-            if (value.trim() === '') {
-              // if input is empty, clear suggestions
-              setSuggestions([])
-              return
-            }
-            const result = getSuggestions(value).latex.slice(0,5)
-            setSuggestions(result)
-            console.log(result)
-          }}
+          onChange={(e) => setInput(e.target.value)}
           disabled={disabled}
         />
-        
-        {suggestions.length > 0 && (
-          <ul className="suggestion-list">
-            {suggestions.map((latex, index) => (
-              <li
-                key={index}
-                className="suggestion-item"
-                onClick={() => {
-                  setInput(latex)
-                  setSuggestions([])
-                }}
-                dangerouslySetInnerHTML={{ __html: katex.renderToString(latex, { throwOnError: false }) }}
-              >
-              </li>
-            ))}
-          </ul>
-        )}
+        <button type="submit" className="btn btn-submit" disabled={disabled}>
+          <span>Get Help</span>
+          <span className="icon">→</span>
+        </button>
       </div>
-      
-      
-      <button type="submit" className="btn btn-submit" disabled={disabled}>
-        <span>Get Help</span>
-        <span className="icon">→</span>
-      </button>
-      
-      
-
-    </div>
-  </form>
-)
+    </form>
+  )
 }
 
 export default MessageInput
