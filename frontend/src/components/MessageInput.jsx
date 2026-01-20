@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import './MessageInput.css'
 import 'katex/dist/katex.min.css';
-import katex from 'katex';
+import { InlineMath } from 'react-katex';
 
 const API_BASE_URL = 'http://localhost:5000/api'
 
@@ -45,10 +45,9 @@ return (
     <div className="input-wrapper">
       <div className='input-dropdown-wrapper'>
         {input.trim() && (
-          <div 
-            className="latex-preview"
-            dangerouslySetInnerHTML={{ __html: katex.renderToString(input, { throwOnError: false }) }}
-          />
+          <div className="latex-preview">
+            <InlineMath math={input} />
+          </div>
         )}
         <textarea
           className="question-input"
@@ -82,8 +81,8 @@ return (
                   setInput(latex)
                   setSuggestions([])
                 }}
-                dangerouslySetInnerHTML={{ __html: katex.renderToString(latex, { throwOnError: false }) }}
               >
+                <InlineMath math={latex} />
               </li>
             ))}
           </ul>
