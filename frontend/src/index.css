@@ -50,7 +50,7 @@ html, body, #root {
 header {
   background: linear-gradient(135deg, #f4623a, #ff8c42);
   color: white;
-  padding: 2rem;
+  padding: 1rem;
   text-align: center;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
@@ -81,7 +81,7 @@ header p {
 }
 
 footer {
-  padding: 1rem;
+  padding: 0.5rem;
   text-align: center;
   color: var(--text-light);
   font-size: 0.875rem;
@@ -151,6 +151,7 @@ footer {
 
 /* Input Section */
 .input-section {
+  flex: 0.7;
   padding: 1.5rem;
   border-top: 1px solid var(--border-color);
   background-color: white;
@@ -165,7 +166,7 @@ footer {
 }
 
 .question-input {
-  padding: 1rem;
+  padding: rem;
   border: 2px solid var(--border-color);
   border-radius: 0.5rem;
   font-size: 1rem;
