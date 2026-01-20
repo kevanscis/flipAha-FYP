@@ -3,12 +3,27 @@ import './MessageInput.css'
 import 'katex/dist/katex.min.css';
 import katex from 'katex';
 
-const getSuggestions = (input) => {
-  if (!input.trim()) return null
+const API_BASE_URL = 'http://localhost:5000/api'
 
-  return {
-    trigger: input,
-    latex: ['x^2', 'x', '\\frac{d}{dx}x^n', '\int x^n dx', 'e^{x}', '\sqrt{x}', '\sin(x)', '\cos(x)', '\tan(x)', '\log(x)']
+const getSuggestions = async (input) => {
+  if (!input.trim()) return []
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/suggestions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ input })
+    })
+    
+    if (!response.ok) throw new Error('Failed to fetch suggestions')
+    
+    const data = await response.json()
+    return data.success ? data.suggestions : []
+  } catch (error) {
+    console.error('Error fetching suggestions:', error)
+    return []
   }
 }
 
@@ -29,6 +44,12 @@ return (
   <form className="question-form" onSubmit={handleSubmit}>
     <div className="input-wrapper">
       <div className='input-dropdown-wrapper'>
+        {input.trim() && (
+          <div 
+            className="latex-preview"
+            dangerouslySetInnerHTML={{ __html: katex.renderToString(input, { throwOnError: false }) }}
+          />
+        )}
         <textarea
           className="question-input"
           placeholder="Ask your math question here...&#10;(e.g., What is the derivative of x²? or Solve 2x + 5 = 13)"
@@ -42,9 +63,11 @@ return (
               setSuggestions([])
               return
             }
-            const result = getSuggestions(value).latex.slice(0,5)
-            setSuggestions(result)
-            console.log(result)
+            // Fetch suggestions from backend
+            getSuggestions(value).then(result => {
+              setSuggestions(result)
+              console.log(result)
+            })
           }}
           disabled={disabled}
         />
