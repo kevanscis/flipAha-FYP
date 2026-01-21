@@ -1,6 +1,6 @@
 .image-gallery {
   background: white;
-  padding: 40px;
+  padding: 20px;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   border: 1px solid #e5e7eb;
@@ -10,13 +10,13 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .gallery-header h2 {
   margin: 0;
   color: #1f2937;
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
   letter-spacing: -0.5px;
 }
@@ -25,7 +25,7 @@
 .gallery-error,
 .gallery-empty {
   text-align: center;
-  padding: 40px 20px;
+  padding: 20px 20px;
   color: #6b7280;
 }
 
@@ -35,12 +35,13 @@
 
 .gallery-stats {
   display: flex;
-  gap: 24px;
-  margin-bottom: 24px;
-  padding: 16px;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 12px;
   background: #f9fafb;
   border-radius: 8px;
   border: 1px solid #e5e7eb;
+  flex-wrap: wrap;
 }
 
 .stat {
@@ -50,22 +51,23 @@
 }
 
 .stat-label {
-  font-size: 12px;
+  font-size: 11px;
   color: #6b7280;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .stat-value {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 600;
   color: #333;
 }
 
 .gallery-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: stretch;
 }
 
 .gallery-item {

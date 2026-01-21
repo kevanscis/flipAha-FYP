@@ -296,21 +296,24 @@ function LatexEditor({ sessionId, imageId, initialLatex, confidence, imageData, 
           <div className="original-image-container">
             <img src={imageData} alt={filename || 'Equation'} />
             {(filename || renaming) && (
-              <div className="image-filename" style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <div className="image-filename" style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', minHeight: '40px' }}>
                 {!renaming ? (
                   <>
-                    {filename && <span>{filename}</span>}
+                    <span style={{ fontWeight: 600, color: '#374151', fontSize: '16px' }}>{filename}</span>
                     <button
                       type="button"
-                      className="btn btn-small btn-secondary"
                       onClick={() => setRenaming(true)}
                       disabled={saving}
+                      title="Rename"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', padding: '4px', opacity: 0.6, transition: 'opacity 0.2s' }}
+                      onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
+                      onMouseLeave={(e) => e.currentTarget.style.opacity = 0.6}
                     >
-                      Rename
+                      ✏️
                     </button>
                   </>
                 ) : (
-                  <>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     <input
                       type="text"
                       value={renameValue}
@@ -323,7 +326,14 @@ function LatexEditor({ sessionId, imageId, initialLatex, confidence, imageData, 
                         }
                       }}
                       placeholder="Enter a name"
-                      style={{ maxWidth: '420px' }}
+                      style={{ 
+                        padding: '6px 12px', 
+                        borderRadius: '6px', 
+                        border: '1px solid #d1d5db', 
+                        fontSize: '14px',
+                        outline: 'none',
+                        width: '200px'
+                      }}
                       aria-label="Rename selected image"
                       autoFocus
                     />
@@ -332,8 +342,9 @@ function LatexEditor({ sessionId, imageId, initialLatex, confidence, imageData, 
                       className="btn btn-small btn-primary"
                       onClick={handleRenameSave}
                       disabled={saving}
+                      title="Save"
                     >
-                      Save
+                      ✓
                     </button>
                     <button
                       type="button"
@@ -343,10 +354,11 @@ function LatexEditor({ sessionId, imageId, initialLatex, confidence, imageData, 
                         setRenameValue(filename || '')
                       }}
                       disabled={saving}
+                      title="Cancel"
                     >
-                      Cancel
+                      ✕
                     </button>
-                  </>
+                  </div>
                 )}
               </div>
             )}
@@ -443,16 +455,6 @@ function LatexEditor({ sessionId, imageId, initialLatex, confidence, imageData, 
         )}
       </div>
 
-      <div className="rating-section">
-        <h4>Rate this conversion:</h4>
-        <div className="stars-container">
-          {renderStars()}
-        </div>
-        {rating && (
-          <p className="rating-text">Thank you for rating: {rating} stars</p>
-        )}
-      </div>
-
       <div className="copy-section">
         <button
           onClick={() => {
@@ -463,6 +465,16 @@ function LatexEditor({ sessionId, imageId, initialLatex, confidence, imageData, 
         >
           Copy LaTeX
         </button>
+      </div>
+
+      <div className="rating-section">
+        <h4>Rate this conversion:</h4>
+        <div className="stars-container">
+          {renderStars()}
+        </div>
+        {rating && (
+          <p className="rating-text">Thank you for rating: {rating} stars</p>
+        )}
       </div>
     </div>
   )

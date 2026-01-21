@@ -307,8 +307,8 @@ function ImageGallery({ sessionId, onImageSelect, onImageRenamed, refreshTrigger
                           if (e.key === 'Enter') saveRename(image.id)
                           if (e.key === 'Escape') cancelRename()
                         }}
-                        placeholder="Enter a name"
-                        style={{ flex: 1, minWidth: 0 }}
+                        placeholder="Name"
+                        style={{ flex: 1, minWidth: 0, padding: '4px 8px', borderRadius: '4px', border: '1px solid #d1d5db', fontSize: '14px' }}
                         aria-label="Rename image"
                         autoFocus
                       />
@@ -316,9 +316,9 @@ function ImageGallery({ sessionId, onImageSelect, onImageRenamed, refreshTrigger
                         onClick={() => saveRename(image.id)}
                         className="btn btn-small btn-primary"
                         type="button"
-                        title="Save name"
+                        title="Save"
                       >
-                        Save
+                        ✓
                       </button>
                       <button
                         onClick={cancelRename}
@@ -326,7 +326,7 @@ function ImageGallery({ sessionId, onImageSelect, onImageRenamed, refreshTrigger
                         type="button"
                         title="Cancel"
                       >
-                        Cancel
+                        ✕
                       </button>
                     </div>
                   ) : (

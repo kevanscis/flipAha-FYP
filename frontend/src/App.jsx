@@ -187,7 +187,7 @@ function App() {
             </div>
             
             <div className="equation-results">
-              <div className="equation-right">
+              <div className="equation-sidebar">
                 <ImageGallery
                   sessionId={sessionId}
                   onImageSelect={handleImageSelect}
@@ -196,8 +196,8 @@ function App() {
                 />
               </div>
 
-              <div className="equation-left">
-                {currentLatex && (
+              <div className="equation-main">
+                {currentLatex ? (
                   <LatexEditor
                     sessionId={sessionId}
                     imageId={currentLatex.imageId}
@@ -211,6 +211,14 @@ function App() {
                     }}
                     onRename={(newFilename) => handleImageRenamed(currentLatex.imageId, newFilename)}
                   />
+                ) : (
+                  <div className="equation-placeholder">
+                    <div className="placeholder-content">
+                      <span className="placeholder-icon">👈</span>
+                      <h3>Select an image</h3>
+                      <p>Choose an image from the gallery or upload a new one to view and edit LaTeX.</p>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
