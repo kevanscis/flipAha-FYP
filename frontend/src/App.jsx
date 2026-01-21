@@ -78,7 +78,12 @@ function App() {
   }
 
   const handleImageUploaded = (imageData) => {
-    setCurrentImage(imageData)
+    // ImageUploader may send partial updates (e.g., convert result only).
+    // Merge so we don't lose preview/filename and the LaTeX panel can render immediately.
+    setCurrentImage(prev => ({
+      ...(prev || {}),
+      ...(imageData || {})
+    }))
     
     if (imageData.converted && imageData.latex) {
       setCurrentLatex({

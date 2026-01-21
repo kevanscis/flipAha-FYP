@@ -165,6 +165,15 @@ function ImageUploader({ sessionId, onImageUploaded, onSessionCreated }) {
       setCompletedCrop(null)
       setCompletedCropPercent(null)
 
+      // Notify parent so the LaTeX panel shows the cropped image immediately.
+      if (onImageUploaded) {
+        onImageUploaded({
+          imageId: uploadedImageId,
+          filename: selectedFile?.name,
+          preview: data.preview
+        })
+      }
+
     } catch (err) {
       setError(err.message)
     }
@@ -202,6 +211,8 @@ function ImageUploader({ sessionId, onImageUploaded, onSessionCreated }) {
       if (onImageUploaded) {
         onImageUploaded({
           imageId: uploadedImageId,
+          filename: selectedFile?.name,
+          preview: previewUrl,
           latex: data.latex,
           confidence: data.confidence,
           converted: true

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MathJax, MathJaxContext } from 'better-react-mathjax'
 import './LatexEditor.css'
 
@@ -92,6 +92,17 @@ function LatexEditor({ sessionId, imageId, initialLatex, confidence, imageData, 
   const [error, setError] = useState(null)
   const [typesetError, setTypesetError] = useState(null)
   const typesetContainerRef = useRef(null)
+
+  // IMPORTANT: keep internal latex state in sync with the selected image.
+  // Without this, switching images or converting a new image won't update until refresh.
+  useEffect(() => {
+    setLatex(initialLatex || '')
+    setIsEditing(false)
+    setSaving(false)
+    setError(null)
+    setTypesetError(null)
+    setRating(null)
+  }, [imageId, initialLatex])
 
   const renderPrep = useMemo(() => {
     const expr = sanitizeLatexForMathJax(latex)
