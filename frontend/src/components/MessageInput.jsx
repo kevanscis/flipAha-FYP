@@ -2,29 +2,15 @@ import { useState } from 'react'
 import './MessageInput.css'
 import 'katex/dist/katex.min.css';
 import { InlineMath } from 'react-katex';
+import { getLatexSuggestions } from '../utils/mathToLatex'
 
-const API_BASE_URL = 'http://localhost:5000/api'
-
-const getSuggestions = async (input) => {
+const getSuggestions = (input) => {
   if (!input.trim()) return []
-
-  try {
-    const response = await fetch(`${API_BASE_URL}/suggestions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ input })
-    })
-    
-    if (!response.ok) throw new Error('Failed to fetch suggestions')
-    
-    const data = await response.json()
-    return data.success ? data.suggestions : []
-  } catch (error) {
-    console.error('Error fetching suggestions:', error)
-    return []
-  }
+  
+  // Return 1-5 suggestions
+  const suggestions = getLatexSuggestions(input, 5)
+  // Filter out suggestions that are the same as input
+  return suggestions.filter(s => s !== input)
 }
 
 function MessageInput({ onSubmit, disabled }) {
@@ -67,12 +53,11 @@ return (
               setSuggestions([])
               return
             }
-            // Fetch suggestions from backend using case-insensitive input
-            getSuggestions(lowerInput).then(result => {
-              setSuggestions(result)
-              console.log(result)
-              console.log('Lowercase input:', value.toLowerCase())  // For Case-Insensitive
-            })
+            // Get suggestions using mathToLatex from Layer1.js
+            const result = getSuggestions(value.toLowerCase())
+            setSuggestions(result)
+            console.log(result)
+            console.log('Lowercase input:', value.toLowerCase())  // For Case-Insensitive
           }}
           disabled={disabled}
         />
