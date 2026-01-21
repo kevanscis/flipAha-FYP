@@ -52,12 +52,13 @@ header {
   color: white;
   padding: 2rem;
   text-align: center;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(244, 98, 58, 0.3);
 }
 
 header h1 {
   font-size: 3rem;
   font-family: 'Caveat', cursive;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
   font-weight: 700;
   margin-bottom: 0.5rem;
   letter-spacing: 2px;
@@ -78,6 +79,38 @@ header p {
   font-size: 1rem;
   opacity: 0.95;
   font-family: 'Oswald', sans-serif;
+}
+
+/* Tab Navigation */
+.tab-navigation {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.tab-button {
+  padding: 0.75rem 1.5rem;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.tab-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+.tab-button.active {
+  background: white;
+  color: #f4623a;
+  border-color: white;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 footer {
@@ -258,6 +291,49 @@ footer {
   background-color: #dbeafe;
   color: #0c4a6e;
   border-left: 4px solid var(--primary-color);
+}
+
+/* Equation Section Layout */
+.equation-section {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px;
+  overflow-y: auto;
+  background-color: var(--bg-light);
+}
+
+.equation-uploader {
+  width: 100%;
+}
+
+.equation-results {
+  display: grid;
+  grid-template-columns: minmax(400px, 1fr) minmax(400px, 1fr);
+  gap: 24px;
+}
+
+.equation-left {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+.equation-right {
+  overflow-y: auto;
+  max-height: 800px;
+  min-width: 0;
+}
+
+@media (max-width: 1024px) {
+  .equation-results {
+    grid-template-columns: 1fr;
+  }
+  
+  .equation-right {
+    max-height: 600px;
+  }
 }
 
 /* Responsive */

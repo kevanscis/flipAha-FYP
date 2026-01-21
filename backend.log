@@ -1,0 +1,23 @@
+/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/transformers/utils/generic.py:441: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.
+  _torch_pytree._register_pytree_node(
+/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/transformers/utils/generic.py:309: FutureWarning: `torch.utils._pytree._register_pytree_node` is deprecated. Please use `torch.utils._pytree.register_pytree_node` instead.
+  _torch_pytree._register_pytree_node(
+/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/albumentations/__init__.py:24: UserWarning: A new version of Albumentations is available: 2.0.8 (you have 1.4.24). Upgrade using: pip install -U albumentations. To disable automatic update checks, set the environment variable NO_ALBUMENTATIONS_UPDATE to 1.
+  check_for_updates()
+/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/pydantic/_internal/_serializers.py:44: UserWarning: Pydantic serializer warnings:
+  PydanticSerializationUnexpectedValue(Expected `dict[str, any]` - serialized value may not be as expected [input_value=UniformParams(noise_type=... 0.058823529411764705)]), input_type=UniformParams])
+  v = handler(item, index)
+/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/pydantic/main.py:463: UserWarning: Pydantic serializer warnings:
+  PydanticSerializationUnexpectedValue(Expected `dict[str, any]` - serialized value may not be as expected [input_value=UniformParams(noise_type=... 0.058823529411764705)]), input_type=UniformParams])
+  return self.__pydantic_serializer__.to_python(
+Initializing Pix2Tex model on cpu...
+Pix2Tex model loaded successfully
+ * Serving Flask app 'app'
+ * Debug mode: off
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5001
+ * Running on http://192.168.1.7:5001
+[33mPress CTRL+C to quit[0m
+127.0.0.1 - - [21/Jan/2026 01:04:10] "POST /api/session HTTP/1.1" 200 -
+127.0.0.1 - - [21/Jan/2026 01:10:05] "POST /api/session HTTP/1.1" 200 -
