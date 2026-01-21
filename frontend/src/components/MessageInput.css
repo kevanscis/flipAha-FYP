@@ -2,14 +2,27 @@
   width: 100%;
 }
 
-.input-wrapper {
+/* .input-wrapper {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 1rem;
   align-items: flex-end;
+} */
+
+.input-wrapper {
+  display: flex;
+  flex-direction: column; /* stack textarea + button vertically */
+  position: relative;
+}
+
+.input-dropdown-wrapper {
+  position: relative; /* reference for absolute dropdown */
+  width: 100%;
 }
 
 .question-input {
+  width: 100%;
   padding: 1rem;
   border: 2px solid #e5e7eb;
   border-radius: 0.5rem;
@@ -29,6 +42,70 @@
   background-color: #f9fafb;
   color: #6b7280;
   cursor: not-allowed;
+}
+
+.latex-preview {
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+  background-color: #f9fafb;
+  border: 2px solid #e5e7eb;
+  border-radius: 0.5rem;
+  min-height: 1.5rem;
+  font-size: 1.1rem;
+  color: #1f2937;
+}
+
+.suggestion-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  width: 100%;
+  
+  margin-top: 4px;
+  padding:0;
+  list-style: none;
+
+  background-color: #ffffff;
+  border: 2px solid #e5e7eb;
+  border-radius: 0.5rem;
+
+  max-height: 160px;
+  max-width: 80%;
+  overflow-y: auto;
+
+  z-index: 10;
+}
+
+.suggestion-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.suggestion-list::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.suggestion-list::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.suggestion-list::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.suggestion-item {
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color 0.2s;
+}
+
+.suggestion-item:hover {
+  background-color: #f9fafb;
 }
 
 .btn {

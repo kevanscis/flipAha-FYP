@@ -74,6 +74,64 @@ def ask_question():
             'error': str(e)
         }), 500
 
+@app.route('/api/suggestions', methods=['OPTIONS'])
+def preflight_suggestions():
+    """Explicit CORS preflight for /api/suggestions"""
+    return jsonify({'status': 'ok'}), 200
+
+@app.route('/api/suggestions', methods=['POST'])
+def get_suggestions():
+    """Get LaTeX suggestions based on user input"""
+    try:
+        data = request.json
+        user_input = data.get('input', '').strip().lower()
+        
+        # Define suggestions based on keywords in input
+        all_suggestions = {
+            'derivative': ['\\frac{d}{dx}x^n', '\\frac{d^2}{dx^2}', "\\frac{d}{dx}\\sin(x)", "\\frac{d}{dx}e^{x}"],
+            'integral': ['\\int x^n dx', '\\int \\sin(x) dx', '\\int e^{x} dx', '\\int \\frac{1}{x} dx'],
+            'power': ['x^2', 'x^3', 'x^{1/2}', '2^x'],
+            'trig': ['\\sin(x)', '\\cos(x)', '\\tan(x)', '\\cot(x)', '\\sec(x)', '\\csc(x)'],
+            'log': ['\\log(x)', '\\ln(x)', '\\log_{10}(x)', 'e^{x}'],
+            'fraction': ['\\frac{a}{b}', '\\frac{x}{y}', '\\frac{1}{2}'],
+            'sqrt': ['\\sqrt{x}', '\\sqrt[3]{x}', '\\sqrt[n]{x}'],
+            'limit': ['\\lim_{x \\to a}', '\\lim_{x \\to \\infty}', '\\lim_{x \\to 0}'],
+            'summation': ['\\sum_{i=1}^{n}', '\\prod_{i=1}^{n}'],
+        }
+        
+        keywords_map = {
+            'derivative': ['deriv', 'differentiat', 'd/dx'],
+            'integral': ['integr', 'antiderivat'],
+            'power': ['power', 'exponent', '^'],
+            'trig': ['sin', 'cos', 'tan', 'trigon'],
+            'log': ['log', 'ln', 'natural'],
+            'fraction': ['frac', 'divide', 'division'],
+            'sqrt': ['sqrt', 'root', 'square root'],
+            'limit': ['limit', 'lim'],
+            'summation': ['sum', 'sigma'],
+        }
+        
+        # Find matching suggestions
+        suggestions = []
+        for category, keywords in keywords_map.items():
+            if any(keyword in user_input for keyword in keywords):
+                suggestions.extend(all_suggestions.get(category, []))
+        
+        # If no specific match, return general LaTeX suggestions
+        if not suggestions:
+            suggestions = ['x^2', 'x', '\\frac{a}{b}', 'e^{x}', '\\sqrt{x}']
+        
+        # Return max 5 suggestions
+        return jsonify({
+            'success': True,
+            'suggestions': suggestions[:5]
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
