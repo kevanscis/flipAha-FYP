@@ -99,6 +99,26 @@ class SessionManager:
         image['edited_latex'] = edited_latex
         self.sessions[session_id]['last_accessed'] = time.time()
         return True
+
+    def rename_image(self, session_id: str, image_id: str, filename: str) -> bool:
+        """Update the display filename for an image."""
+        image = self.get_image(session_id, image_id)
+        if not image:
+            return False
+
+        name = (filename or '').strip()
+        if not name:
+            return False
+
+        # Keep this as a display name (not a filesystem path).
+        name = name.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+        name = name.replace('/', '-').replace('\\', '-')
+        if len(name) > 160:
+            name = name[:160].rstrip()
+
+        image['filename'] = name
+        self.sessions[session_id]['last_accessed'] = time.time()
+        return True
     
     def rate_image(self, session_id: str, image_id: str, rating: int) -> bool:
         """

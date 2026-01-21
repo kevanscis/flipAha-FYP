@@ -112,6 +112,14 @@ function App() {
     })
   }
 
+  const handleImageRenamed = (imageId, filename) => {
+    setCurrentImage(prev => {
+      if (!prev || prev.imageId !== imageId) return prev
+      return { ...prev, filename }
+    })
+    setGalleryRefresh(prev => prev + 1)
+  }
+
   return (
     <div className="container">
       <header>
@@ -183,6 +191,7 @@ function App() {
                 <ImageGallery
                   sessionId={sessionId}
                   onImageSelect={handleImageSelect}
+                  onImageRenamed={handleImageRenamed}
                   refreshTrigger={galleryRefresh}
                 />
               </div>
@@ -200,6 +209,7 @@ function App() {
                       setCurrentLatex({ ...currentLatex, latex: newLatex })
                       setGalleryRefresh(prev => prev + 1)
                     }}
+                    onRename={(newFilename) => handleImageRenamed(currentLatex.imageId, newFilename)}
                   />
                 )}
               </div>

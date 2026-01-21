@@ -92,11 +92,13 @@ function prepareLatexForPreview(input) {
   return { valid: fixedValid, fixedExpr }
 }
 
-function ImageGallery({ sessionId, onImageSelect, refreshTrigger }) {
+function ImageGallery({ sessionId, onImageSelect, onImageRenamed, refreshTrigger }) {
   const [images, setImages] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [stats, setStats] = useState(null)
+  const [renamingId, setRenamingId] = useState(null)
+  const [renameValue, setRenameValue] = useState('')
 
   const mathJaxConfig = {
     loader: {
@@ -196,6 +198,52 @@ function ImageGallery({ sessionId, onImageSelect, refreshTrigger }) {
     }
   }
 
+  const beginRename = (image) => {
+    setRenamingId(image.id)
+    setRenameValue(image.filename || '')
+  }
+
+  const cancelRename = () => {
+    setRenamingId(null)
+    setRenameValue('')
+  }
+
+  const saveRename = async (imageId) => {
+    const nextName = (renameValue || '').trim()
+    if (!nextName) {
+      alert('Please enter a name.')
+      return
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/image/${imageId}/rename`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          filename: nextName
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to rename image')
+      }
+
+      setImages(prev => prev.map(img => (img.id === imageId ? { ...img, filename: data.filename } : img)))
+      if (onImageRenamed) {
+        onImageRenamed(imageId, data.filename)
+      }
+      cancelRename()
+
+    } catch (err) {
+      alert(`Error renaming image: ${err.message}`)
+    }
+  }
+
   const formatDate = (dateString) => {
     const date = new Date(dateString)
     return date.toLocaleString()
@@ -249,14 +297,61 @@ function ImageGallery({ sessionId, onImageSelect, refreshTrigger }) {
             {images.map((image) => (
               <div key={image.id} className="gallery-item">
                 <div className="item-header">
-                  <h3>{image.filename}</h3>
-                  <button
-                    onClick={() => handleDelete(image.id)}
-                    className="btn-delete"
-                    title="Delete"
-                  >
-                    🗑️
-                  </button>
+                  {renamingId === image.id ? (
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', width: '100%' }}>
+                      <input
+                        type="text"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveRename(image.id)
+                          if (e.key === 'Escape') cancelRename()
+                        }}
+                        placeholder="Enter a name"
+                        style={{ flex: 1, minWidth: 0 }}
+                        aria-label="Rename image"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => saveRename(image.id)}
+                        className="btn btn-small btn-primary"
+                        type="button"
+                        title="Save name"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={cancelRename}
+                        className="btn btn-small btn-secondary"
+                        type="button"
+                        title="Cancel"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <h3 style={{ margin: 0 }}>{image.filename}</h3>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <button
+                          onClick={() => beginRename(image)}
+                          className="btn-delete"
+                          title="Rename"
+                          type="button"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => handleDelete(image.id)}
+                          className="btn-delete"
+                          title="Delete"
+                          type="button"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {image.latex && (

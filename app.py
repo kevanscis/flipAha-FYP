@@ -499,6 +499,42 @@ def delete_image(image_id):
             'error': str(e)
         }), 500
 
+
+@app.route('/api/image/<image_id>/rename', methods=['PUT'])
+def rename_image(image_id):
+    """Rename an image (display name only). JSON: {session_id, filename}"""
+    try:
+        data = request.get_json(silent=True) or {}
+        session_id = data.get('session_id')
+        filename = data.get('filename')
+
+        if not session_id or filename is None:
+            return jsonify({
+                'success': False,
+                'error': 'Missing required fields'
+            }), 400
+
+        success = session_manager.rename_image(session_id, image_id, filename)
+        if not success:
+            return jsonify({
+                'success': False,
+                'error': 'Image not found or invalid filename'
+            }), 404
+
+        image_data = session_manager.get_image(session_id, image_id)
+        return jsonify({
+            'success': True,
+            'image_id': image_id,
+            'filename': image_data['filename'],
+            'message': 'Image renamed successfully'
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/api/latex', methods=['PUT'])
 def update_latex():
     """

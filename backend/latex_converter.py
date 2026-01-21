@@ -19,7 +19,7 @@ class LatexConverter:
     def __init__(self):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model = None
-        self.model_type = "pix2tex"  # or "trocr"
+        self.model_type = "pix2text"  # default; will fall back if unavailable
         self._initialized = False
         self._init_error: Optional[str] = None
         self._init_lock = threading.Lock()
@@ -43,7 +43,7 @@ class LatexConverter:
     
     def _initialize_model(self):
         """Initialize the LaTeX OCR model"""
-        prefer = (os.getenv('LATEX_OCR_ENGINE', 'pix2tex') or 'pix2tex').strip().lower()
+        prefer = (os.getenv('LATEX_OCR_ENGINE', 'pix2text') or 'pix2text').strip().lower()
 
         # Pix2Text can be enabled explicitly. It may download models on first run.
         if prefer == 'pix2text' and Pix2Text is not None:

@@ -1,216 +1,179 @@
-# FlipAha - Math Tutor Application
+# FlipAha
 
-A modern web application with a **Python Flask** backend and **React + Vite** frontend for interactive math tutoring and equation image-to-LaTeX conversion.
+FlipAha is a local, full-stack demo app with:
 
-## ✨ Features
+- 💬 **Chat Tutor**: simple math Q&A (keyword-based responses)
+- 📸 **Equation Scanner**: upload/crop an equation image → convert to LaTeX → edit/rate/delete → browse session gallery
 
-### 💬 Chat Tutor
-- Interactive Q&A with math explanations
-- Step-by-step solutions
-- Topic classification
+The backend is **Flask** (Python), and the frontend is **React + Vite**.
 
-### 📸 Equation Scanner (NEW!)
-- **Upload handwritten equation images**
-- **AI-powered LaTeX conversion** using transformer models
-- **Interactive image cropping**
-- **Quality warnings** for optimal accuracy
-- **Edit converted LaTeX** before use
-- **Rate conversions** for quality tracking
-- **Session-based image gallery**
-- **Delete and manage** your images
+## Quick Start
 
-## 🚀 Quick Start
+### Prerequisites
 
-### Automated Setup (Recommended)
+- Python 3.10+ recommended
+- Node.js 16+
 
-```bash
-./setup.sh
-```
+### Install
 
-### Manual Setup
+Backend:
 
-1. **Install Python Dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. **Install Node Dependencies**
-   ```bash
-   cd frontend
-   npm install
-   ```
-
-3. **Run Backend**
-   ```bash
-   python app.py
-   ```
-
-4. **Run Frontend** (in new terminal)
-   ```bash
-   cd frontend
-   npm run dev
-   ```
-
-5. **Open Browser**
-   Navigate to: http://localhost:5173
-
-## 📖 Documentation
-
-- **[QUICKSTART.md](QUICKSTART.md)** - Get started in 5 minutes
-- **[EQUATION_FEATURES.md](EQUATION_FEATURES.md)** - Detailed equation scanner documentation
-- **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - Technical implementation details
-
-## Project Structure
-
-```
-flipAha-FYP/
-├── app.py                          # Flask backend with API endpoints
-├── requirements.txt                # Python dependencies (ML models included)
-├── setup.sh                        # Automated setup script
-├── test_backend.py                 # Backend testing suite
-├── QUICKSTART.md                   # Quick start guide
-├── EQUATION_FEATURES.md            # Equation scanner documentation
-├── IMPLEMENTATION_SUMMARY.md       # Technical details
-├── backend/
-│   ├── image_processor.py         # Image quality & preprocessing
-│   ├── latex_converter.py         # ML model for LaTeX conversion
-│   ├── session_manager.py         # Session-based storage
-│   └── firebase_*.py              # Firebase integration
-└── frontend/
-    ├── package.json               # Node dependencies
-    ├── vite.config.js            # Vite configuration
-    └── src/
-        ├── App.jsx               # Main app with tabs
-        ├── index.css             # Global styles
-        └── components/
-            ├── ChatMessage.jsx   # Chat UI
-            ├── MessageInput.jsx  # Input UI
-            ├── ImageUploader.jsx # Image upload & crop
-            ├── LatexEditor.jsx   # LaTeX edit & rate
-            └── ImageGallery.jsx  # Image management
-```
-
-## 🛠️ Tech Stack
-
-### Backend
-- **Flask** - Web framework
-- **Pix2Tex** - LaTeX OCR model (transformer-based)
-- **Pix2Text** - Optional OCR engine (enable with `LATEX_OCR_ENGINE=pix2text`)
-- **OpenCV** - Image processing
-- **PyTorch** - ML framework
-- **Pillow** - Image manipulation
-
-## OCR Engine Selection
-
-By default, the backend uses **Pix2Tex**.
-
-To use **Pix2Text** instead:
-
-```bash
-LATEX_OCR_ENGINE=pix2text python app.py
-```
-
-Note: the first conversion request may take longer while Pix2Text downloads/initializes its models.
-
-### Frontend
-- **React 18** - UI framework
-- **Vite** - Build tool
-- **KaTeX** - LaTeX rendering
-- **react-image-crop** - Image cropping
-
-## 📋 API Endpoints
-
-### Chat
-- `POST /api/questions` - Ask math questions
-
-### Equation Scanner
-- `POST /api/session` - Create session
-- `POST /api/upload` - Upload image
-- `POST /api/crop` - Crop image
-- `POST /api/convert` - Convert to LaTeX
-- `GET /api/images` - List all images
-- `GET /api/image/:id` - Get image details
-- `DELETE /api/image/:id` - Delete image
-- `PUT /api/latex` - Update LaTeX
-- `POST /api/rate` - Rate conversion
-
-## Setup Instructions
-
-### 1. Install Python Dependencies (Backend)
-
-```ensure you are in flipAha-FYP folder```
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Install Node Dependencies (Frontend)
+Frontend:
 
 ```bash
 cd frontend
 npm install
 ```
 
-### 3. Run the Flask Backend
+### Run
+
+Terminal 1 (backend):
 
 ```bash
 python app.py
 ```
 
-The backend will start on `http://localhost:5000`
-
-### 4. Run the React Frontend (in a separate terminal)
+Terminal 2 (frontend):
 
 ```bash
 cd frontend
 npm run dev
 ```
 
-The frontend will start on `http://localhost:5173`
+Open: http://localhost:5173
 
-## 🧪 Testing
+## Configuration
 
-Test backend functionality:
-```bash
-python test_backend.py
-```
+### Frontend API base URL
 
-## 💡 Usage
-
-### Chat Tutor
-1. Click "💬 Chat Tutor" tab
-2. Type your math question
-3. Get instant explanations
-
-### Equation Scanner
-1. Click "📸 Equation Scanner" tab
-2. Upload an equation image
-3. Optionally crop to focus area
-4. Click "Convert to LaTeX"
-5. Edit if needed
-6. Rate the accuracy
-7. View all images in gallery
-
-## 🎯 Tips for Best Results
-
-### Image Quality
-- ✅ Good lighting, no shadows
-- ✅ Clear focus, sharp text
-- ✅ High contrast (dark on light)
-- ✅ Straight angle, minimum 100x100px
-- ❌ Avoid blurry or faded writing
-
-## 📝 API Documentation
-
-See [EQUATION_FEATURES.md](EQUATION_FEATURES.md) for complete API documentation.
-
-## Environment Configuration
-
-### Frontend `.env`
-The frontend uses an environment variable to configure the API URL:
+Set in `frontend/.env` (optional):
 
 ```env
 VITE_API_BASE_URL=http://localhost:5000
 ```
+
+### OCR engine selection
+
+Default OCR engine is **Pix2Text**.
+
+To switch back to **Pix2Tex**:
+
+```bash
+LATEX_OCR_ENGINE=pix2tex python app.py
+```
+
+Notes:
+
+- Pix2Text may download/initialize models on first use; the first conversion can be slow.
+- The server startup is kept fast by lazily initializing the OCR model on first conversion.
+
+## Usage
+
+### Chat Tutor
+
+1. Open the **Chat Tutor** tab
+2. Enter a question like “What is the derivative of $x^2$?”
+
+### Equation Scanner workflow
+
+1. Open the **Equation Scanner** tab
+2. **Select Image** → **Upload**
+3. Optionally **Crop** to the equation region
+4. Click **Convert to LaTeX**
+5. Review the **Rendered Equation** and **LaTeX Code**
+6. Optionally **Edit** → **Save Changes**
+7. Optionally rate the result (⭐ 1–5)
+
+Tips for better accuracy:
+
+- Crop tightly around the equation
+- Use good lighting and high contrast
+- Try “High accuracy (slower)” in the UI
+
+## API (backend)
+
+Health:
+
+- `GET /health`
+
+Chat:
+
+- `POST /api/questions`
+
+Equation Scanner:
+
+- `POST /api/session`
+- `POST /api/upload`
+- `POST /api/crop`
+- `POST /api/convert`
+- `GET /api/images`
+- `GET /api/image/:id`
+- `DELETE /api/image/:id`
+- `PUT /api/latex`
+- `POST /api/rate`
+
+## Troubleshooting
+
+### `net::ERR_CONNECTION_REFUSED` to `http://localhost:5000` (often on macOS)
+
+First, double-check the backend is actually running.
+
+If the backend is running but your browser still shows connection refused to `localhost`, some macOS setups resolve `localhost` to IPv6 (`::1`) while the Flask dev server is only reachable on IPv4.
+
+- Keep the repo default as-is for portability.
+- On macOS, create a local-only override file (it is already gitignored):
+    - Create `frontend/.env.local` with:
+        - `VITE_API_BASE_URL=http://127.0.0.1:5000`
+
+Then restart the frontend dev server so Vite reloads env vars.
+
+### “Failed to fetch” / network errors
+
+- Confirm backend is running: `curl http://localhost:5000/health`
+- If that fails but you believe the backend is running, try: `curl http://127.0.0.1:5000/health`
+- Confirm frontend API base URL is correct (`VITE_API_BASE_URL`)
+- If port 5000 is stuck: `lsof -ti :5000 | xargs kill -9`
+
+### Model is slow / hangs on first conversion
+
+- First-time model initialization can take a while.
+- Keep the backend running and try converting again after the initial load.
+
+## Testing
+
+Backend smoke test:
+
+```bash
+python test_backend.py
+```
+
+## Project Structure
+
+```
+flipAha-FYP/
+├── app.py
+├── requirements.txt
+├── backend/
+│   ├── image_processor.py
+│   ├── latex_converter.py
+│   └── session_manager.py
+└── frontend/
+    ├── vite.config.js
+    └── src/
+        ├── App.jsx
+        └── components/
+            ├── ImageUploader.jsx
+            ├── LatexEditor.jsx
+            └── ImageGallery.jsx
+```
+
+## Architecture
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for diagrams and data flow.
 
 Copy `.env.example` files:
 ```bash

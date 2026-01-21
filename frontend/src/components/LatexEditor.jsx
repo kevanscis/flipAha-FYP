@@ -84,13 +84,15 @@ function autoFixBraces(expr) {
   return out
 }
 
-function LatexEditor({ sessionId, imageId, initialLatex, confidence, imageData, filename, onUpdate }) {
+function LatexEditor({ sessionId, imageId, initialLatex, confidence, imageData, filename, onUpdate, onRename }) {
   const [latex, setLatex] = useState(initialLatex || '')
   const [isEditing, setIsEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [rating, setRating] = useState(null)
   const [error, setError] = useState(null)
   const [typesetError, setTypesetError] = useState(null)
+  const [renaming, setRenaming] = useState(false)
+  const [renameValue, setRenameValue] = useState(filename || '')
   const typesetContainerRef = useRef(null)
 
   // IMPORTANT: keep internal latex state in sync with the selected image.
@@ -102,7 +104,53 @@ function LatexEditor({ sessionId, imageId, initialLatex, confidence, imageData, 
     setError(null)
     setTypesetError(null)
     setRating(null)
+    setRenaming(false)
+    setRenameValue(filename || '')
   }, [imageId, initialLatex])
+
+  useEffect(() => {
+    if (!renaming) {
+      setRenameValue(filename || '')
+    }
+  }, [filename, renaming])
+
+  const handleRenameSave = async () => {
+    if (!sessionId || !imageId) return
+    const nextName = (renameValue || '').trim()
+    if (!nextName) {
+      setError('Please enter a name.')
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/image/${imageId}/rename`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          filename: nextName
+        })
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to rename')
+      }
+
+      setRenaming(false)
+      if (onRename) {
+        onRename(data.filename)
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const renderPrep = useMemo(() => {
     const expr = sanitizeLatexForMathJax(latex)
@@ -247,7 +295,61 @@ function LatexEditor({ sessionId, imageId, initialLatex, confidence, imageData, 
           <h4>Original Equation Image</h4>
           <div className="original-image-container">
             <img src={imageData} alt={filename || 'Equation'} />
-            {filename && <p className="image-filename">{filename}</p>}
+            {(filename || renaming) && (
+              <div className="image-filename" style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+                {!renaming ? (
+                  <>
+                    {filename && <span>{filename}</span>}
+                    <button
+                      type="button"
+                      className="btn btn-small btn-secondary"
+                      onClick={() => setRenaming(true)}
+                      disabled={saving}
+                    >
+                      Rename
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleRenameSave()
+                        if (e.key === 'Escape') {
+                          setRenaming(false)
+                          setRenameValue(filename || '')
+                        }
+                      }}
+                      placeholder="Enter a name"
+                      style={{ maxWidth: '420px' }}
+                      aria-label="Rename selected image"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-small btn-primary"
+                      onClick={handleRenameSave}
+                      disabled={saving}
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-small btn-secondary"
+                      onClick={() => {
+                        setRenaming(false)
+                        setRenameValue(filename || '')
+                      }}
+                      disabled={saving}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

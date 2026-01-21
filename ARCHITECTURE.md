@@ -1,4 +1,6 @@
-# FlipAha Architecture Diagram
+# FlipAha Architecture
+
+This document describes FlipAha’s runtime architecture and the main data flows for the chat tutor and equation scanner.
 
 ## System Overview
 
@@ -47,8 +49,9 @@
 │  ┌────────────────┐  ┌────────────────┐  ┌──────────────┐  │
 │  │ImageProcessor  │  │LatexConverter  │  │SessionManager│  │
 │  │                │  │                │  │              │  │
-│  │• Quality Check │  │• Pix2Tex Model│  │• Create      │  │
-│  │• Preprocess    │  │• TrOCR Fallback│ │• Store       │  │
+│  │• Quality Check │  │• Pix2Text (default)││• Create   │  │
+│  │• Preprocess    │  │• Pix2Tex (fallback)││• Store   │  │
+│  │• Crop          │  │• TrOCR fallback│ │• Retrieve    │  │
 │  │• Crop          │  │• Validation    │  │• Retrieve    │  │
 │  │• Base64 Conv   │  │• Confidence    │  │• Delete      │  │
 │  └────────────────┘  └────────────────┘  └──────────────┘  │
@@ -57,7 +60,8 @@
 │                    ┌──────────────────┐                     │
 │                    │   ML Models      │                     │
 │                    │                  │                     │
-│                    │ • Pix2Tex (~2GB)│                     │
+│                    │ • Pix2Text      │                     │
+│                    │ • Pix2Tex       │                     │
 │                    │ • TrOCR         │                     │
 │                    │ • PyTorch       │                     │
 │                    └──────────────────┘                     │
@@ -154,7 +158,9 @@
                      ▼
          ┌──────────────────────────────────────────┐
          │ 9. LatexConverter: convert_to_latex()   │
-         │    • Load Pix2Tex model                 │
+         │    • Lazy-initialize OCR model          │
+         │      (keeps server startup fast)        │
+         │    • Run Pix2Tex/Pix2Text/TrOCR         │
          │    • Run inference                      │
          │    • Generate LaTeX string              │
          │    • Calculate confidence               │
@@ -178,7 +184,7 @@
                      ▼
          ┌──────────────────────────────────────────┐
          │ 12. Frontend: LatexEditor Component     │
-         │     • Render LaTeX with KaTeX           │
+         │     • Render LaTeX with MathJax         │
          │     • Show editable code                │
          │     • Display rating stars              │
          │     • Enable copy to clipboard          │
@@ -306,7 +312,7 @@
 ┌─────────────────────────────────────────────────────────┐
 │                   Presentation Layer                     │
 │                                                           │
-│  React 18.2  •  Vite 5.0  •  KaTeX  •  react-image-crop │
+│  React 18  •  Vite  •  MathJax  •  react-image-crop     │
 └─────────────────────────────────────────────────────────┘
                             │
                             ▼
@@ -327,7 +333,7 @@
 ┌─────────────────────────────────────────────────────────┐
 │                   ML/AI Layer                            │
 │                                                           │
-│  Pix2Tex  •  TrOCR  •  PyTorch 2.1  •  Transformers    │
+│  Pix2Tex  •  Pix2Text  •  TrOCR  •  PyTorch  •  Transformers │
 └─────────────────────────────────────────────────────────┘
                             │
                             ▼
@@ -344,6 +350,13 @@
 │  In-Memory Dict  •  localStorage  •  (Future: Database) │
 └─────────────────────────────────────────────────────────┘
 ```
+
+## Key Design Decisions
+
+- **Session storage**: in-memory on the backend with a 24h timeout; the browser keeps a `session_id` in `localStorage`.
+- **OCR engine selection**: controlled by `LATEX_OCR_ENGINE` (Pix2Text default, Pix2Tex fallback, TrOCR fallback).
+- **Lazy model init**: OCR models can be heavy; the converter initializes on first conversion request to keep server startup responsive.
+- **Rendering robustness**: the frontend sanitizes and auto-fixes common LaTeX issues to reduce renderer failures.
 
 ## Deployment Architecture (Future)
 
