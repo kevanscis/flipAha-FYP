@@ -237,4 +237,22 @@ class LatexConverter:
         score -= 0.5 * text.count('\\\\\\')
         score -= 0.25 * text.count('???')
 
+        # HEAVY PENALTY for repetitive empty matrices or structures (hallucinations)
+        # Matches "\begin{matrix} \end{matrix}" or similar with optional spaces
+        empty_matrix_count = len(re.findall(r'\\begin\{matrix\}\s*\\end\{matrix\}', text))
+        if empty_matrix_count > 0:
+            score -= 50.0 * empty_matrix_count
+            validation['valid'] = False
+            validation['errors'].append('Hallucinated empty matrices detected')
+
+        # Detect excessive repetition of any begin/end block
+        # If the same environment is opened/closed > 5 times in a way that dominates the text
+        if len(text) > 50:
+             # Heuristic: if text length ratio to matrix count is low, it's likely spam
+             total_matrix_count = text.count('matrix}')
+             if total_matrix_count > 10 and (len(text) / total_matrix_count) < 20:
+                 score -= 100.0
+                 validation['valid'] = False
+                 validation['errors'].append('Repetitive matrix structure detected')
+
         return { 'score': score, 'valid': validation['valid'], 'errors': validation['errors'] }
