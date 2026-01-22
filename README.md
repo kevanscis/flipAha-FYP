@@ -30,8 +30,8 @@ flipAha-FYP/
 
 ### 1. Install Python Dependencies (Backend)
 
+```ensure you are in flipAha-FYP folder```
 ```bash
-cd /Applications/MAMP/htdocs/flipAha-FYP
 pip install -r requirements.txt
 ```
 

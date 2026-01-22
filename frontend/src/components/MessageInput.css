@@ -2,23 +2,11 @@
   width: 100%;
 }
 
-/* .input-wrapper {
-  position: relative;
+.input-wrapper {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 1rem;
   align-items: flex-end;
-} */
-
-.input-wrapper {
-  display: flex;
-  flex-direction: column; /* stack textarea + button vertically */
-  position: relative;
-}
-
-.input-dropdown-wrapper {
-  position: relative; /* reference for absolute dropdown */
-  width: 100%;
 }
 
 .math-field-host {

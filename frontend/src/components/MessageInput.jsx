@@ -127,18 +127,8 @@ function MessageInput({ onSubmit, disabled }) {
           </ul>
         )}
       </div>
-      
-      
-      <button type="submit" className="btn btn-submit" disabled={disabled}>
-        <span>Get Help</span>
-        <span className="icon">→</span>
-      </button>
-      
-      
-
-    </div>
-  </form>
-)
+    </form>
+  )
 }
 
 export default MessageInput
