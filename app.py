@@ -1,7 +1,5 @@
 from flask import Flask, request, jsonify
-import os
-import json
-import subprocess
+import re
 
 app = Flask(__name__)
 
@@ -69,39 +67,6 @@ def ask_question():
             'question': question,
             'answer': answer,
             'topic': topic
-        }), 200
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/suggestions', methods=['OPTIONS'])
-def preflight_suggestions():
-    """Explicit CORS preflight for /api/suggestions"""
-    return jsonify({'status': 'ok'}), 200
-
-@app.route('/api/suggestions', methods=['POST'])
-def get_suggestions():
-    """Get LaTeX suggestions based on user input"""
-    try:
-        data = request.json
-        user_input = data.get('input', '').strip()
-
-        layer1_path = os.path.join(os.path.dirname(__file__), 'Layer1.js')
-        result = subprocess.run(
-            ['node', layer1_path, '--input', user_input, '--max', '5'],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-
-        payload = json.loads(result.stdout.strip() or '{}')
-        suggestions = payload.get('suggestions', [])
-
-        return jsonify({
-            'success': True,
-            'suggestions': suggestions[:5]
         }), 200
     except Exception as e:
         return jsonify({
