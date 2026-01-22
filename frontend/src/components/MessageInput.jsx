@@ -96,27 +96,17 @@ function MessageInput({ onSubmit, disabled }) {
                 className="suggestion-item"
                 onClick={() => {
                   if (mathfieldRef.current) {
-                    const current = mathfieldRef.current.getValue('latex')
                     const { query } = suggestionContextRef.current
-                    let nextValue = current
-
-                    if (query) {
-                      const replaceIndex = current.lastIndexOf(query)
-                      if (replaceIndex !== -1) {
-                        nextValue =
-                          current.slice(0, replaceIndex) +
-                          latex +
-                          current.slice(replaceIndex + query.length)
-                      } else {
-                        nextValue = `${current} ${latex}`.trim()
-                      }
-                    } else {
-                      nextValue = `${current} ${latex}`.trim()
-                    }
-
-                    mathfieldRef.current.setValue(nextValue)
                     mathfieldRef.current.focus()
-                    setInput(nextValue)
+                    if (query) {
+                      mathfieldRef.current.executeCommand('extendToPreviousWord')
+                    }
+                    mathfieldRef.current.insert(latex, {
+                      mode: 'math',
+                      insertionMode: 'replaceSelection',
+                      selectionMode: 'after'
+                    })
+                    setInput(mathfieldRef.current.getValue('latex'))
                   }
                   setSuggestions([])
                 }}
