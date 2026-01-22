@@ -1,66 +1,92 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './MessageInput.css'
 import 'katex/dist/katex.min.css';
 import { InlineMath } from 'react-katex';
-import { getLatexSuggestions } from '../utils/mathToLatex'
-
-const getSuggestions = (input) => {
-  if (!input.trim()) return []
-  
-  // Return 1-5 suggestions
-  const suggestions = getLatexSuggestions(input, 5)
-  // Filter out suggestions that are the same as input
-  return suggestions.filter(s => s !== input)
-}
+import { MathfieldElement } from 'mathlive';
+import 'mathlive/static.css';
+import 'mathlive/fonts.css';
+import { getLatexSuggestions } from '../utils/mathToLatex';
 
 function MessageInput({ onSubmit, disabled }) {
   const [input, setInput] = useState('')
-  const [valueStored, setValueStored] = useState('')
   const [suggestions, setSuggestions] = useState([])
-  const [lowerInput, setLowerInput] = useState('') // For Case-Insensitive
+  const mathfieldRef = useRef(null)
+  const mathfieldHostRef = useRef(null)
+  const handleMathInputRef = useRef(() => {})
+  const suggestionContextRef = useRef({ query: '', value: '' })
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    const fullValue = valueStored + input
-    if (fullValue.trim()) {
-      onSubmit(fullValue)
+    if (input.trim()) {
+      onSubmit(input)
       setInput('')
-      setValueStored('')
       setSuggestions([])
+      if (mathfieldRef.current) {
+        mathfieldRef.current.setValue('')
+      }
     }
   }
 
-return (
+  const updateSuggestions = (query) => {
+    const trimmedQuery = query.trim()
+    if (!trimmedQuery) {
+      setSuggestions([])
+      return
+    }
+
+    const nextSuggestions = getLatexSuggestions(trimmedQuery)
+      .filter(s => s !== trimmedQuery)
+
+    setSuggestions(nextSuggestions)
+  }
+
+  const handleMathInput = () => {
+    if (!mathfieldRef.current) return
+    const value = mathfieldRef.current.getValue('latex')
+    const textValue = value.replace(/\\text\{([^}]*)\}/g, '$1')
+    const match = textValue.match(/([A-Za-z0-9_\\^/+-]+)$/)
+    const query = match ? match[1] : ''
+    setInput(value)
+    suggestionContextRef.current = { query, value }
+    updateSuggestions(query)
+  }
+
+  handleMathInputRef.current = handleMathInput
+
+  useEffect(() => {
+    if (!mathfieldHostRef.current || mathfieldRef.current) return
+
+    const mathfield = new MathfieldElement()
+    mathfield.className = 'question-input'
+    mathfield.placeholder = 'Ask your math question here... (e.g., x^2, 2x+5=13)'
+    mathfield.setOptions({
+      defaultMode: 'text',
+      smartMode: true,
+      smartSuperscript: true,
+      mathVirtualKeyboardPolicy: 'manual'
+    })
+    mathfield.addEventListener('input', () => handleMathInputRef.current())
+
+    mathfieldHostRef.current.appendChild(mathfield)
+    mathfieldRef.current = mathfield
+
+    return () => {
+      mathfield.remove()
+      mathfieldRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (mathfieldRef.current) {
+      mathfieldRef.current.disabled = Boolean(disabled)
+    }
+  }, [disabled])
+
+  return (
   <form className="question-form" onSubmit={handleSubmit}>
     <div className="input-wrapper">
       <div className='input-dropdown-wrapper'>
-        {(valueStored + input).trim() && (
-          <div className="latex-preview">
-            <InlineMath math={valueStored + input} />
-          </div>
-        )}
-        <textarea
-          className="question-input"
-          placeholder="Ask your math question here...&#10;(e.g., What is the derivative of x²? or Solve 2x + 5 = 13)"
-          rows="2"
-          value={input}
-          onChange={(e) => {
-            const value = e.target.value
-            setInput(value)
-            setLowerInput(value.toLowerCase())  // For Case-Insensitive
-            if (value.trim() === '') {
-              // if input is empty, clear suggestions
-              setSuggestions([])
-              return
-            }
-            // Get suggestions using mathToLatex from Layer1.js
-            const result = getSuggestions(value.toLowerCase())
-            setSuggestions(result)
-            console.log(result)
-            console.log('Lowercase input:', value.toLowerCase())  // For Case-Insensitive
-          }}
-          disabled={disabled}
-        />
+        <div ref={mathfieldHostRef} className="math-field-host" />
         
         {suggestions.length > 0 && (
           <ul className="suggestion-list">
@@ -69,8 +95,29 @@ return (
                 key={index}
                 className="suggestion-item"
                 onClick={() => {
-                  setValueStored(valueStored + latex)
-                  setInput('')
+                  if (mathfieldRef.current) {
+                    const current = mathfieldRef.current.getValue('latex')
+                    const { query } = suggestionContextRef.current
+                    let nextValue = current
+
+                    if (query) {
+                      const replaceIndex = current.lastIndexOf(query)
+                      if (replaceIndex !== -1) {
+                        nextValue =
+                          current.slice(0, replaceIndex) +
+                          latex +
+                          current.slice(replaceIndex + query.length)
+                      } else {
+                        nextValue = `${current} ${latex}`.trim()
+                      }
+                    } else {
+                      nextValue = `${current} ${latex}`.trim()
+                    }
+
+                    mathfieldRef.current.setValue(nextValue)
+                    mathfieldRef.current.focus()
+                    setInput(nextValue)
+                  }
                   setSuggestions([])
                 }}
               >
