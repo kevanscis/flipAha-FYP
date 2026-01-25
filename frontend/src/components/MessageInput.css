@@ -21,6 +21,49 @@
   width: 100%;
 }
 
+.input-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0.75rem 1rem;
+  border: 2px solid transparent;
+  border-radius: 0.5rem;
+  font-size: 1.1rem;
+  font-family: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+  pointer-events: none;
+  color: #111827;
+  background: transparent;
+  overflow: hidden;
+}
+
+.input-placeholder {
+  color: #9ca3af;
+}
+
+.smart-token .katex {
+  font-size: 1.1rem;
+}
+
+.smart-token {
+  position: relative;
+  display: inline-block;
+}
+
+.smart-token .smart-text {
+  visibility: hidden;
+}
+
+.smart-token .smart-render {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+}
+
 .question-input {
   width: 100%;
   min-height: 3rem;
@@ -33,6 +76,8 @@
   transition: border-color 0.2s, box-shadow 0.2s;
   background-color: #ffffff;
   resize: vertical;
+  color: transparent;
+  caret-color: #111827;
 }
 
 .question-input:focus {
