@@ -1,19 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import './MessageInput.css'
-import 'katex/dist/katex.min.css';
-import { InlineMath } from 'react-katex';
-import { MathfieldElement } from 'mathlive';
-import 'mathlive/static.css';
-import 'mathlive/fonts.css';
 import { getLatexSuggestions } from '../utils/mathToLatex';
 
 function MessageInput({ onSubmit, disabled }) {
   const [input, setInput] = useState('')
   const [suggestions, setSuggestions] = useState([])
-  const mathfieldRef = useRef(null)
-  const mathfieldHostRef = useRef(null)
-  const handleMathInputRef = useRef(() => {})
-  const suggestionContextRef = useRef({ query: '', value: '' })
+  const inputRef = useRef(null)
+  const suggestionContextRef = useRef({ start: 0, end: 0 })
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -21,8 +14,8 @@ function MessageInput({ onSubmit, disabled }) {
       onSubmit(input)
       setInput('')
       setSuggestions([])
-      if (mathfieldRef.current) {
-        mathfieldRef.current.setValue('')
+      if (inputRef.current) {
+        inputRef.current.value = ''
       }
     }
   }
@@ -40,93 +33,82 @@ function MessageInput({ onSubmit, disabled }) {
     setSuggestions(nextSuggestions)
   }
 
-  const handleMathInput = () => {
-    if (!mathfieldRef.current) return
-    const value = mathfieldRef.current.getValue('latex')
-    const textValue = value.replace(/\\text\{([^}]*)\}/g, '$1')
-    const match = textValue.match(/([A-Za-z0-9_\\^/+-]+)$/)
-    const query = match ? match[1] : ''
+  const handleInputChange = (e) => {
+    const value = e.target.value
+    const caret = e.target.selectionStart ?? value.length
     setInput(value)
-    suggestionContextRef.current = { query, value }
+
+    const isWordChar = (ch) => /[A-Za-z0-9_\\^/+-]/.test(ch)
+    let start = caret
+    let end = caret
+
+    while (start > 0 && isWordChar(value[start - 1])) start -= 1
+    while (end < value.length && isWordChar(value[end])) end += 1
+
+    const query = value.slice(start, end)
+    suggestionContextRef.current = { start, end }
     updateSuggestions(query)
   }
 
-  handleMathInputRef.current = handleMathInput
-
   useEffect(() => {
-    if (!mathfieldHostRef.current || mathfieldRef.current) return
-    
-    const mathfield = new MathfieldElement({
-      defaultMode: 'text',
-      smartMode: false,
-      smartSuperscript: false,
-      mathVirtualKeyboardPolicy: 'manual',
-    })
-
-    mathfield.className = 'question-input'
-    mathfield.addEventListener('input', () => handleMathInputRef.current())
-
-    mathfieldHostRef.current.appendChild(mathfield)
-    mathfieldRef.current = mathfield
-
-    return () => {
-      mathfield.remove()
-      mathfieldRef.current = null
-    }
-  }, [])
-
-  useEffect(() => {
-    if (mathfieldRef.current) {
-      mathfieldRef.current.disabled = Boolean(disabled)
+    if (inputRef.current) {
+      inputRef.current.disabled = Boolean(disabled)
     }
   }, [disabled])
 
   return (
-    <form className="question-form" onSubmit={handleSubmit}>
-      <div className="input-wrapper">
-        <div className='input-dropdown-wrapper'>
-          <div className="math-field-container">
-            <div ref={mathfieldHostRef} className="math-field-host" />
-            {!input && (
-              <div className="custom-placeholder">
-                Ask your math question here... (e.g., x², 2x+5=13)
-              </div>
-            )}
-          </div>
-          
-          {suggestions.length > 0 && (
-            <ul className="suggestion-list">
-              {suggestions.map((latex, index) => (
-                <li
-                  key={index}
-                  className="suggestion-item"
-                  onClick={() => {
-                    if (mathfieldRef.current) {
-                      const { query, value } = suggestionContextRef.current
-
-                      const newValue = value.slice(0, value.length - query.length) + latex
-
-                      mathfieldRef.current.setValue(newValue, { mode: 'latex' })
-                      mathfieldRef.current.focus()
-                      setInput(newValue)
-                    }
-                    setSuggestions([])
-                  }}
-                >
-                  <InlineMath math={latex} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+  <form className="question-form" onSubmit={handleSubmit}>
+    <div className="input-wrapper">
+      <div className='input-dropdown-wrapper'>
+        <textarea
+          ref={inputRef}
+          className="question-input"
+          placeholder="Ask your math question here... (e.g., x^2, 2x+5=13)"
+          value={input}
+          onChange={handleInputChange}
+          disabled={disabled}
+          rows={3}
+        />
         
-        
-        <button type="submit" className="btn btn-submit" disabled={disabled}>
-          <span className="icon">→</span>
-        </button>
+        {suggestions.length > 0 && (
+          <ul className="suggestion-list">
+            {suggestions.map((latex, index) => (
+              <li
+                key={index}
+                className="suggestion-item"
+                onClick={() => {
+                  if (!inputRef.current) return
+                  const { start, end } = suggestionContextRef.current
+                  const before = input.slice(0, start)
+                  const after = input.slice(end)
+                  const nextValue = `${before}${latex}${after}`
+                  setInput(nextValue)
+                  setSuggestions([])
+                  requestAnimationFrame(() => {
+                    const caretPos = before.length + latex.length
+                    inputRef.current.focus()
+                    inputRef.current.setSelectionRange(caretPos, caretPos)
+                  })
+                }}
+              >
+                {latex}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
-    </form>
-  )
+      
+      
+      <button type="submit" className="btn btn-submit" disabled={disabled}>
+        <span>Get Help</span>
+        <span className="icon">→</span>
+      </button>
+      
+      
+
+    </div>
+  </form>
+)
 }
 
 export default MessageInput
