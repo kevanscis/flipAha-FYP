@@ -55,16 +55,15 @@ function MessageInput({ onSubmit, disabled }) {
 
   useEffect(() => {
     if (!mathfieldHostRef.current || mathfieldRef.current) return
-
-    const mathfield = new MathfieldElement()
-    mathfield.className = 'question-input'
-    mathfield.placeholder = 'Ask your math question here... (e.g., x^2, 2x+5=13)'
-    mathfield.setOptions({
+    
+    const mathfield = new MathfieldElement({
       defaultMode: 'text',
-      smartMode: true,
-      smartSuperscript: true,
-      mathVirtualKeyboardPolicy: 'manual'
+      smartMode: false,
+      smartSuperscript: false,
+      mathVirtualKeyboardPolicy: 'manual',
     })
+
+    mathfield.className = 'question-input'
     mathfield.addEventListener('input', () => handleMathInputRef.current())
 
     mathfieldHostRef.current.appendChild(mathfield)
@@ -83,52 +82,51 @@ function MessageInput({ onSubmit, disabled }) {
   }, [disabled])
 
   return (
-  <form className="question-form" onSubmit={handleSubmit}>
-    <div className="input-wrapper">
-      <div className='input-dropdown-wrapper'>
-        <div ref={mathfieldHostRef} className="math-field-host" />
-        
-        {suggestions.length > 0 && (
-          <ul className="suggestion-list">
-            {suggestions.map((latex, index) => (
-              <li
-                key={index}
-                className="suggestion-item"
-                onClick={() => {
-                  if (mathfieldRef.current) {
-                    const { query } = suggestionContextRef.current
-                    mathfieldRef.current.focus()
-                    if (query) {
-                      mathfieldRef.current.executeCommand('extendToPreviousWord')
-                    }
-                    mathfieldRef.current.insert(latex, {
-                      mode: 'math',
-                      insertionMode: 'replaceSelection',
-                      selectionMode: 'after'
-                    })
-                    setInput(mathfieldRef.current.getValue('latex'))
-                  }
-                  setSuggestions([])
-                }}
-              >
-                <InlineMath math={latex} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      
-      
-      <button type="submit" className="btn btn-submit" disabled={disabled}>
-        <span>Get Help</span>
-        <span className="icon">→</span>
-      </button>
-      
-      
+    <form className="question-form" onSubmit={handleSubmit}>
+      <div className="input-wrapper">
+        <div className='input-dropdown-wrapper'>
+          <div className="math-field-container">
+            <div ref={mathfieldHostRef} className="math-field-host" />
+            {!input && (
+              <div className="custom-placeholder">
+                Ask your math question here... (e.g., x², 2x+5=13)
+              </div>
+            )}
+          </div>
+          
+          {suggestions.length > 0 && (
+            <ul className="suggestion-list">
+              {suggestions.map((latex, index) => (
+                <li
+                  key={index}
+                  className="suggestion-item"
+                  onClick={() => {
+                    if (mathfieldRef.current) {
+                      const { query, value } = suggestionContextRef.current
 
-    </div>
-  </form>
-)
+                      const newValue = value.slice(0, value.length - query.length) + latex
+
+                      mathfieldRef.current.setValue(newValue, { mode: 'latex' })
+                      mathfieldRef.current.focus()
+                      setInput(newValue)
+                    }
+                    setSuggestions([])
+                  }}
+                >
+                  <InlineMath math={latex} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        
+        
+        <button type="submit" className="btn btn-submit" disabled={disabled}>
+          <span className="icon">→</span>
+        </button>
+      </div>
+    </form>
+  )
 }
 
 export default MessageInput

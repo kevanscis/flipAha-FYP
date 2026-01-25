@@ -2,17 +2,9 @@
   width: 100%;
 }
 
-/* .input-wrapper {
-  position: relative;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 1rem;
-  align-items: flex-end;
-} */
-
 .input-wrapper {
   display: flex;
-  flex-direction: column; /* stack textarea + button vertically */
+  flex-direction: row; /* stack textarea + button vertically */
   position: relative;
 }
 
@@ -21,8 +13,18 @@
   width: 100%;
 }
 
-.math-field-host {
-  width: 100%;
+.custom-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px 16px;
+  color: #9ca3af;
+  pointer-events: none;
+  z-index: 0;
+  display: flex;
+  align-items: center;
 }
 
 math-field::part(menu-toggle),
@@ -31,7 +33,7 @@ math-field::part(menu) {
   display: none !important;
 }
 
-.question-input {
+math-field.question-input {
   width: 100%;
   min-height: 3rem;
   padding: 0.75rem 1rem;
@@ -41,7 +43,6 @@ math-field::part(menu) {
   font-family: inherit;
   display: block;
   transition: border-color 0.2s, box-shadow 0.2s;
-  background-color: #ffffff;
 }
 
 .question-input:focus-within {
@@ -71,8 +72,10 @@ math-field::part(menu) {
   position: absolute;
   top: 100%;
   left: 0;
-  right: 0;
+  /* right: 0; */
+
   width: 100%;
+  box-sizing: border-box;
   
   margin-top: 4px;
   padding:0;
@@ -83,7 +86,7 @@ math-field::part(menu) {
   border-radius: 0.5rem;
 
   max-height: 160px;
-  max-width: 80%;
+  /* max-width: 80%; */
   overflow-y: auto;
 
   z-index: 10;
