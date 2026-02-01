@@ -92,9 +92,10 @@ const latexToSmartText = (latex) => {
   text = text.replace(/\\approx/g, '≈')
   text = text.replace(/\\int_\{\}\^\{\}/g, '∫')
 
-  Object.entries(GREEK_MAP).forEach(([latexCmd, symbol]) => {
-    text = text.replace(new RegExp(latexCmd, 'g'), symbol)
-  })
+  // ✅ Convert greek commands safely (avoid regex issues like \t becoming TAB)
+  for (const [latexCmd, symbol] of Object.entries(GREEK_MAP)) {
+    text = text.split(latexCmd).join(symbol)
+  }
 
   text = text.replace(/\\,/g, ' ')
   text = text.replace(/\{([^}]*)\}/g, '$1')
@@ -103,6 +104,12 @@ const latexToSmartText = (latex) => {
 
   return text
 }
+
+const cleanInsertedText = (s) =>
+  String(s)
+    .replace(/[\u200B-\u200D\uFEFF]/g, '') // remove zero-width chars
+    .replace(/\s+/g, ' ')                 // collapse weird whitespace
+    .trim()
 
 const normalizeLatexForOverlay = (latex) =>
   latex
@@ -230,7 +237,8 @@ function MessageInput({ onSubmit, disabled }) {
     setInput(value)
     prevInputRef.current = value
 
-    const isWordChar = (ch) => /[A-Za-z0-9_\\^/+-]/.test(ch)
+    const isWordChar = (ch) => /[A-Za-z0-9_\\^/+\-(),{}<>=!]/.test(ch)
+
     let start = caret
     let end = caret
 
@@ -327,7 +335,8 @@ function MessageInput({ onSubmit, disabled }) {
                   const { start, end } = suggestionContextRef.current
                   const before = input.slice(0, start)
                   const after = input.slice(end)
-                  const formatted = latexToSmartText(latex)
+                  const formatted = cleanInsertedText(latexToSmartText(latex))
+                  
                   const nextValue = `${before}${formatted}${after}`
                   const newRange = {
                     start: before.length,
@@ -356,7 +365,6 @@ function MessageInput({ onSubmit, disabled }) {
       
       
       <button type="submit" className="btn btn-submit" disabled={disabled}>
-        <span>Get Help</span>
         <span className="icon">→</span>
       </button>
       

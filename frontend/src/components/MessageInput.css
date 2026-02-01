@@ -12,7 +12,7 @@
 
 .input-wrapper {
   display: flex;
-  flex-direction: column; /* stack textarea + button vertically */
+  flex-direction: row; /* stack textarea + button vertically */
   position: relative;
 }
 
@@ -119,7 +119,7 @@
   border-radius: 0.5rem;
 
   max-height: 160px;
-  max-width: 80%;
+  max-width: 100%;
   overflow-y: auto;
 
   z-index: 10;
