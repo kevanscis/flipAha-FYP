@@ -162,19 +162,6 @@ function MessageInput({ onSubmit, disabled }) {
     }
   }
 
-  const updateSuggestions = (query) => {
-    const trimmedQuery = query.trim()
-    if (!trimmedQuery) {
-      setSuggestions([])
-      return
-    }
-
-    const nextSuggestions = getLatexSuggestions(trimmedQuery)
-      .filter(s => s !== trimmedQuery)
-
-    setSuggestions(nextSuggestions)
-  }
-
   const getTextChange = (prevValue, nextValue) => {
     if (prevValue === nextValue) return null
 
@@ -237,17 +224,50 @@ function MessageInput({ onSubmit, disabled }) {
     setInput(value)
     prevInputRef.current = value
 
-    const isWordChar = (ch) => /[A-Za-z0-9_\\^/+\-(),{}<>=!]/.test(ch)
+    // Strategy: Try to find a suggestion for the "loose" phrase (including spaces)
+    // If that fails, fall back to the "strict" word (classic behavior)
+    
+    // Include common Unicode math symbols (Greek, exponents, operators like ×, ≤, etc.)
+    const mathSymbolRegex = /[A-Za-z0-9_\\^/+\-*(),{}<>=!|√∛∜×≤≥≠±∞∪∩≈∫⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ⃗αβγδΔθλμωΩπ]/
+    
+    const isStrictChar = (ch) => mathSymbolRegex.test(ch)
+    const isLooseChar = (ch) => mathSymbolRegex.test(ch) || /\s/.test(ch)
 
-    let start = caret
-    let end = caret
+    // 1. Loose phrase (expands across spaces)
+    let lStart = caret, lEnd = caret
+    while (lStart > 0 && isLooseChar(value[lStart - 1])) lStart -= 1
+    while (lEnd < value.length && isLooseChar(value[lEnd])) lEnd += 1
+    const looseQuery = value.slice(lStart, lEnd)
 
-    while (start > 0 && isWordChar(value[start - 1])) start -= 1
-    while (end < value.length && isWordChar(value[end])) end += 1
+    // 2. Strict word (stops at spaces)
+    let sStart = caret, sEnd = caret
+    while (sStart > 0 && isStrictChar(value[sStart - 1])) sStart -= 1
+    while (sEnd < value.length && isStrictChar(value[sEnd])) sEnd += 1
+    const strictQuery = value.slice(sStart, sEnd)
 
-    const query = value.slice(start, end)
-    suggestionContextRef.current = { start, end }
-    updateSuggestions(query)
+    // Check loose first
+    const trimmedLoose = looseQuery.trim()
+    const looseSuggestions = trimmedLoose 
+      ? getLatexSuggestions(trimmedLoose).filter(s => s !== trimmedLoose)
+      : []
+
+    if (looseSuggestions.length > 0) {
+      suggestionContextRef.current = { start: lStart, end: lEnd }
+      setSuggestions(looseSuggestions)
+    } else {
+      // Fallback to strict
+      const trimmedStrict = strictQuery.trim()
+      const strictSuggestions = trimmedStrict 
+        ? getLatexSuggestions(trimmedStrict).filter(s => s !== trimmedStrict)
+        : []
+        
+      if (strictSuggestions.length > 0) {
+        suggestionContextRef.current = { start: sStart, end: sEnd }
+        setSuggestions(strictSuggestions)
+      } else {
+        setSuggestions([])
+      }
+    }
   }
 
   useEffect(() => {
@@ -345,7 +365,29 @@ function MessageInput({ onSubmit, disabled }) {
                     displayText: formatted,
                     displayLatex: normalizeLatexForOverlay(latex)
                   }
-                  setSmartRanges((prev) => [...prev, newRange])
+                  
+                  // Calculate length difference to shift subsequent ranges
+                  const lengthDiff = formatted.length - (end - start);
+
+                  setSmartRanges((prev) => {
+                    // 1. Remove ranges that overlap with the replaced section [start, end]
+                    // 2. Shift ranges that come after the replaced section
+                    const updated = prev
+                      .filter(r => r.end <= start || r.start >= end)
+                      .map(r => {
+                        if (r.start >= end) {
+                          return {
+                            ...r,
+                            start: r.start + lengthDiff,
+                            end: r.end + lengthDiff
+                          }
+                        }
+                        return r
+                      })
+                    
+                    return [...updated, newRange]
+                  })
+
                   setInput(nextValue)
                   setSuggestions([])
                   prevInputRef.current = nextValue

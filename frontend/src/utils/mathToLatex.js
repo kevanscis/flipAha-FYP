@@ -185,22 +185,15 @@
 
 const RULES = [
   // -------------------------
-  // Fractions (3 synonyms -> 1 wildcard family)
-  // -------------------------
-  ["%/%", "\\frac{$1}{$2}"],
-  ["%over%", "\\frac{$1}{$2}"],
-  ["%divide%", "\\frac{$1}{$2}"],
-
-  // -------------------------
   // Logarithms (specific -> general)
   // -------------------------
   ["log(%,%)", "\\log_{$1}($2)"],   // log(2,8)
   ["log_%(%)", "\\log_{$1}($2)"],   // log_2(8)
+  ["log(%)", "\\log($1)"],          // log(x)  <-- Moved up to prevent log% from greedily matching log(x)
   ["log%(%)", "\\log_{$1}($2)"],    // log2(8)
   ["log_%", "\\log_{$1}"],          // log_2
   ["log%", "\\log_{$1}"],           // log2
-  ["log(%)", "\\log($1)"],          // log(x)
-  ["log", "\\log(x)"],              // log
+  ["log", ["\\log(x)", "\\log_{10}(x)", "\\ln(x)"]],              // log -> template
 
   // natural log
   ["ln(%)", "\\ln($1)"],
@@ -214,9 +207,30 @@ const RULES = [
   ["lg", "\\log_{10}(x)"],
 
   // -------------------------
-  // Sums & absolute value (your "mod" is actually abs)
+  // Roots (2 rules -> 1 wildcard + keep sqrt)
+  // -------------------------
+  ["squareroot(%)", "\\sqrt{$1}"],
+  ["%root(%)", "\\sqrt{$1}"],         // square root(x), squareroot(x) -> √
+  ["cube%root(%)", "\\sqrt[3]{$1}"],  // cube root(x), cuberoot(x)
+  ["sqrt(%)", "\\sqrt{$1}"],
+
+  // -------------------------
+  // Vectors (2 rules -> 1 wildcard)
+  // -------------------------
+  ["%ec(%)", "\\overrightarrow{$1}"], // matches Vec(...) and Vector(...)
+
+  // -------------------------
+  // Sums (moved up to avoid fracture conflict if applicable)
   // -------------------------
   ["%SUM%", "\\sum_{$1}^{$2}"],
+  ["mod", "\\left|x\\right|"],
+
+  // -------------------------
+  // Fractions (Moved down so function calls like log(a/b) are caught first)
+  // -------------------------
+  ["%/%", "\\frac{$1}{$2}"],
+  ["%over%", "\\frac{$1}{$2}"],
+  ["%divide%", "\\frac{$1}{$2}"],
   ["mod", "\\left|x\\right|"],
 
   // -------------------------
@@ -241,12 +255,9 @@ const RULES = [
   ["%ec(%)", "\\overrightarrow{$1}"], // matches Vec(...) and Vector(...)
 
   // -------------------------
-  // Roots (2 rules -> 1 wildcard + keep sqrt)
+  // Roots definitions moved up
   // -------------------------
-  ["squareroot(%)", "\\sqrt{$1}"],
-  ["%root(%)", "\\sqrt{$1}"],         // square root(x), squareroot(x) -> √
-  ["cube%root(%)", "\\sqrt[3]{$1}"],  // cube root(x), cuberoot(x)
-  ["sqrt(%)", "\\sqrt{$1}"],
+
 
   // -------------------------
   // Exponents (general; keep specific first)
@@ -286,6 +297,11 @@ const RULES = [
   // multiplication (I recommend removing ["x","\\times"] if x is usually a variable)
   ["times", "\\times"],
   ["time", "\\times"],
+  ["mult", "\\times"],
+  ["multiply", "\\times"],
+  ["*", "\\times"],
+  ["×", "\\times"],
+  ["dot", "\\cdot"],
 
   // -------------------------
   // Greek (keep common typos)
@@ -362,6 +378,38 @@ function compileRules(rules) {
 const COMPILED_RULES = compileRules(RULES);
 
 /**
+ * Finds the index of a top-level operator (+, -, =) in the string
+ * respecting parenthesis/braces balance.
+ * Returns -1 if no suitable split found.
+ */
+function findTopLevelSplit(str) {
+  let depth = 0;
+  // prioritize × same as *
+  const priorities = { '=': 1, '+': 2, '-': 2, '*': 3, '×': 3 };
+  let bestIdx = -1;
+  let bestPriority = 0; 
+  
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i];
+    if (char === '(' || char === '{' || char === '[') depth++;
+    else if (char === ')' || char === '}' || char === ']') depth--;
+    else if (depth === 0) {
+       if (priorities[char]) {
+         const p = priorities[char];
+         // Logic: prefer '=' (lowest priority value 1) over '+' (2).
+         // If prioritize same-level, we can just keep the first one found or last one.
+         // Keeping the first one splits a + b + c into a and b+c.
+         if (bestIdx === -1 || p < bestPriority) {
+            bestIdx = i;
+            bestPriority = p;
+         }
+       }
+    }
+  }
+  return bestIdx;
+}
+
+/**
  * Get top LaTeX suggestions (1 or more) for a math input.
  * @param {string} input
  * @param {number} maxSuggestions - max number of suggestions to return
@@ -369,9 +417,32 @@ const COMPILED_RULES = compileRules(RULES);
  */
 export function getLatexSuggestions(input, maxSuggestions = 5) {
   if (typeof input !== 'string') return [input];
+  const trimmed = input.trim();
+  if (!trimmed) return [''];
 
+  // 1. Try to split by top-level operators (+, -, =)
+  // This allows mixed expressions like "x^2 + 5x" to be processed in parts.
+  const splitIdx = findTopLevelSplit(trimmed);
+  if (splitIdx !== -1) {
+    const left = trimmed.slice(0, splitIdx);
+    const op = trimmed[splitIdx];
+    const right = trimmed.slice(splitIdx + 1);
+    
+    // Recurse on parts
+    // TRIM parts to ensure regex matching works correctly (e.g. "log(...) " vs "log(...)")
+    const leftSugs = getLatexSuggestions(left, 1);
+    const rightSugs = getLatexSuggestions(right, 1);
+    
+    let opLatex = op;
+    if (op === '*') opLatex = '\\times';
+    if (op === '×') opLatex = '\\times';
+    
+    return [`${leftSugs[0]} ${opLatex} ${rightSugs[0]}`];
+  }
+
+  // 2. Try RULES
   for (const rule of COMPILED_RULES) {
-    const match = input.match(rule.regex);
+    const match = trimmed.match(rule.regex);
     if (match) {
       let suggestions = Array.isArray(rule.replacement) 
         ? rule.replacement 
@@ -382,7 +453,13 @@ export function getLatexSuggestions(input, maxSuggestions = 5) {
         suggestions = suggestions.map(template => {
           let result = template;
           for (let i = 1; i < match.length; i++) {
-            result = result.replace(new RegExp(`\\$${i}`, 'g'), match[i]);
+            // RECURSIVE wildcard expansion
+            // Instead of raw matching string, we try to convert it to LaTeX too.
+            // e.g. if $1 is "y^2" inside "Sin(y^2)", we want "Sin({y}^{2})"
+            const subInput = match[i];
+            const subLatex = mathToLatex(subInput); 
+
+            result = result.split(`$${i}`).join(subLatex);
           }
           return result;
         });
@@ -392,7 +469,7 @@ export function getLatexSuggestions(input, maxSuggestions = 5) {
     }
   }
 
-  return [input]; // fallback
+  return [trimmed]; // fallback
 }
 
 /**
@@ -400,6 +477,9 @@ export function getLatexSuggestions(input, maxSuggestions = 5) {
  * Returns the FIRST suggestion only.
  */
 export function mathToLatex(input) {
+  // Pass input directly; getLatexSuggestions will handle trimming if needed for matching
+  // but we might want to preserve behavior? 
+  // Actually, getLatexSuggestions trims now.
   const suggestions = getLatexSuggestions(input, 1);
   return suggestions[0];
 }
