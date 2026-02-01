@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
 import ChatMessage from './components/ChatMessage'
 import MessageInput from './components/MessageInput'
+import Login from './components/Login'
+import SignUp from './components/SignUp'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
-function App() {
+function Chat() {
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
   const [responseStatus, setResponseStatus] = useState({ type: '', message: '' })
@@ -24,7 +27,6 @@ function App() {
       return
     }
 
-    // Add user message
     setMessages(prev => [...prev, { text: question, role: 'user' }])
     setLoading(true)
     setResponseStatus({ type: 'loading', message: 'Processing your question...' })
@@ -32,18 +34,13 @@ function App() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/questions`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ question: question })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question })
       })
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
 
       const data = await response.json()
-
       if (data.success) {
         setMessages(prev => [...prev, { text: data.answer, role: 'assistant' }])
         setResponseStatus({ type: 'success', message: '✅ Response received!' })
@@ -61,12 +58,17 @@ function App() {
 
   return (
     <div className="container">
-      <header>
-        <h1>
-          <span className="flip">Flip</span>
-          <span className="aha">Aha</span>!
-        </h1>
-        <p>Your Personal Online Math Tutor</p>
+      <header style={{ position: 'relative', textAlign: 'center', padding: '1rem 0' }}>
+        <div>
+          <h1>
+            <span className="flip">Flip</span>
+            <span className="aha">Aha</span>!
+          </h1>
+          <p>Your Personal Online Math Tutor</p>
+        </div>
+        <Link to="/login">
+          <button className="btn btn-submit" style={{ position: 'absolute', top: '1rem', right: '1rem' }}>Login</button>
+        </Link>
       </header>
 
       <main className="tutor-main">
@@ -79,9 +81,7 @@ function App() {
               </div>
             ) : (
               <>
-                {messages.map((msg, idx) => (
-                  <ChatMessage key={idx} message={msg} />
-                ))}
+                {messages.map((msg, idx) => <ChatMessage key={idx} message={msg} />)}
                 {loading && <ChatMessage message={{ text: 'Thinking...', role: 'loading' }} />}
                 <div ref={messagesEndRef} />
               </>
@@ -103,6 +103,18 @@ function App() {
         <p>&copy; 2026 FlipAha - Math Tutoring Made Easy</p>
       </footer>
     </div>
+  )
+}
+
+function App() {
+  return (
+    <Router>
+    <Routes>
+      <Route path="/" element={<Chat />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<SignUp />} />
+    </Routes>
+    </Router>
   )
 }
 
