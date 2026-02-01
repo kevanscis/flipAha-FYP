@@ -374,10 +374,10 @@ const RULES = [
   ["app", "\\approx"],
 
   // integrals (case-insensitive already)
-  ["int", ["int(a,b)","integrate(a,b)"]],   // Suggest simple integral first, then definite
+  ["int", ["int(,)","integrate(,)"]],   // Suggest simple integral first, then definite
   
-  ["integral", ["integrate(a,b)"]],
-  ["integrate", ["integrate(a,b)"]],
+  ["integral", ["integrate(,)"]],
+  ["integrate", ["integrate(,)"]],
 
   ["int(%,%)", ["\\int_{$1}^{$2}"]],
   ["integrate(%,%)", ["\\int_{$1}^{$2}"]],
