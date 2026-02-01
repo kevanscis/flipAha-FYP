@@ -244,6 +244,7 @@ const RULES = [
   // -------------------------
   ["vector(%)", "\\overrightarrow{$1}"],
   ["Vector(%)", "\\overrightarrow{$1}"],
+  ["Vector %", "\\overrightarrow{$1}"],
   ["vec(%)", "\\overrightarrow{$1}"],
   ["vec (%)", "\\overrightarrow{$1}"], // vec (AB)
   ["Vec(%)", "\\overrightarrow{$1}"],
@@ -251,11 +252,16 @@ const RULES = [
   ["vec%", "\\overrightarrow{$1}"],  // vecAB
   
   // Hats and Bars (Generic)
+  ["%hat", "\\hat{$1}"], 
+  ["% hat", "\\hat{$1}"],
   ["hat(%)", "\\hat{$1}"],
   ["hat (%)", "\\hat{$1}"], // hat (a)
   ["hat %", "\\hat{$1}"],  // hat a
   ["hat%", "\\hat{$1}"],   // hata
   ["hat", ["\\hat{a}", "\\hat{v}", "\\hat{\\imath}", "\\hat{\\jmath}"]], // Common physics vectors
+  
+  ["%bar", "\\bar{$1}"],
+  ["% bar", "\\bar{$1}"], 
   
   ["bar(%)", "\\bar{$1}"],
   ["bar (%)", "\\bar{$1}"], // bar (a)
@@ -276,6 +282,8 @@ const RULES = [
   ["sum", ["\\sum", "\\sum_{n=1}^{\\infty}", "\\sum_{i=0}^{n}"]], // Offer variations
   ["summation", ["\\sum", "\\sum_{n=1}^{\\infty}", "\\sum_{i=0}^{n}"]],
   ["%SUM%", "\\sum_{$1}^{$2}"],
+  ["sum(%,%)", "\\sum_{$1}^{$2}"],
+
   // "mod" matched here or at the end. Removed duplicate here.
 
   // -------------------------
@@ -328,6 +336,10 @@ const RULES = [
   // Roots definitions moved up
   // -------------------------
 
+    // ✅ FRACTIONAL EXPONENT RULES (MUST COME FIRST)
+  ["%^(1/2)", "\\sqrt{$1}"],
+  ["%^(1/3)", "\\sqrt[3]{$1}"],
+  ["%^(%/%)", "{$1}^{\\frac{$2}{$3}}"],
 
   // -------------------------
   // Exponents (general; keep specific first)
@@ -362,10 +374,14 @@ const RULES = [
   ["app", "\\approx"],
 
   // integrals (case-insensitive already)
-  ["int", ["\\int", "\\int_{a}^{b}"]],   // Suggest simple integral first, then definite
+  ["int", ["int(a,b)","integrate(a,b)"]],   // Suggest simple integral first, then definite
   
-  ["integral", ["\\int", "\\int_{a}^{b}"]],
-  ["integrate", ["\\int", "\\int_{a}^{b}"]],
+  ["integral", ["integrate(a,b)"]],
+  ["integrate", ["integrate(a,b)"]],
+
+  ["int(%,%)", ["\\int_{$1}^{$2}"]],
+  ["integrate(%,%)", ["\\int_{$1}^{$2}"]],
+
   ["defint", "\\int_{a}^{b}"],           // Explicit definite integral shortcuts
   ["dint", "\\int_{a}^{b}"],             
   ["intab", "\\int_{a}^{b}"],            
@@ -382,7 +398,7 @@ const RULES = [
 
   // "int0" -> ∫_0^x (Intuitive shorthand: lower only -> assume x is upper)
   // Must come after specific keywords like "integral" to avoid greedy match
-  ["int%", "\\int_{$1}^{x}"],
+  // ["int%", "\\int_{$1}^{x}"],
 
   // multiplication (I recommend removing ["x","\\times"] if x is usually a variable)
   ["x", ["{x}", "x^{2}", "x^{3}", "x^{n}", "\\times"]], // x variable preferred, but times is an option
@@ -633,36 +649,37 @@ export function getLatexSuggestions(input, maxSuggestions = 5) {
   }
 
   if (!foundRule) {
-    baseSuggestions = [trimmed];
+    baseSuggestions = [trimmed]; // Fallback: raw input
   }
 
-  // 3. Augment with Logical Variations (Prediction)
-  // If the input is simple (alphanumeric, no complex latex), offer variations.
-  // Avoid augmenting if it's already a complex LaTeX command (starts with \)
-  // or if it matched a "Function" rule like 'sin', 'log' which usually don't get hats/sqrts.
-  const isSimpleTerm = /^[a-zA-Z0-9]+$/.test(trimmed) && !trimmed.startsWith('\\');
+
+  // // 3. Augment with Logical Variations (Prediction)
+  // // If the input is simple (alphanumeric, no complex latex), offer variations.
+  // // Avoid augmenting if it's already a complex LaTeX command (starts with \)
+  // // or if it matched a "Function" rule like 'sin', 'log' which usually don't get hats/sqrts.
+  // const isSimpleTerm = /^[a-zA-Z0-9]+$/.test(trimmed) && !trimmed.startsWith('\\');
   
-  // Naughty list of words we shouldn't augment because they are commands
-  const commandBlacklist = new Set([
-      'sin', 'cos', 'tan', 'csc', 'sec', 'cot', 
-      'log', 'ln', 'lg', 'exp', 'det', 'dim', 'lim',
-      'min', 'max', 'deg', 'gcd', 'primes', 'sup', 'inf',
-      'int', 'sum', 'prod', 'lim', 'mod', 'pi', 'theta', 'alpha', 'beta',
-      'gamma', 'delta', 'omega', 'mu', 'lambda'
-  ]);
+  // // Naughty list of words we shouldn't augment because they are commands
+  // const commandBlacklist = new Set([
+  //     'sin', 'cos', 'tan', 'csc', 'sec', 'cot', 
+  //     'log', 'ln', 'lg', 'exp', 'det', 'dim', 'lim',
+  //     'min', 'max', 'deg', 'gcd', 'primes', 'sup', 'inf',
+  //     'int', 'sum', 'prod', 'lim', 'mod', 'pi', 'theta', 'alpha', 'beta',
+  //     'gamma', 'delta', 'omega', 'mu', 'lambda'
+  // ]);
 
-  if (isSimpleTerm && !commandBlacklist.has(trimmed.toLowerCase())) {
-     const augmentations = [
-         `\\vec{${trimmed}}`,        // Vector  -> \vec{10}
-         `\\hat{${trimmed}}`,        // Hat     -> \hat{10}
-         `\\bar{${trimmed}}`,        // Bar     -> \bar{10}
-         `\\sqrt{${trimmed}}`,       // Root    -> \sqrt{10}
-         `${trimmed}^{2}`,           // Square  -> 10^2
-         `\\frac{1}{${trimmed}}`,    // Inverse -> 1/10
-     ];
-     // Append augmentations to base suggestions
-     baseSuggestions = [...baseSuggestions, ...augmentations];
-  }
+  // if (isSimpleTerm && !commandBlacklist.has(trimmed.toLowerCase())) {
+  //    const augmentations = [
+  //        `\\vec{${trimmed}}`,        // Vector  -> \vec{10}
+  //        `\\hat{${trimmed}}`,        // Hat     -> \hat{10}
+  //        `\\bar{${trimmed}}`,        // Bar     -> \bar{10}
+  //        `\\sqrt{${trimmed}}`,       // Root    -> \sqrt{10}
+  //        `${trimmed}^{2}`,           // Square  -> 10^2
+  //        `\\frac{1}{${trimmed}}`,    // Inverse -> 1/10
+  //    ];
+  //    // Append augmentations to base suggestions
+  //    baseSuggestions = [...baseSuggestions, ...augmentations];
+  // }
 
   // Deduplicate and correct format
   const unique = new Set();
