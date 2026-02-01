@@ -187,19 +187,15 @@ const RULES = [
   // -------------------------
   // Logarithms (specific -> general)
   // -------------------------
-  ["log(%,%)", "\\log_{$1}($2)"],   // log(2,8)
-  ["log_%(%)", "\\log_{$1}($2)"],   // log_2(8)
-  ["log(%)", "\\log($1)"],          // log(x)  <-- Moved up to prevent log% from greedily matching log(x)
-  ["log (%)", "\\log($1)"],         // log (x) -> avoid double parens
-  ["log%(%)", "\\log_{$1}($2)"],    // log2(8)
-  ["log_%", "\\log_{$1}"],          // log_2
-  ["log%", "\\log_{$1}"],           // log2
-  ["log", ["\\log(x)", "\\log_{10}(x)", "\\ln(x)"]],              // log -> template
-
   // natural log
   ["ln(%)", "\\ln($1)"],
   ["ln (%)", "\\ln($1)"],           // ln (x) -> avoid double parens
   ["ln", "\\ln(x)"],
+  ["ln(%", "\\ln($1)"],
+  ["ln%", ["\\ln(x)","\\ln($1)"]],
+  ["ln %", ["\\ln(x)","\\ln($1)"]],
+
+  ["loge %", "\\ln($1)"],
   ["loge(%)", "\\ln($1)"],
   ["log_e(%)", "\\ln($1)"],
   ["log e(%)", "\\ln($1)"],
@@ -207,7 +203,21 @@ const RULES = [
   // base-10 shortcut
   ["lg(%)", "\\log_{10}($1)"],
   ["lg (%)", "\\log_{10}($1)"],     // lg (x) -> avoid double parens
+  ["lg(%", "\\log_{10}($1)"],
+  ["lg (%", "\\log_{10}($1)"],
+  ["lg%", "\\log_{10}($1)"],
+  ["lg %", "\\log_{10}($1)"],
   ["lg", "\\log_{10}(x)"],
+
+  ["log(%,%)", "\\log_{$1}($2)"],   // log(2,8)
+  ["log_%(%)", "\\log_{$1}($2)"],   // log_2(8)
+  ["log(%)", "\\log($1)"],          // log(x)  <-- Moved up to prevent log% from greedily matching log(x)
+  ["log (%)", "\\log($1)"],         // log (x) -> avoid double parens
+  ["log%(%)", "\\log_{$1}($2)"],    // log2(8)
+  ["log%(%", "\\log_{$1}($2)"],     // log2(8
+  ["log_%", "\\log_{$1}"],          // log_2
+  ["log%", "\\log_{$1}"],           // log2
+  ["log", ["\\log(x)", "\\log_{10}(x)", "\\ln(x)"]],              // log -> template
 
   // -------------------------
   // Roots (2 rules -> 1 wildcard + keep sqrt)
@@ -298,17 +308,12 @@ const RULES = [
   ["dy", ["\\frac{dy}{dx}", "dy"]],   // suggest derivative OR just "dy" differential
   ["dx", ["dx", "\\frac{d}{dx}"]],    // suggest differential OR derivative operator
   
-  ["f'(x)", "f'(x)"],                 // Keep prime notation as prime notation
-  ["f''(x)", "f''(x)"],
-  ["f\"(x)", "f''(x)"],               // Double quote support
-  ["f'''(x)", "f'''(x)"],
-  ["f'", "f'"],
-  ["f", ["f(x)", "f'(x)", "f''(x)"]], // Suggest function forms for 'f'
-  
-  ["y'", "y'"],                       // Standard prime notation
-  ["y''", "y''"],
-  ["y\"", "y''"],
-  ["y", ["y", "y(x)", "y'"]],         // Suggest y(x) or y' for 'y'
+
+  ["f", ["f(x)", "f'(x)", "f''(x)"]], // Suggest function forms for f
+  ["f'", ["f'(x)", "f''(x)"]], // Suggest function forms for f'
+  ["f''", ["f''(x)"]], // Suggest function forms for f''
+
+  ["y", ["y","y'"]],         // Suggest y(x) or y' for 'y'
 
   ["d2ydx2", "\\frac{d^{2}y}{dx^{2}}"],
   ["d2y", "\\frac{d^{2}y}{dx^{2}}"],
