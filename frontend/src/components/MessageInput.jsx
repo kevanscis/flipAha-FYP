@@ -90,7 +90,15 @@ const latexToSmartText = (latex) => {
   text = text.replace(/\\cup/g, '∪')
   text = text.replace(/\\cap/g, '∩')
   text = text.replace(/\\approx/g, '≈')
-  text = text.replace(/\\int_\{\}\^\{\}/g, '∫')
+  
+  // Integrals: Handle definite first (with limits), then indefinite or empty limits
+  text = text.replace(/\\int_\{([^}]+)\}\^\{([^}]+)\}/g, '∫_$1^$2') // \int_{a}^{b} -> ∫_a^b
+  text = text.replace(/\\int_\{\}\^\{\}/g, '∫')                     // \int_{}^{} -> ∫
+  text = text.replace(/\\int/g, '∫')                                // \int -> ∫
+
+  // Sums: Handle limits similar to integrals
+  text = text.replace(/\\sum_\{([^}]+)\}\^\{([^}]+)\}/g, '∑_$1^$2') // \sum_{n=1}^{k} -> ∑_n=1^k
+  text = text.replace(/\\sum/g, '∑')
 
   // ✅ Convert greek commands safely (avoid regex issues like \t becoming TAB)
   for (const [latexCmd, symbol] of Object.entries(GREEK_MAP)) {
@@ -121,7 +129,8 @@ const normalizeLatexForOverlay = (latex) =>
 
 const renderSuggestionDisplay = (text) => {
   const parts = []
-  const regex = /\^\{([^}]+)\}|\^([A-Za-z0-9+\-=()]+)/g
+  // Matches both superscripts (^...) and subscripts (_...)
+  const regex = /(\^|_)\{([^}]+)\}|(\^|_)([A-Za-z0-9+\-=()]+)/g
   let lastIndex = 0
   let match
 
@@ -129,8 +138,18 @@ const renderSuggestionDisplay = (text) => {
     if (match.index > lastIndex) {
       parts.push(text.slice(lastIndex, match.index))
     }
-    const content = match[1] ?? match[2] ?? ''
-    parts.push(<sup key={`sup-${match.index}`}>{content}</sup>)
+    
+    // Group 1 or 3 is the type (^ or _)
+    // Group 2 or 4 is the content
+    const type = match[1] || match[3]
+    const content = match[2] || match[4] || ''
+
+    if (type === '^') {
+      parts.push(<sup key={`sup-${match.index}`}>{content}</sup>)
+    } else {
+      parts.push(<sub key={`sub-${match.index}`}>{content}</sub>)
+    }
+    
     lastIndex = regex.lastIndex
   }
 
@@ -228,7 +247,8 @@ function MessageInput({ onSubmit, disabled }) {
     // If that fails, fall back to the "strict" word (classic behavior)
     
     // Include common Unicode math symbols (Greek, exponents, operators like ×, ≤, etc.)
-    const mathSymbolRegex = /[A-Za-z0-9_\\^/+\-*(),{}<>=!|√∛∜×≤≥≠±∞∪∩≈∫⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ⃗αβγδΔθλμωΩπ]/
+    // ADDED: ' and " to support f'(x) and f"(x)
+    const mathSymbolRegex = /[A-Za-z0-9_\\^/+\-*(),{}<>=!|√∛∜×≤≥≠±∞∪∩≈∫∑⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ⃗αβγδΔθλμωΩπ'"]/
     
     const isStrictChar = (ch) => mathSymbolRegex.test(ch)
     const isLooseChar = (ch) => mathSymbolRegex.test(ch) || /\s/.test(ch)
@@ -292,7 +312,7 @@ function MessageInput({ onSubmit, disabled }) {
 
   const renderOverlayContent = () => {
     if (!input) {
-      return <span className="input-placeholder">Ask your math question here... (e.g., x^2, 2x+5=13)</span>
+      return <span className="input-placeholder">Ask your math question... (e.g. sin x, sum n=1 to 5, x^2)</span>
     }
 
     if (smartRanges.length === 0) {
