@@ -243,6 +243,7 @@ const RULES = [
   // -------------------------
   // Roots (2 rules -> 1 wildcard + keep sqrt)
   // -------------------------
+  ["squareroot(%)", "\\sqrt{$1}"],
   ["%root(%)", "\\sqrt{$1}"],         // square root(x), squareroot(x) -> √
   ["cube%root(%)", "\\sqrt[3]{$1}"],  // cube root(x), cuberoot(x)
   ["sqrt(%)", "\\sqrt{$1}"],
