@@ -307,25 +307,25 @@ const RULES = [
   ["arctan(%)", "\\tan^{-1}($1)"],  // arctan(x)
 
   //Trig with degrees
-  ["Sin30", "\\sin(30^{\\circ})"]  // CORRECT: brace closes BEFORE )
-  ["Cos30", "\\cos(30^{\\circ})"],
-  ["Tan30", "\\tan(30^{\\circ})"], 
+  // ["Sin30", "\\sin(30^{\\circ})"],  // CORRECT: brace closes BEFORE )
+  // ["Cos30", "\\cos(30^{\\circ})"],
+  // ["Tan30", "\\tan(30^{\\circ})"], 
 
-  ["Sin45", "\\sin(45^{\\circ})"],
-  ["Cos45", "\\cos(45^{\\circ})"],
-  ["Tan45", "\\tan(45^{\\circ})"], 
+  // ["Sin45", "\\sin(45^{\\circ})"],
+  // ["Cos45", "\\cos(45^{\\circ})"],
+  // ["Tan45", "\\tan(45^{\\circ})"], 
 
-  ["Sin60", "\\sin(60^{\\circ})"],
-  ["Cos60", "\\cos(60^{\\circ})"],
-  ["Tan60", "\\tan(60^{\\circ})"],
+  // ["Sin60", "\\sin(60^{\\circ})"],
+  // ["Cos60", "\\cos(60^{\\circ})"],
+  // ["Tan60", "\\tan(60^{\\circ})"],
 
-  ["Sin90", "\\sin(90^{\\circ})"],
-  ["Cos90", "\\cos(90^{\\circ})"],
-  ["Tan90", "\\tan(90^{\\circ})"],
+  // ["Sin90", "\\sin(90^{\\circ})"],
+  // ["Cos90", "\\cos(90^{\\circ})"],
+  // ["Tan90", "\\tan(90^{\\circ})"],
 
-  ["Sin180", "\\sin(180^{\\circ})"],
-  ["Cos180", "\\cos(180^{\\circ})"],
-  ["Tan180", "\\tan(180^{\\circ})"],
+  // ["Sin180", "\\sin(180^{\\circ})"],
+  // ["Cos180", "\\cos(180^{\\circ})"],
+  // ["Tan180", "\\tan(180^{\\circ})"],
 
   // trig with pi (keep)
   ["Sin(pi)", ["\\sin( \\frac{\\pi }{6})", "\\sin( \\frac{\\pi }{4})", "\\sin( \\frac{\\pi }{3})", "\\sin( \\frac{\\pi }{2})", "\\sin( \\pi)"]],
