@@ -306,12 +306,34 @@ const RULES = [
   ["atan(%)", "\\tan^{-1}($1)"],    // atan(x)
   ["arctan(%)", "\\tan^{-1}($1)"],  // arctan(x)
 
+  //Trig with degrees
+  ["Sin30", "\\sin(30^{\\circ})"]  // CORRECT: brace closes BEFORE )
+  ["Cos30", "\\cos(30^{\\circ})"],
+  ["Tan30", "\\tan(30^{\\circ})"], 
+
+  ["Sin45", "\\sin(45^{\\circ})"],
+  ["Cos45", "\\cos(45^{\\circ})"],
+  ["Tan45", "\\tan(45^{\\circ})"], 
+
+  ["Sin60", "\\sin(60^{\\circ})"],
+  ["Cos60", "\\cos(60^{\\circ})"],
+  ["Tan60", "\\tan(60^{\\circ})"],
+
+  ["Sin90", "\\sin(90^{\\circ})"],
+  ["Cos90", "\\cos(90^{\\circ})"],
+  ["Tan90", "\\tan(90^{\\circ})"],
+
+  ["Sin180", "\\sin(180^{\\circ})"],
+  ["Cos180", "\\cos(180^{\\circ})"],
+  ["Tan180", "\\tan(180^{\\circ})"],
+
   // trig with pi (keep)
   ["Sin(pi)", ["\\sin( \\frac{\\pi }{6})", "\\sin( \\frac{\\pi }{4})", "\\sin( \\frac{\\pi }{3})", "\\sin( \\frac{\\pi }{2})", "\\sin( \\pi)"]],
   ["Sin(2", ["\\sin( 2\\pi)", "\\sin( \\frac{2\\pi }{3})"]],
   ["Sin(3", ["\\sin( \\frac{3\\pi }{4})", "\\sin( \\frac{3\\pi }{2})"]],
   ["Sin(5", ["\\sin( \\frac{5\\pi }{3})", "\\sin( \\frac{5\\pi }{6})"]],
 
+  
   ["Cos(pi)", ["\\cos( \\frac{\\pi }{6})", "\\cos( \\frac{\\pi }{4})", "\\cos( \\frac{\\pi }{3})", "\\cos( \\frac{\\pi }{2})", "\\cos( \\pi)"]],
   ["Cos(2", ["\\cos( 2\\pi)", "\\cos( \\frac{2\\pi }{3})"]],
   ["Cos(3", ["\\cos( \\frac{3\\pi }{4})", "\\cos( \\frac{3\\pi }{2})"]],
