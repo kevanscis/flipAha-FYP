@@ -35,7 +35,9 @@ const GREEK_MAP = {
   '\\mu': 'μ',
   '\\omega': 'ω',
   '\\Omega': 'Ω',
-  '\\pi': 'π'
+  '\\pi': 'π',
+  '\\subseteq': '⊆',
+  '\\supseteq': '⊇',
 }
 
 const toSuperscriptText = (text) =>

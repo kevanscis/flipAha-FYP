@@ -68,14 +68,15 @@ const RULES = [
   // -------------------------
   // Vectors (Explicit rules only - avoid wildcard prefix issues)
   // -------------------------
-  ["vector(%)", "\\overrightarrow{$1}"],
-  ["Vector(%)", "\\overrightarrow{$1}"],
-  ["Vector %", "\\overrightarrow{$1}"],
   ["vec(%)", "\\overrightarrow{$1}"],
   ["vec (%)", "\\overrightarrow{$1}"], // vec (AB)
   ["Vec(%)", "\\overrightarrow{$1}"],
   ["vec %", "\\overrightarrow{$1}"], // vec AB
-  ["vec%", "\\overrightarrow{$1}"],  // vecAB
+  ["vec%", "\\overrightarrow{$1}"],  // vecAB 
+  ["vector(%)", "\\overrightarrow{$1}"],
+  ["Vector(%)", "\\overrightarrow{$1}"],
+  ["Vector %", "\\overrightarrow{$1}"],
+  
   
   // Hats and Bars (Generic)
   ["%hat", "\\hat{$1}"], 
@@ -151,7 +152,7 @@ const RULES = [
 // === DERIVATIVE OPERATORS (NO EXPRESSION) ===
 
 ["y", ["y", "y(x)", "y'(x)", "y''(x)"]],
-["dy", ["\\frac{d}{dx}", "\\frac{dy}{dx}", "\\frac{d^2y}{dx^2}"]],  
+// ["dy", ["\\frac{d}{dx}", "\\frac{dy}{dx}", "\\frac{d^2y}{dx^2}"]],  
 ["diff", ["\\frac{d}{dx}", "\\frac{dy}{dx}", "\\frac{d^2y}{dx^2}"]],
 ["differentiate", ["\\frac{d}{dx}", "\\frac{dy}{dx}", "\\frac{d^2y}{dx^2}"]],
 ["d/dx", "\\frac{d}{dx}"],
