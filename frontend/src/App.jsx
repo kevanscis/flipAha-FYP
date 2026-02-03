@@ -2,8 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
 import ChatMessage from './components/ChatMessage'
 import MessageInput from './components/MessageInput'
-import Login from './components/Login'
-import SignUp from './components/SignUp'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
@@ -66,9 +64,6 @@ function Chat() {
           </h1>
           <p>Your Personal Online Math Tutor</p>
         </div>
-        <Link to="/login">
-          <button className="btn btn-submit" style={{ position: 'absolute', top: '1rem', right: '1rem' }}>Login</button>
-        </Link>
       </header>
 
       <main className="tutor-main">
@@ -111,8 +106,6 @@ function App() {
     <Router>
     <Routes>
       <Route path="/" element={<Chat />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<SignUp />} />
     </Routes>
     </Router>
   )

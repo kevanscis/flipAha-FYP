@@ -1,0 +1,81 @@
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>FlipAha Login</title>
+  <link rel="stylesheet" href="login.css" />
+</head>
+<body>
+  <header class="header">
+    <h1>
+      <span class="flip">Flip</span><span class="aha">Aha</span>!
+    </h1>
+    <p>Your Personal Online Math Tutor</p>
+  </header>
+
+  <div class="container">
+  
+    <main>
+      <form id="signUpForm" class="question-form">
+        <p id="statusMessage" class="status-message"></p>
+
+        <div class="input-row">
+          <label for="username">Username:</label>
+          <input
+            id="username"
+            type="text"
+            class="question-input"
+            placeholder="Username"
+          />
+        </div>
+
+        <div class="input-row">
+          <label for="password">Password:</label>
+          <input
+            id="password"
+            type="password"
+            class="question-input"
+            placeholder="Password"
+          />
+        </div>
+
+        <div class="input-row">
+          <label>
+            <input type="checkbox" id="isAdmin" />
+            Register as Admin
+          </label>
+        </div>
+
+        <div class="input-row" id="adminCodeRow" style="display: none;">
+          <label for="adminCode">Admin Code:</label>
+          <input
+            id="adminCode"
+            type="password"
+            class="question-input"
+            placeholder="Enter admin code"
+          />
+        </div>
+        
+        <div class="btn-center">
+          <button type="submit" class="btn btn-submit">
+            <span>Sign Up</span>
+            <span class="icon">→</span>
+          </button>
+        </div>
+
+        <div class="auth-link">
+          <p>
+            Already have an account?
+            <a href="login.html">Login here</a>
+          </p>
+        </div>
+      </form>
+    </main>
+
+    <footer class="footer">
+      <p>&copy; 2026 FlipAha - Math Tutoring Made Easy</p>
+    </footer>
+  </div>
+
+  <script src="signup.js"></script>
+</body>
+</html>
