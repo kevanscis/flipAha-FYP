@@ -1,8 +1,10 @@
+// src/components/MessageInput.jsx
+
 import { useEffect, useRef, useState } from 'react'
 import './MessageInput.css'
 import 'katex/dist/katex.min.css'
 import { InlineMath } from 'react-katex'
-import { getLatexSuggestions } from '../utils/mathToLatex';
+import { getMergedSuggestions as getLatexSuggestions } from '../utils/suggestion-merger';
 
 const SUPERSCRIPT_MAP = {
   '0': '⁰',
