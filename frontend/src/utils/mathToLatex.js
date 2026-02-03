@@ -151,35 +151,34 @@ const RULES = [
 
 // === DERIVATIVE OPERATORS (NO EXPRESSION) ===
 
-["y", ["y", "y(x)", "y'(x)", "y''(x)"]],
-// ["dy", ["\\frac{d}{dx}", "\\frac{dy}{dx}", "\\frac{d^2y}{dx^2}"]],  
-["diff", ["\\frac{d}{dx}", "\\frac{dy}{dx}", "\\frac{d^2y}{dx^2}"]],
-["differentiate", ["\\frac{d}{dx}", "\\frac{dy}{dx}", "\\frac{d^2y}{dx^2}"]],
-["d/dx", "\\frac{d}{dx}"],
+  ["y", ["y", "y(x)", "y'(x)", "y''(x)"]],
+  // ["dy", ["\\frac{d}{dx}", "\\frac{dy}{dx}", "\\frac{d^2y}{dx^2}"]],  
+  ["diff", ["\\frac{d}{dx}", "\\frac{dy}{dx}", "\\frac{d^2y}{dx^2}"]],
+  ["differentiate", ["\\frac{d}{dx}", "\\frac{dy}{dx}", "\\frac{d^2y}{dx^2}"]],
+  ["d/dx", "\\frac{d}{dx}"],
 
-// === FIRST DERIVATIVE (REQUIRES /dx CONTEXT) ===
-["dy/dx", "\\frac{dy}{dx}"],
-["dy / dx", "\\frac{dy}{dx}"],
-["dydx", "\\frac{dy}{dx}"],          // Compact form
+  // === FIRST DERIVATIVE (REQUIRES /dx CONTEXT) ===
+  ["dy/dx", "\\frac{dy}{dx}"],
+  ["dy / dx", "\\frac{dy}{dx}"],
+  ["dydx", "\\frac{dy}{dx}"],          // Compact form
 
-// === SECOND+ DERIVATIVES (REQUIRES /dx² CONTEXT) ===
-["d2y", "\\frac{d^2y}{dx^2}"],
-["d2y/dx2", "\\frac{d^2y}{dx^2}"],
-["d^2y/dx^2", "\\frac{d^2y}{dx^2}"],
-["d2y / dx2", "\\frac{d^2y}{dx^2}"],
-["d2ydx2", "\\frac{d^2y}{dx^2}"],    // Compact form
-["d3y", "\\frac{d^3y}{dx^3}"],
-["d3y/dx3", "\\frac{d^3y}{dx^3}"],
-["d^3y/dx^3", "\\frac{d^3y}{dx^3}"],
+  // === SECOND+ DERIVATIVES (REQUIRES /dx² CONTEXT) ===
+  ["d2y", "\\frac{d^2y}{dx^2}"],
+  ["d2y/dx2", "\\frac{d^2y}{dx^2}"],
+  ["d^2y/dx^2", "\\frac{d^2y}{dx^2}"],
+  ["d2y / dx2", "\\frac{d^2y}{dx^2}"],
+  ["d2ydx2", "\\frac{d^2y}{dx^2}"],    // Compact form
+  ["d3y", "\\frac{d^3y}{dx^3}"],
+  ["d3y/dx3", "\\frac{d^3y}{dx^3}"],
+  ["d^3y/dx^3", "\\frac{d^3y}{dx^3}"],
 
-// === PRIME NOTATION (NEVER CONVERT TO FRACTIONS) ===
+  // === PRIME NOTATION (NEVER CONVERT TO FRACTIONS) ===
   ["f", ["f(x)", "f'(x)", "f''(x)"]], // Suggest function forms for f
   ["f'", ["f'(x)", "f''(x)"]], // Suggest function forms for f'
   ["f''", ["f''(x)"]], // Suggest function forms for f''
 
 
-
-    // ✅ FRACTIONAL EXPONENT RULES (MUST COME FIRST)
+  // ✅ FRACTIONAL EXPONENT RULES (MUST COME FIRST)
   ["%^(1/2)", "\\sqrt{$1}"],
   ["%^(1/3)", "\\sqrt[3]{$1}"],
   ["%^(%/%)", "{$1}^{\\frac{$2}{$3}}"],
@@ -400,16 +399,26 @@ function findTopLevelSplit(str) {
     if (char === '(' || char === '{' || char === '[') depth++;
     else if (char === ')' || char === '}' || char === ']') depth--;
     else if (depth === 0) {
-       if (priorities[char]) {
-         const p = priorities[char];
-         // Logic: prefer '=' (lowest priority value 1) over '+' (2).
-         // If prioritize same-level, we can just keep the first one found or last one.
-         // Keeping the first one splits a + b + c into a and b+c.
-         if (bestIdx === -1 || p < bestPriority) {
-            bestIdx = i;
-            bestPriority = p;
-         }
-       }
+      // ✅ Don't split inside <= >= !=
+      if (char === '=' && i > 0 && (str[i - 1] === '<' || str[i - 1] === '>' || str[i - 1] === '!')) {
+        continue
+      }
+      
+      // ✅ (optional) Don't split "+-" into "+" and "-"
+      if (char === '+' && str[i + 1] === '-') {
+        continue
+      }
+      if (char === '-' && i > 0 && str[i - 1] === '+') {
+        continue
+      }
+
+      if (priorities[char]) {
+        const p = priorities[char]
+        if (bestIdx === -1 || p < bestPriority) {
+          bestIdx = i
+          bestPriority = p
+        }
+      }
     }
   }
   return bestIdx;
