@@ -33,7 +33,6 @@ def create_tables():
     CREATE TABLE IF NOT EXISTS processing (
         processing_id TEXT PRIMARY KEY,
         question_id TEXT NOT NULL,
-        input_method TEXT NOT NULL,
         processing_success INTEGER NOT NULL,
         ocr_confidence REAL,
         retake INTEGER,
