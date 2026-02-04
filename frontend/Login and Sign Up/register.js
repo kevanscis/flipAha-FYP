@@ -1,6 +1,6 @@
 const API_BASE_URL = 'http://localhost:3000';
 
-const form = document.getElementById('signUpForm');
+const form = document.getElementById('registerForm');
 const usernameInput = document.getElementById('username');
 const passwordInput = document.getElementById('password');
 const statusMessage = document.getElementById('statusMessage');
@@ -35,10 +35,10 @@ form.addEventListener('submit', async (e) => {
   }
 
   setLoading(true);
-  statusMessage.textContent = 'Signing up...';
+  statusMessage.textContent = 'Registering...';
 
   try {
-    const response = await fetch(`${API_BASE_URL}/signup`, {
+    const response = await fetch(`${API_BASE_URL}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
