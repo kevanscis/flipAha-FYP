@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>flipAha! - Online Math Tutor</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Oswald:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- KaTeX for rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/katex.min.css">
+    
+    <!-- MathLive for editing -->
+    <link rel="stylesheet" href="https://unpkg.com/mathlive@0.104.0/dist/mathlive-static.css">
+    
+    <!-- Custom styles -->
+    <link rel="stylesheet" href="styles-vanilla.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>
+                <span class="flip">Flip</span><span class="aha">Aha</span>!
+            </h1>
+            <p>Your Personal Online Math Tutor</p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="tutor-main">
+            <!-- Chat Section -->
+            <div class="chat-section">
+                <div class="messages-container" id="messagesContainer">
+                    <div class="welcome-message" id="welcomeMessage">
+                        <h2>Welcome to FlipAha! 👋</h2>
+                        <p>Ask me any math question and I'll help you understand it step by step.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input Section -->
+            <div class="input-section">
+                <form class="question-form" id="questionForm">
+                    <div class="input-wrapper">
+                        <div class="input-dropdown-wrapper">
+                            <math-field
+                                id="questionInput"
+                                class="question-input"
+                                smart-mode
+                                virtual-keyboard-mode="manual"
+                            ></math-field>
+                            
+                            <!-- Suggestions dropdown -->
+                            <ul class="suggestion-list" id="suggestionList" style="display: none;"></ul>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-submit" id="submitBtn">
+                            <span class="icon">→</span>
+                        </button>
+                    </div>
+                </form>
+                
+                <div id="responseMessage" class="response-message" style="display: none;"></div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer>
+            <p>&copy; 2026 FlipAha - Math Tutoring Made Easy</p>
+        </footer>
+
+
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/contrib/auto-render.min.js"></script>
+    <script src="https://unpkg.com/mathlive@0.104.0"></script>
+    <script src="mathToLatex-vanilla.js"></script>
+    <script src="app-vanilla.js"></script>
+</body>
+</html>
