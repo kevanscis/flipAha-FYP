@@ -15,6 +15,9 @@
     
     <!-- MathLive for editing -->
     <link rel="stylesheet" href="https://unpkg.com/mathlive@0.104.0/dist/mathlive-static.css">
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
     
     <!-- Custom styles -->
     <link rel="stylesheet" href="styles.css">
@@ -22,11 +25,22 @@
 <body>
     <div class="container">
         <!-- Header -->
-        <header>
-            <h1>
-                <span class="flip">Flip</span><span class="aha">Aha</span>!
-            </h1>
-            <p>Your Personal Online Math Tutor</p>
+        <header class="row">
+            <div class="col"></div>
+            <div class="col text-center">
+                <h1>
+                    <span class="flip">Flip</span><span class="aha">Aha</span>!
+                </h1>
+                <p>Your Personal Online Math Tutor</p>
+            </div>
+            <div class="col align-self-center d-flex justify-content-end">
+                <div id="authButtons">
+                    <button class="btn btn-primary" onclick="goLogin()">Login</button>
+                </div>
+                <div id="logoutButton">
+                    <button class="btn btn-secondary" onclick="goLogout()">Logout</button>
+                </div>
+            </div>
         </header>
 
         <!-- Main Content -->
@@ -49,9 +63,9 @@
                             <math-field
                                 id="questionInput"
                                 class="question-input"
-                                smart-mode
+                                smartmode
                                 virtual-keyboard-mode="manual"
-                                placeholder="\text{Ask your math question... (e.g. 1/2, sin x, x^2)}"
+                                disabled
                             ></math-field>
 
                             <!-- Suggestions dropdown -->
@@ -73,7 +87,6 @@
             <p>&copy; 2026 FlipAha - Math Tutoring Made Easy</p>
         </footer>
 
-
     </div>
 
     <!-- Scripts -->
@@ -81,6 +94,7 @@
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/contrib/auto-render.min.js"></script>
     <script src="https://unpkg.com/mathlive@0.104.0"></script>
     <script src="mathToLatex.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
     <script src="app.js"></script>
 </body>
 </html>

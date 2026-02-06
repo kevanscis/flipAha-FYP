@@ -1,12 +1,18 @@
-from flask import Flask, send_from_directory, request, jsonify
+from flask import Flask, send_from_directory, request, jsonify, session
 from register import register_bp
 from login import login_bp
 import os
 import json
 import subprocess
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import uuid
+from database.db import get_db
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_ROOT = os.path.join(BASE_DIR, "..", "frontend")
+
+SINGAPORE_TZ = ZoneInfo("Asia/Singapore")
 
 app = Flask(__name__)
 
@@ -77,18 +83,66 @@ def preflight_questions():
 
 @app.route('/api/questions', methods=['POST'])
 def ask_question():
-    """Handle question submissions"""
+    """Handle question submissions + log to DB"""
     try:
-        data = request.json
-        question = data.get('question', '').strip()
+        # 1) Require login
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'Not logged in'
+            }), 401
+        
+        print("User ID from session:", user_id)
+
+        # 2) Read request
+        data = request.get_json(silent=True) or {}
+        question = (data.get('question') or '').strip()
+        input_method = (data.get('input_method') or 'typing').strip()
+        use_suggestion = 1 if data.get('use_suggestion') else 0
+        accept_suggestion = 1 if data.get('accept_suggestion') else 0
+
+        print(question)
+
+        if not question:
+            return jsonify({
+                'success': False,
+                'error': 'Question is empty'
+            }), 400
+
+        # 3) Your existing logic
         topic = classify_question(question)
         answer = responses.get(topic, responses['algebra'])
+
+        # 4) Insert into DB
+        question_id = str(uuid.uuid4())
+
+        ts = datetime.now(SINGAPORE_TZ).isoformat()
+
+        conn = get_db()
+        cursor = conn.cursor()
+        with conn:
+            cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+            user = cursor.fetchone()
+            print(user)
+            conn.execute("""
+                INSERT INTO questions (
+                    question_id, user_id, question_timestamp,
+                    input_method, topic, use_suggestion, accept_suggestion
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (question_id, user_id, ts, input_method, topic, use_suggestion, accept_suggestion))
+        conn.close()
+
+        # 5) Return response
         return jsonify({
             'success': True,
             'question': question,
             'answer': answer,
-            'topic': topic
+            'topic': topic,
+            'question_id': question_id
         }), 200
+
     except Exception as e:
         return jsonify({
             'success': False,
@@ -154,6 +208,22 @@ def register_page():
 @app.route("/login")
 def login_page():
     return send_from_directory(os.path.join(FRONTEND_ROOT, "Login and Register"), "login.html")
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.clear()   # removes user_id and everything in session
+    return jsonify({"message": "Logged out successfully"}), 200
+
+from flask import session, jsonify
+
+@app.route("/api/me")
+def get_current_user():
+    if "user_id" in session:
+        return jsonify({
+            "logged_in": True,
+            "user_id": session["user_id"]
+        }), 200
+    return jsonify({"logged_in": False}), 200
 
 # Serve JS/CSS files
 @app.route("/<path:filename>")

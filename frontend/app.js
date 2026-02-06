@@ -4,9 +4,67 @@ let loading = false;
 let smartRanges = [];
 let prevInputValue = '';
 let suggestionContext = { start: 0, end: 0 };
+// let currentUserID = null;
 
 // Configuration
 const API_BASE_URL = 'http://localhost:5000'; // Update with your backend URL
+
+function goLogin() {
+  window.location.href = `${API_BASE_URL}/login`;
+}
+
+function lockChat() {
+  const questionInput = document.getElementById('questionInput');
+  const sendBtn = document.getElementById('submitBtn');
+
+  questionInput.disabled = true;
+  sendBtn.disabled = true;
+
+  questionInput.setAttribute(
+    'placeholder',
+    '\\text{Please log in to get started}'
+  );
+}
+
+function unlockChat() {
+  const questionInput = document.getElementById('questionInput');
+  const sendBtn = document.getElementById('submitBtn');
+  questionInput.disabled = false;
+  sendBtn.disabled = false;
+  questionInput.setAttribute(
+    'placeholder',
+    '\\text{Ask your math question... (e.g. 1/2, sin x, x^2)}'
+  );
+}
+
+async function checkAuthStatus() {
+  const res = await fetch(`${API_BASE_URL}/api/me`, {
+    credentials: 'include'
+  });
+  const data = await res.json();
+
+  if (!data.logged_in) {
+    document.getElementById('logoutButton').style.display = 'none';
+    lockChat()
+  } else {
+    document.getElementById('authButtons').style.display = 'none';
+    document.getElementById('logoutButton').style.display = 'block';
+    unlockChat();
+    console.log("Logged in as user ID:", data.user_id);
+    // currentUserID = data.user_id;
+  }
+}
+
+window.addEventListener('load', checkAuthStatus);
+
+async function goLogout() {
+  await fetch(`${API_BASE_URL}/logout`, {
+    method: 'POST',
+    credentials: 'include'
+  });
+
+  window.location.reload();
+}
 
 // DOM Elements
 const messagesContainer = document.getElementById('messagesContainer');
@@ -280,7 +338,7 @@ async function handleSubmitQuestion(e) {
     showResponseStatus('error', 'Please enter a math question');
     return;
   }
-
+  
   // Add user message
   addMessage({ text: question, role: 'user' });
   
@@ -302,6 +360,7 @@ async function handleSubmitQuestion(e) {
   try {
     const response = await fetch(`${API_BASE_URL}/api/questions`, {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json'
       },

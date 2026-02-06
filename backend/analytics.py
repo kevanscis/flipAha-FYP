@@ -36,43 +36,56 @@ def get_active_user_counts():
     """, (start_month.isoformat(), start_week.isoformat()))
     monthly_count = cursor.fetchone()["count"]
 
-    conn.close()
-    return daily_count, weekly_count, monthly_count
+    # Inactive: NULL OR older than 30 days
+    cursor.execute("""
+        SELECT COUNT(*) AS count
+        FROM users
+        WHERE last_login IS NULL
+           OR last_login < ?
+    """, (start_month.isoformat(),))
+    inactive_count = cursor.fetchone()["count"]
 
-def get_new_and_returning_users():
-    # Return counts of new and returning users
+    conn.close()
+    return daily_count, weekly_count, monthly_count, inactive_count
+
+def get_new_vs_returning_last_7_days():
     conn = get_db()
     cursor = conn.cursor()
     now = datetime.now(SINGAPORE_TZ)
 
-    # New users: created in the last 7 days
-    start_new = now - timedelta(days=7)
-    cursor.execute("""
-        SELECT COUNT(*) AS count FROM users
-        WHERE created_at >= ?
-    """, (start_new.isoformat(),))
-    new_count = cursor.fetchone()["count"]
+    start = now - timedelta(days=7)
 
-    # Returning users: created more than 30 days ago but logged in within last 30 days
-    start_30_days_ago = now - timedelta(days=30)
+    # New active users (created in last 7 days AND logged in in last 7 days)
     cursor.execute("""
-        SELECT COUNT(*) AS count FROM users
-        WHERE created_at < ? AND last_login >= ?
-    """, (start_30_days_ago.isoformat(), start_30_days_ago.isoformat()))
-    returning_count = cursor.fetchone()["count"]
+        SELECT COUNT(*) AS count
+        FROM users
+        WHERE created_at >= ?
+          AND last_login >= ?
+    """, (start.isoformat(), start.isoformat()))
+    new_active = cursor.fetchone()["count"]
+
+    # Returning active users (created more than 7 days ago AND logged in in last 7 days)
+    cursor.execute("""
+        SELECT COUNT(*) AS count
+        FROM users
+        WHERE created_at < ?
+          AND last_login >= ?
+    """, (start.isoformat(), start.isoformat()))
+    returning_active = cursor.fetchone()["count"]
 
     conn.close()
-    return new_count, returning_count
+    return new_active, returning_active
 
 if __name__ == "__main__":
-    daily, weekly, monthly = get_active_user_counts()
+    daily, weekly, monthly, inactive = get_active_user_counts()
     print("Number of Active Students:")
     print(f"Daily Active Users: {daily}")
     print(f"Weekly Active Users: {weekly}")
     print(f"Monthly Active Users: {monthly}")
+    print(f"InActive Users: {inactive}")
     print("------------------------------------")
 
-    new_users, returning_users = get_new_and_returning_users()
+    new_users, returning_users = get_new_vs_returning_last_7_days()
     print("New vs Returning Students:")
     print(f"New Users: {new_users}")
     print(f"Returning Users: {returning_users}")
