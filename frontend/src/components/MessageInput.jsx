@@ -370,7 +370,9 @@ function MessageInput({ onSubmit, disabled }) {
         
         {suggestions.length > 0 && (
           <ul className="suggestion-list">
-            {suggestions.map((latex, index) => (
+            {suggestions.map((suggestion, index) => {
+              const latex = suggestion.text || suggestion;
+              return (
               <li
                 key={index}
                 className="suggestion-item"
@@ -424,7 +426,8 @@ function MessageInput({ onSubmit, disabled }) {
               >
                 <InlineMath math={latex} errorColor="#ef4444" />
               </li>
-            ))}
+            )
+            })}
           </ul>
         )}
       </div>
