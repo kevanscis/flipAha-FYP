@@ -1,5 +1,4 @@
 from flask import Flask, send_from_directory, request, jsonify
-from flask_cors import CORS
 from register import register_bp
 from login import login_bp
 import os
@@ -10,7 +9,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_ROOT = os.path.join(BASE_DIR, "..", "frontend")
 
 app = Flask(__name__)
-CORS(app)
 
 ########################################################################################################################
 # USE CASE 1
@@ -134,6 +132,10 @@ app.secret_key = "your-super-secret-key"  # Change this in production
 # Load routes in another folder
 app.register_blueprint(register_bp)
 app.register_blueprint(login_bp)
+
+@app.route("/")
+def home_page():
+    return send_from_directory(os.path.join(FRONTEND_ROOT), "index.html")
 
 @app.route("/register")
 def register_page():
