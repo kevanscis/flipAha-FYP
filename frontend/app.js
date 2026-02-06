@@ -1,0 +1,519 @@
+// App State
+let messages = [];
+let loading = false;
+let smartRanges = [];
+let prevInputValue = '';
+let suggestionContext = { start: 0, end: 0 };
+
+// Configuration
+const API_BASE_URL = 'http://localhost:5000'; // Update with your backend URL
+
+// DOM Elements
+const messagesContainer = document.getElementById('messagesContainer');
+const welcomeMessage = document.getElementById('welcomeMessage');
+const questionForm = document.getElementById('questionForm');
+const suggestionList = document.getElementById('suggestionList');
+const submitBtn = document.getElementById('submitBtn');
+const responseMessage = document.getElementById('responseMessage');
+
+// MathLive element
+let questionInput = null;
+let mathFieldReady = false;
+
+// Character Maps
+const SUPERSCRIPT_MAP = {
+  '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+  '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+  '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾',
+  'n': 'ⁿ', 'i': 'ⁱ'
+};
+
+const GREEK_MAP = {
+  '\\alpha': 'α', '\\beta': 'β', '\\gamma': 'γ', '\\delta': 'δ',
+  '\\Delta': 'Δ', '\\theta': 'θ', '\\lambda': 'λ', '\\mu': 'μ',
+  '\\omega': 'ω', '\\Omega': 'Ω', '\\pi': 'π', '\\subseteq': '⊆',
+  '\\supseteq': '⊇'
+};
+
+// Utility Functions
+function toSuperscriptText(text) {
+  return text.split('').map(ch => SUPERSCRIPT_MAP[ch] || ch).join('');
+}
+
+function applySuperscriptForInsert(text) {
+  return text.replace(/\^\{([^}]+)\}|\^([A-Za-z0-9+\-=()]+)/g, (match, braced, simple) => {
+    const content = braced || simple || '';
+    return toSuperscriptText(content);
+  });
+}
+
+function latexToSmartText(latex) {
+  let text = latex;
+
+  text = text.replace(/\\left\|/g, '|').replace(/\\right\|/g, '|');
+  text = text.replace(/\\text\{([^}]*)\}/g, '$1');
+
+  // Handle fractions
+  const replaceFrac = () => {
+    const next = text.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2');
+    const changed = next !== text;
+    text = next;
+    return changed;
+  };
+  while (replaceFrac()) {}
+
+  // Roots
+  text = text.replace(/\\sqrt\[(\d+)\]\{([^}]+)\}/g, (match, idx, radicand) => {
+    if (idx === '3') return `∛${radicand}`;
+    if (idx === '4') return `∜${radicand}`;
+    return `√[${idx}]${radicand}`;
+  });
+  text = text.replace(/\\sqrt\{([^}]+)\}/g, '√$1');
+
+  // Logarithms
+  text = text.replace(/\\log_\{([^}]+)\}\(([^)]+)\)/g, 'log_$1($2)');
+  text = text.replace(/\\log_\{([^}]+)\}/g, 'log_$1');
+  text = text.replace(/\\ln\(([^)]+)\)/g, 'ln($1)');
+
+  // Trig functions
+  text = text.replace(/\\sin/g, 'sin');
+  text = text.replace(/\\cos/g, 'cos');
+  text = text.replace(/\\tan/g, 'tan');
+
+  // Vectors
+  text = text.replace(/\\overrightarrow\{([^}]+)\}/g, '$1⃗');
+
+  // Operators
+  text = text.replace(/\\times/g, '×');
+  text = text.replace(/\\leq/g, '≤');
+  text = text.replace(/\\geq/g, '≥');
+  text = text.replace(/\\neq/g, '≠');
+  text = text.replace(/\\pm/g, '±');
+  text = text.replace(/\\infty/g, '∞');
+  text = text.replace(/\\cup/g, '∪');
+  text = text.replace(/\\cap/g, '∩');
+  text = text.replace(/\\approx/g, '≈');
+
+  // Integrals and Sums
+  text = text.replace(/\\int_\{([^}]+)\}\^\{([^}]+)\}/g, '∫_$1^$2');
+  text = text.replace(/\\int_\{\}\^\{\}/g, '∫');
+  text = text.replace(/\\int/g, '∫');
+  text = text.replace(/\\sum_\{([^}]+)\}\^\{([^}]+)\}/g, '∑_$1^$2');
+  text = text.replace(/\\sum/g, '∑');
+
+  // Greek letters
+  for (const [latexCmd, symbol] of Object.entries(GREEK_MAP)) {
+    text = text.split(latexCmd).join(symbol);
+  }
+
+  text = text.replace(/\\,/g, ' ');
+  text = text.replace(/\{([^}]*)\}/g, '$1');
+
+  text = applySuperscriptForInsert(text);
+
+  return text;
+}
+
+function cleanInsertedText(s) {
+  return String(s)
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeLatexForOverlay(latex) {
+  return latex
+    .replace(/\\sin/g, '\\mathrm{sin}')
+    .replace(/\\cos/g, '\\mathrm{cos}')
+    .replace(/\\tan/g, '\\mathrm{tan}')
+    .replace(/\\log/g, '\\mathrm{log}')
+    .replace(/\\ln/g, '\\mathrm{ln}');
+}
+
+function normalizeToLatex(input) {
+  let s = input;
+
+  // Logs
+  s = s.replace(/\blog\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/g, '\\log_{$1}($2)');
+  s = s.replace(/\blog_([A-Za-z0-9]+)\s*\(\s*([^)]+)\s*\)/g, '\\log_{$1}($2)');
+  s = s.replace(/\blog([A-Za-z0-9]+)\s*\(\s*([^)]+)\s*\)/g, '\\log_{$1}($2)');
+  s = s.replace(/\blog_([A-Za-z0-9]+)\b/g, '\\log_{$1}');
+  s = s.replace(/\blog([A-Za-z0-9]+)\b/g, '\\log_{$1}');
+  s = s.replace(/\blog\b/g, '\\log');
+
+  // Fractions
+  s = s.replace(
+    /(^|[^A-Za-z0-9/])(\([^)]+\)|[A-Za-z0-9]+)\s*\/\s*(\([^)]+\)|[A-Za-z0-9]+)(?=$|[^A-Za-z0-9/])/g,
+    '$1\\frac{$2}{$3}'
+  );
+
+  return s;
+}
+
+// Message Rendering
+function createMessageElement(message) {
+  const messageDiv = document.createElement('div');
+  messageDiv.className = `message ${message.role}`;
+
+  const bubbleDiv = document.createElement('div');
+  bubbleDiv.className = 'message-bubble';
+
+  if (message.role === 'user') {
+    const raw = String(message?.text ?? '');
+    const mathText = raw.trim().replace(/^\$+/, '').replace(/\$+$/, '');
+    const normalized = normalizeToLatex(mathText);
+    
+    try {
+      katex.render(normalized, bubbleDiv, {
+        throwOnError: false,
+        displayMode: false
+      });
+    } catch (e) {
+      bubbleDiv.textContent = raw;
+    }
+  } else if (message.role === 'loading') {
+    bubbleDiv.textContent = message.text;
+  } else {
+    bubbleDiv.textContent = message.text;
+    
+    // Add copy button for assistant responses
+    if (message.role === 'assistant' && message.text) {
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'edit-latex-btn';
+      copyBtn.textContent = '📋 Copy to Input';
+      copyBtn.onclick = () => {
+        if (questionInput && mathFieldReady) {
+          questionInput.setValue(message.text);
+          questionInput.focus();
+        }
+      };
+      bubbleDiv.appendChild(copyBtn);
+    }
+  }
+
+  messageDiv.appendChild(bubbleDiv);
+  return messageDiv;
+}
+
+function addMessage(message) {
+  messages.push(message);
+  
+  if (welcomeMessage && welcomeMessage.parentNode) {
+    welcomeMessage.style.display = 'none';
+  }
+
+  const messageElement = createMessageElement(message);
+  messagesContainer.appendChild(messageElement);
+  scrollToBottom();
+}
+
+function scrollToBottom() {
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+function showResponseStatus(type, message) {
+  responseMessage.className = `response-message ${type}`;
+  responseMessage.textContent = message;
+  responseMessage.style.display = 'block';
+
+  if (type === 'success' || type === 'error') {
+    setTimeout(() => {
+      responseMessage.style.display = 'none';
+    }, 3000);
+  }
+}
+
+// Initialize MathLive when DOM is ready
+function initializeMathField() {
+  questionInput = document.getElementById('questionInput');
+  
+  if (!questionInput) {
+    console.error('MathField not found');
+    return;
+  }
+  
+  mathFieldReady = true;
+  
+  // Configure MathLive - smart mode is set via HTML attribute
+  questionInput.mathVirtualKeyboardPolicy = 'manual';
+
+  // In smart mode, MathLive can treat a plain 'x' as a multiplication shortcut.
+  // Keep 'x' as a variable when the user types it.
+  try {
+    const existingShortcuts = questionInput.inlineShortcuts || {};
+    questionInput.inlineShortcuts = {
+      ...existingShortcuts,
+      x: 'x',
+      X: 'X'
+    };
+  } catch {
+    // Ignore if inlineShortcuts is not supported in this MathLive build
+  }
+  
+  // Handle input changes for suggestions
+  questionInput.addEventListener('input', () => {
+    handleInputChange();
+  });
+  
+  console.log('MathLive field initialized with smart mode');
+}
+
+// Wait for page load
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeMathField);
+} else {
+  initializeMathField();
+}
+
+// Form Submission
+async function handleSubmitQuestion(e) {
+  e.preventDefault();
+
+  if (!questionInput || !mathFieldReady) {
+    console.error('MathField not ready');
+    return;
+  }
+
+  const question = questionInput.getValue('latex-expanded').trim();
+  
+  if (!question) {
+    showResponseStatus('error', 'Please enter a math question');
+    return;
+  }
+
+  // Add user message
+  addMessage({ text: question, role: 'user' });
+  
+  // Clear input
+  questionInput.setValue('');
+  smartRanges = [];
+  prevInputValue = '';
+
+  // Set loading state
+  loading = true;
+  submitBtn.disabled = true;
+  questionInput.disabled = true;
+  showResponseStatus('loading', 'Processing your question...');
+
+  // Add loading message
+  const loadingMsgIndex = messages.length;
+  addMessage({ text: 'Thinking...', role: 'loading' });
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/questions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ question: question })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // Remove loading message
+    messages.splice(loadingMsgIndex, 1);
+    messagesContainer.removeChild(messagesContainer.lastChild);
+
+    if (data.success) {
+      addMessage({ text: data.answer, role: 'assistant' });
+      showResponseStatus('success', '✅ Response received!');
+    } else {
+      throw new Error(data.error || 'Failed to get response');
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    
+    // Remove loading message
+    if (messages[loadingMsgIndex] && messages[loadingMsgIndex].role === 'loading') {
+      messages.splice(loadingMsgIndex, 1);
+      messagesContainer.removeChild(messagesContainer.lastChild);
+    }
+    
+    addMessage({ text: 'Sorry, I encountered an error. Please try again.', role: 'assistant' });
+    showResponseStatus('error', 'Error: ' + error.message);
+  } finally {
+    loading = false;
+    submitBtn.disabled = false;
+    questionInput.disabled = false;
+    questionInput.focus();
+  }
+}
+
+// Input Change Handler
+function getTextChange(prevValue, nextValue) {
+  if (prevValue === nextValue) return null;
+
+  let start = 0;
+  const prevLen = prevValue.length;
+  const nextLen = nextValue.length;
+
+  while (start < prevLen && start < nextLen && prevValue[start] === nextValue[start]) {
+    start += 1;
+  }
+
+  let prevEnd = prevLen - 1;
+  let nextEnd = nextLen - 1;
+  while (prevEnd >= start && nextEnd >= start && prevValue[prevEnd] === nextValue[nextEnd]) {
+    prevEnd -= 1;
+    nextEnd -= 1;
+  }
+
+  const removedCount = Math.max(0, prevEnd - start + 1);
+  const addedCount = Math.max(0, nextEnd - start + 1);
+
+  return { start, removedCount, addedCount };
+}
+
+function updateSmartRanges(prevValue, nextValue) {
+  const change = getTextChange(prevValue, nextValue);
+  if (!change) return smartRanges;
+
+  const { start, removedCount, addedCount } = change;
+  const delta = addedCount - removedCount;
+
+  return smartRanges
+    .map((range) => {
+      if (range.end <= start) return range;
+      if (range.start >= start + removedCount) {
+        return {
+          ...range,
+          start: range.start + delta,
+          end: range.end + delta
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
+
+function handleInputChange() {
+  if (!questionInput || !mathFieldReady) return;
+  
+  // Get LaTeX representation - our rules now match LaTeX format
+  const latexValue = questionInput.getValue();
+  const searchValue = latexValue;
+  
+  console.log('LaTeX value:', latexValue); // Debug
+  console.log('Search value:', searchValue); // Debug
+  
+  const caret = searchValue.length;
+
+  smartRanges = updateSmartRanges(prevInputValue, searchValue);
+  prevInputValue = searchValue;
+
+  renderOverlay();
+
+  // Extract the current word/phrase for suggestions
+  // Match more characters including backslash for LaTeX commands
+  const mathSymbolRegex = /[A-Za-z0-9_\\^/+\-*(),{}<>=!|√∛∜×·⋅≤≥≠±∞∪∩≈∫∑⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ⃗αβγδΔθλμωΩπ\s'"]/;
+  const isChar = (ch) => mathSymbolRegex.test(ch);
+
+  // Get current word/phrase
+  let start = caret;
+  let end = caret;
+  while (start > 0 && isChar(searchValue[start - 1])) start -= 1;
+  while (end < searchValue.length && isChar(searchValue[end])) end += 1;
+  
+  let query = searchValue.slice(start, end).trim();
+  
+  // Clean query from placeholders and empty groups to ensure better matching
+  // This allows "log\placeholder" to match the "log" rule
+  // Also remove trailing subscripts/superscripts that might be artifacts of smart mode
+  query = query.replace(/\\placeholder(\{[^}]*\})?/g, '')
+               .replace(/\{\}/g, '')
+               .replace(/[_^]$/, ''); // Remove dangling subscript/superscript indicators
+
+  // MathLive builds structured constructs with placeholders (e.g. "\\sum_{...}^{...}").
+  // For suggestions, we usually want to match the base command.
+  if (query.startsWith('\\sum')) query = '\\sum';
+  if (query.startsWith('\\int')) query = '\\int';
+               
+  // If query became empty or just backslash, check if we had content before
+  if (query === '\\' || query === '') {
+     // If we stripped everything, maybe just use the original without placeholder to be safe, 
+     // or let it be empty (which will hide suggestions)
+  }
+
+  console.log('Query for suggestions:', query); // Debug
+
+  if (query.length > 0) {
+    // Match rules directly with LaTeX input
+    let suggestions = getLatexSuggestions(query).filter(s => {
+      if (s === query) return false;
+      if (searchValue.includes(s)) return false;
+      return true;
+    });
+    
+    console.log('Suggestions found:', suggestions); // Debug
+
+    if (suggestions.length > 0) {
+      suggestionContext = { start, end };
+      showSuggestions(suggestions);
+    } else {
+      hideSuggestions();
+    }
+  } else {
+    hideSuggestions();
+  }
+}
+
+function renderOverlay() {
+  // MathLive handles its own rendering
+}
+
+function showSuggestions(suggestions) {
+  suggestionList.innerHTML = '';
+  
+  suggestions.forEach(latex => {
+    const li = document.createElement('li');
+    li.className = 'suggestion-item';
+    
+    try {
+      katex.render(latex, li, {
+        throwOnError: false,
+        displayMode: false
+      });
+    } catch (e) {
+      li.textContent = latex;
+    }
+
+    li.onclick = () => selectSuggestion(latex);
+    suggestionList.appendChild(li);
+  });
+
+  suggestionList.style.display = 'block';
+}
+
+function hideSuggestions() {
+  suggestionList.style.display = 'none';
+}
+
+function selectSuggestion(latex) {
+  if (!questionInput || !mathFieldReady) return;
+  
+  // Set the LaTeX value in MathLive
+  questionInput.setValue(latex);
+  
+  hideSuggestions();
+  
+  requestAnimationFrame(() => {
+    questionInput.focus();
+  });
+}
+
+// Event Listeners
+questionForm.addEventListener('submit', handleSubmitQuestion);
+
+// Close suggestions on click outside
+document.addEventListener('click', (e) => {
+  if (!suggestionList.contains(e.target) && e.target !== questionInput) {
+    hideSuggestions();
+  }
+});
+
+// Initialize
+console.log('FlipAha! app initialized');
