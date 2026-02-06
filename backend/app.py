@@ -81,7 +81,7 @@ def preflight_questions():
     """Explicit CORS preflight for /api/questions"""
     return jsonify({'status': 'ok'}), 200
 
-@app.route('/api/questions', methods=['POST'])
+@app.route('/api/questions', methods=['POST']) # Updates data on questions table
 def ask_question():
     """Handle question submissions + log to DB"""
     try:
