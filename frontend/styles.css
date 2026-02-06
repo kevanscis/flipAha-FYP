@@ -102,14 +102,14 @@ header p {
     color: #999;
 }
 
+/* Messages */
 .message {
     display: flex;
-    margin-bottom: 15px;
-    gap: 12px;
-    animation: slideIn 0.3s ease;
+    margin-bottom: 1rem;
+    animation: fadeIn 0.3s ease-out;
 }
 
-@keyframes slideIn {
+@keyframes fadeIn {
     from {
         opacity: 0;
         transform: translateY(10px);
@@ -120,101 +120,221 @@ header p {
     }
 }
 
+.message.user {
+    justify-content: flex-end;
+}
+
+.message.assistant {
+    justify-content: flex-start;
+}
+
+.message.loading {
+    justify-content: flex-start;
+}
+
 .message-bubble {
-    padding: 14px 18px;
-    border-radius: 12px;
-    max-width: 80%;
+    max-width: 70%;
+    padding: 1rem;
+    border-radius: 1rem;
     word-wrap: break-word;
-    line-height: 1.5;
+    white-space: pre-wrap;
+    line-height: 1.6;
     font-size: 0.95rem;
+    position: relative;
 }
 
 .message.user .message-bubble {
-    background: linear-gradient(135deg, #f4623a 0%, #d94027 100%);
-    color: white;
-    margin-left: auto;
-    border-bottom-right-radius: 4px;
+    background-color: #dbeafe;
+    color: #0c4a6e;
+    border-bottom-right-radius: 0.25rem;
 }
 
 .message.assistant .message-bubble {
-    background: #e9ecef;
-    color: #333;
-    border-bottom-left-radius: 4px;
+    background-color: #f3f4f6;
+    color: #1f2937;
+    border-bottom-left-radius: 0.25rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .message.loading .message-bubble {
-    background: #fff3cd;
-    color: #856404;
+    background-color: #fef3c7;
+    color: #78350f;
+    font-style: italic;
+    animation: pulse 1.5s ease-in-out infinite;
 }
 
+.edit-latex-btn {
+    margin-top: 10px;
+    padding: 6px 12px;
+    background: #f4623a;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.edit-latex-btn:hover {
+    background: #d94027;
+    transform: translateY(-1px);
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
+}
+
+/* Input Section */
 .input-section {
     display: flex;
     flex-direction: column;
     gap: 12px;
 }
 
-#questionForm {
+.question-form {
     width: 100%;
 }
 
 .input-wrapper {
     display: flex;
-    gap: 12px;
-    align-items: flex-end;
+    flex-direction: row;
+    position: relative;
 }
 
-.question-input {
-    flex: 1;
-    padding: 16px;
-    border: 2px solid #e0e0e0;
-    border-radius: 10px;
-    font-size: 1rem;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    resize: vertical;
-    transition: all 0.3s ease;
-    min-height: 100px;
+.input-dropdown-wrapper {
+    position: relative;
+    width: 100%;
 }
 
-.question-input:focus {
+
+
+math-field.question-input {
+    width: 100%;
+    min-height: 3rem;
+    padding: 0.75rem 1rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 0.5rem;
+    font-size: 1.1rem;
+    display: block;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    background-color: #ffffff;
+}
+
+math-field.question-input:focus-within {
     outline: none;
     border-color: #f4623a;
     box-shadow: 0 0 0 3px rgba(244, 98, 58, 0.1);
 }
 
-.btn {
-    padding: 14px 24px;
-    border: none;
-    border-radius: 10px;
-    font-size: 1rem;
+math-field.question-input[disabled] {
+    background-color: #f9fafb;
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Suggestions */
+.suggestion-list {
+    position: absolute;
+    bottom: 100%; /* Position above input */
+    top: auto;
+    left: 0;
+    right: 0;
+    width: 100%;
+    margin-bottom: 8px; /* Space between input and list */
+    padding: 0;
+    list-style: none;
+    background-color: #ffffff;
+    border: 2px solid #e5e7eb;
+    border-radius: 0.5rem;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15); /* Shadow upwards */
+}
+
+.suggestion-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.suggestion-list::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+}
+
+.suggestion-list::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+.suggestion-list::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+.suggestion-item {
+    padding: 1rem 1.25rem; /* More padding */
     cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 1.25rem; /* Larger font */
+    border-bottom: 1px solid #e5e7eb;
+    color: #1f2937;
+    background-color: white; /* Ensure white bg */
+    display: flex; /* Better alignment */
+    align-items: center;
+    min-height: 3rem;
+}
+
+.suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.suggestion-item:hover {
+    background-color: #fff7ed; /* Lighter orange/warm tint matching theme */
+    padding-left: 1.5rem; /* Slight movement on hover */
+    color: #ea580c; /* Theme orange color */
+    font-weight: 500;
+}
+
+/* Buttons */
+.btn {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 1rem;
     font-weight: 600;
-    transition: all 0.3s ease;
+    cursor: pointer;
+    transition: all 0.2s;
     display: flex;
     align-items: center;
-    gap: 8px;
-    white-space: nowrap;
+    gap: 0.5rem;
 }
 
 .btn-submit {
-    background: linear-gradient(135deg, #f4623a 0%, #d94027 100%);
+    background: linear-gradient(135deg, #f4623a, #ff8c42);
     color: white;
-    padding: 14px 32px;
-    align-self: flex-end;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.btn-submit:hover {
+.btn-submit:hover:not(:disabled) {
     transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(244, 98, 58, 0.4);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
-.btn-submit:active {
-    transform: translateY(0);
+.btn-submit:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
 }
 
 .btn-submit .icon {
-    font-size: 1.2rem;
+    font-size: 1.25rem;
 }
 
+/* Response Messages */
 .response-message {
     padding: 12px;
     border-radius: 8px;
@@ -222,6 +342,17 @@ header p {
     font-weight: 500;
     display: none;
     animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .response-message.success {
@@ -245,6 +376,7 @@ header p {
     border: 1px solid #bee5eb;
 }
 
+/* Footer */
 footer {
     background: #f8f9fa;
     color: #666;
@@ -254,43 +386,127 @@ footer {
     font-size: 0.9rem;
 }
 
-/* Loading animation */
-.loading-dots {
-    display: inline-flex;
-    gap: 4px;
+/* Modal for LaTeX Editor */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    align-items: center;
+    justify-content: center;
 }
 
-.loading-dots span {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #f4623a;
-    animation: bounce 1.4s infinite;
+.modal-content {
+    background-color: white;
+    border-radius: 12px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    animation: modalSlideIn 0.3s ease-out;
 }
 
-.loading-dots span:nth-child(2) {
-    animation-delay: 0.2s;
-}
-
-.loading-dots span:nth-child(3) {
-    animation-delay: 0.4s;
-}
-
-@keyframes bounce {
-    0%, 80%, 100% {
-        transform: scale(0.8);
-        opacity: 0.5;
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-30px);
     }
-    40% {
-        transform: scale(1);
+    to {
         opacity: 1;
+        transform: translateY(0);
     }
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: #333;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 2rem;
+    cursor: pointer;
+    color: #666;
+    line-height: 1;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-close:hover {
+    color: #f4623a;
+}
+
+.modal-body {
+    padding: 20px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.modal-body label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #333;
+}
+
+.latex-output {
+    margin-top: 20px;
+}
+
+.modal-footer {
+    padding: 20px;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.btn-secondary {
+    background: #6b7280;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #4b5563;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #f4623a, #ff8c42);
+    color: white;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 /* Responsive Design */
 @media (max-width: 768px) {
     header h1 {
         font-size: 2rem;
+    }
+
+    header h1 .flip {
+        font-size: 2.5rem;
     }
 
     header p {
@@ -313,10 +529,11 @@ footer {
     .btn-submit {
         align-self: stretch;
         width: 100%;
+        justify-content: center;
     }
 
     .message-bubble {
-        max-width: 100%;
+        max-width: 90%;
     }
 
     .question-input {
@@ -336,6 +553,10 @@ footer {
 
     header h1 {
         font-size: 1.5rem;
+    }
+
+    header h1 .flip {
+        font-size: 2rem;
     }
 
     header p {

@@ -1,14 +1,133 @@
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, request, jsonify
 from flask_cors import CORS
 from register import register_bp
 from login import login_bp
 import os
+import json
+import subprocess
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_ROOT = os.path.join(BASE_DIR, "..", "frontend")
 
 app = Flask(__name__)
 CORS(app)
+
+########################################################################################################################
+# USE CASE 1
+########################################################################################################################
+
+# Hardcoded responses for different topics
+responses = {
+    'derivative': 'To find the derivative of x², we use the power rule: d/dx(x^n) = n·x^(n-1). So d/dx(x²) = 2x. The derivative represents the instantaneous rate of change of the function.',
+    'solve': 'Let me solve 2x + 5 = 13 step by step:\n1. Start: 2x + 5 = 13\n2. Subtract 5 from both sides: 2x = 8\n3. Divide by 2: x = 4\n\nTo verify: 2(4) + 5 = 8 + 5 = 13 ✓',
+    'integral': 'The integral (antiderivative) of x² is x³/3 + C, where C is the constant of integration. This is found using the power rule for integration: ∫x^n dx = x^(n+1)/(n+1) + C.',
+    'quadratic': 'The quadratic formula is used to solve ax² + bx + c = 0:\n\nx = (-b ± √(b² - 4ac)) / 2a\n\nThe discriminant (b² - 4ac) tells us about the nature of roots.',
+    'limit': 'A limit describes the value that a function approaches as the input approaches some value. For example: lim(x→2) (x²) = 4 means as x gets closer to 2, x² approaches 4.',
+    'algebra': 'Algebra is the branch of mathematics that uses symbols (variables) to represent unknown quantities and express mathematical relationships. Key concepts include: equations, inequalities, and functions.',
+    'geometry': 'Geometry is the study of shapes, sizes, and properties of figures and spaces. Key topics include: points, lines, angles, triangles, circles, area, and volume.',
+    'trigonometry': 'Trigonometry deals with relationships between angles and sides of triangles. The main ratios are: sin(θ) = opposite/hypotenuse, cos(θ) = adjacent/hypotenuse, tan(θ) = opposite/adjacent.'
+}
+
+def classify_question(question):
+    """Classify the question to determine which response to return"""
+    question_lower = question.lower()
+    
+    # Define keywords for each topic
+    keywords = {
+        'derivative': ['derivative', 'differentiate', 'd/dx', 'rate of change'],
+        'solve': ['solve', 'solution', 'equation', '2x', 'equals'],
+        'integral': ['integral', 'antiderivative', 'integrate', '∫'],
+        'quadratic': ['quadratic', 'quadratic formula', 'ax²', 'discriminant'],
+        'limit': ['limit', 'approaches', 'lim', 'converges'],
+        'algebra': ['algebra', 'algebraic', 'variable', 'expression'],
+        'geometry': ['geometry', 'geometric', 'shape', 'triangle', 'circle'],
+        'trigonometry': ['trigonometry', 'trigonometric', 'sin', 'cos', 'tan']
+    }
+    
+    # Check which keywords match
+    for topic, words in keywords.items():
+        for word in words:
+            if word in question_lower:
+                return topic
+    
+    # Default to algebra if no match found
+    return 'algebra'
+
+@app.after_request
+def add_cors_headers(response):
+    """Add CORS headers to every response"""
+    response.headers['Access-Control-Allow-Origin'] = 'http://localhost:5173'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    response.headers['Access-Control-Max-Age'] = '86400'
+    return response
+
+@app.route('/api/questions', methods=['OPTIONS'])
+def preflight_questions():
+    """Explicit CORS preflight for /api/questions"""
+    return jsonify({'status': 'ok'}), 200
+
+@app.route('/api/questions', methods=['POST'])
+def ask_question():
+    """Handle question submissions"""
+    try:
+        data = request.json
+        question = data.get('question', '').strip()
+        topic = classify_question(question)
+        answer = responses.get(topic, responses['algebra'])
+        return jsonify({
+            'success': True,
+            'question': question,
+            'answer': answer,
+            'topic': topic
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/suggestions', methods=['OPTIONS'])
+def preflight_suggestions():
+    """Explicit CORS preflight for /api/suggestions"""
+    return jsonify({'status': 'ok'}), 200
+
+@app.route('/api/suggestions', methods=['POST'])
+def get_suggestions():
+    """Get LaTeX suggestions based on user input"""
+    try:
+        data = request.json
+        user_input = data.get('input', '').strip()
+
+        layer1_path = os.path.join(os.path.dirname(__file__), 'Layer1.js')
+        result = subprocess.run(
+            ['node', layer1_path, '--input', user_input, '--max', '5'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
+        payload = json.loads(result.stdout.strip() or '{}')
+        suggestions = payload.get('suggestions', [])
+
+        return jsonify({
+            'success': True,
+            'suggestions': suggestions[:5]
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({'status': 'ok'}), 200
+
+########################################################################################################################
+# USE CASE 3
+########################################################################################################################
 
 app.secret_key = "your-super-secret-key"  # Change this in production
 
@@ -45,4 +164,4 @@ def serve_file(filename):
     return "File Not Found", 404
 
 if __name__ == "__main__":
-    app.run(port=3000, debug=True)
+    app.run(port=5000, debug=True)
