@@ -150,6 +150,26 @@ function normalizeToLatex(input) {
   return s;
 }
 
+function getInputTextValue() {
+  if (!questionInput) return '';
+
+  try {
+    const textValue = questionInput.getValue('text');
+    if (typeof textValue === 'string' && textValue.trim().length > 0) {
+      return textValue;
+    }
+  } catch {
+    // Ignore if format not supported
+  }
+
+  try {
+    const latexValue = questionInput.getValue();
+    return latexToSmartText(latexValue);
+  } catch {
+    return '';
+  }
+}
+
 // Message Rendering
 function createMessageElement(message) {
   const messageDiv = document.createElement('div');
@@ -396,6 +416,7 @@ function handleInputChange() {
   // Get LaTeX representation - our rules now match LaTeX format
   const latexValue = questionInput.getValue();
   const searchValue = latexValue;
+  const textValue = getInputTextValue();
   
   console.log('LaTeX value:', latexValue); // Debug
   console.log('Search value:', searchValue); // Debug
@@ -419,6 +440,7 @@ function handleInputChange() {
   while (end < searchValue.length && isChar(searchValue[end])) end += 1;
   
   let query = searchValue.slice(start, end).trim();
+  const queryText = latexToSmartText(query);
   
   // Clean query from placeholders and empty groups to ensure better matching
   // This allows "log\placeholder" to match the "log" rule
@@ -447,6 +469,23 @@ function handleInputChange() {
       if (searchValue.includes(s)) return false;
       return true;
     });
+
+    if (suggestions.length === 0 && typeof window.getLayer2Suggestions === 'function') {
+      const layer2Input = queryText || textValue || query;
+      const layer2Candidates = window.getLayer2Suggestions(layer2Input, {
+        curriculum: 'o-level',
+        maxSuggestions: 5
+      });
+
+      const layer2Latex = layer2Candidates
+        .map(candidate => {
+          const value = candidate.text || candidate.display || '';
+          return window.mathToLatex ? window.mathToLatex(value) : value;
+        })
+        .filter(s => s && s !== query && !searchValue.includes(s));
+
+      suggestions = [...new Set(layer2Latex)].slice(0, 5);
+    }
     
     console.log('Suggestions found:', suggestions); // Debug
 
@@ -495,11 +534,46 @@ function hideSuggestions() {
 function selectSuggestion(latex) {
   if (!questionInput || !mathFieldReady) return;
   
-  // Set the LaTeX value in MathLive
-  questionInput.setValue(latex);
-  
+  const deleteCount = Math.max(0, (suggestionContext.end || 0) - (suggestionContext.start || 0));
+
+  try {
+    questionInput.defaultMode = 'text';
+    questionInput.mode = 'text';
+  } catch {
+    // Ignore if mode APIs are not supported
+  }
+
+  try {
+    if (typeof questionInput.executeCommand === 'function' && deleteCount > 0) {
+      for (let i = 0; i < deleteCount; i += 1) {
+        questionInput.executeCommand('deleteBackward');
+      }
+    }
+
+    if (typeof questionInput.insert === 'function') {
+      questionInput.insert(latex);
+    } else {
+      const currentValue = getInputTextValue();
+      const prefix = currentValue.slice(0, suggestionContext.start || 0);
+      const suffix = currentValue.slice(suggestionContext.end || 0);
+      questionInput.setValue(`${prefix}${latex}${suffix}`);
+    }
+  } catch {
+    const currentValue = getInputTextValue();
+    const prefix = currentValue.slice(0, suggestionContext.start || 0);
+    const suffix = currentValue.slice(suggestionContext.end || 0);
+    questionInput.setValue(`${prefix}${latex}${suffix}`);
+  }
+
+  try {
+    questionInput.defaultMode = 'text';
+    questionInput.mode = 'text';
+  } catch {
+    // Ignore if mode APIs are not supported
+  }
+
   hideSuggestions();
-  
+
   requestAnimationFrame(() => {
     questionInput.focus();
   });

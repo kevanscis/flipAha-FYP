@@ -243,6 +243,12 @@ const RULES = [
   ["Sin^", ["\\sin^2(\\theta)", "\\sin^{-1}(\\theta)", "\\sin(\\theta)^2", "\\sin(\\theta)^{-1}"]],
   ["sin(%)", "\\sin($1)"],
   ["sin (%)", "\\sin($1)"],
+  ["sin^-1", "\\sin^{-1}(x)"],
+  ["sin-1", "\\sin^{-1}(x)"],
+  ["sin -1", "\\sin^{-1}(x)"],
+  ["sin^-1%", "\\sin^{-1}($1)"],
+  ["sin-1%", "\\sin^{-1}($1)"],
+  ["sin -1%", "\\sin^{-1}($1)"],
   ["sin^2(%)", "\\sin^{2}($1)"],
   ["sin^-1(%)", "\\sin^{-1}($1)"],
   ["sin %", "\\sin($1)"],
@@ -258,6 +264,12 @@ const RULES = [
   // Plain text versions
   ["Cos", ["\\cos(x)", "\\cos(\\theta)", "\\cos^2(\\theta)", "\\cos^{-1}(\\theta)"]],
   ["Cos^", ["\\cos^2(\\theta)", "\\cos^{-1}(\\theta)", "\\cos(\\theta)^2", "\\cos(\\theta)^{-1}"]],
+  ["cos^-1", "\\cos^{-1}(x)"],
+  ["cos-1", "\\cos^{-1}(x)"],
+  ["cos -1", "\\cos^{-1}(x)"],
+  ["cos^-1%", "\\cos^{-1}($1)"],
+  ["cos-1%", "\\cos^{-1}($1)"],
+  ["cos -1%", "\\cos^{-1}($1)"],
   ["cos(%)", "\\cos($1)"],
   ["cos (%)", "\\cos($1)"],
   ["cos^2(%)", "\\cos^{2}($1)"],
@@ -277,6 +289,12 @@ const RULES = [
   ["Tan^", ["\\tan^2(\\theta)", "\\tan^{-1}(\\theta)", "\\tan(\\theta)^2", "\\tan(\\theta)^{-1}"]],
   ["tan(%)", "\\tan($1)"],
   ["tan (%)", "\\tan($1)"],
+  ["tan^-1", "\\tan^{-1}(x)"],
+  ["tan-1", "\\tan^{-1}(x)"],
+  ["tan -1", "\\tan^{-1}(x)"],
+  ["tan^-1%", "\\tan^{-1}($1)"],
+  ["tan-1%", "\\tan^{-1}($1)"],
+  ["tan -1%", "\\tan^{-1}($1)"],
   ["tan^2(%)", "\\tan^{2}($1)"],
   ["tan^-1(%)", "\\tan^{-1}($1)"],
   ["tan %", "\\tan($1)"],
@@ -329,6 +347,24 @@ function compileRules(rules) {
 
 const COMPILED_RULES = compileRules(RULES);
 
+const FUZZY_TRIG_RULES = [
+  { key: 'sin', suggestions: ['\\sin(x)', '\\sin(\\theta)'] },
+  { key: 'cos', suggestions: ['\\cos(x)', '\\cos(\\theta)'] },
+  { key: 'tan', suggestions: ['\\tan(x)', '\\tan(\\theta)'] },
+  { key: 'asin', suggestions: ['\\sin^{-1}(x)'] },
+  { key: 'arcsin', suggestions: ['\\sin^{-1}(x)'] },
+  { key: 'acos', suggestions: ['\\cos^{-1}(x)'] },
+  { key: 'arccos', suggestions: ['\\cos^{-1}(x)'] },
+  { key: 'atan', suggestions: ['\\tan^{-1}(x)'] },
+  { key: 'arctan', suggestions: ['\\tan^{-1}(x)'] },
+  { key: 'sin-1', suggestions: ['\\sin^{-1}(x)'] },
+  { key: 'sin^-1', suggestions: ['\\sin^{-1}(x)'] },
+  { key: 'cos-1', suggestions: ['\\cos^{-1}(x)'] },
+  { key: 'cos^-1', suggestions: ['\\cos^{-1}(x)'] },
+  { key: 'tan-1', suggestions: ['\\tan^{-1}(x)'] },
+  { key: 'tan^-1', suggestions: ['\\tan^{-1}(x)'] }
+];
+
 function findTopLevelSplit(str) {
   let depth = 0;
   const priorities = { '=': 1, '+': 2, '-': 2, '*': 3, '×': 3, '/': 4 };
@@ -367,6 +403,12 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
   if (typeof input !== 'string') return [input];
   let trimmed = input.trim();
   if (!trimmed) return [''];
+
+  const normalized = normalizeForMatching(trimmed);
+  const inverseSuggestions = getInverseTrigSuggestions(normalized);
+  if (inverseSuggestions.length > 0) {
+    return inverseSuggestions.slice(0, maxSuggestions);
+  }
 
   // MathLive often emits multiplication as "·" or "\\cdot".
   // Normalize these to '*' so our top-level split logic can detect multiplication.
@@ -433,32 +475,23 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
   let baseSuggestions = [];
   let foundRule = false;
 
-  for (const rule of COMPILED_RULES) {
-    const match = trimmed.match(rule.regex);
-    if (match) {
+  const variants = buildInputVariants(trimmed);
+  for (const variant of variants) {
+    const matchResult = matchRules(variant);
+    if (matchResult.found) {
       foundRule = true;
-      let suggestions = Array.isArray(rule.replacement)
-        ? rule.replacement
-        : [rule.replacement];
-
-      if (rule.isWildcard) {
-        suggestions = suggestions.map(template => {
-          let result = template;
-          for (let i = 1; i < match.length; i++) {
-            const subInput = match[i];
-            const subLatex = mathToLatex(subInput);
-            result = result.split(`$${i}`).join(subLatex);
-          }
-          return result;
-        });
-      }
-      baseSuggestions = suggestions;
+      baseSuggestions = matchResult.suggestions;
       break;
     }
   }
 
   if (!foundRule) {
-    baseSuggestions = [trimmed];
+    const fuzzy = getFuzzySuggestions(trimmed);
+    if (fuzzy.length > 0) {
+      baseSuggestions = fuzzy;
+    } else {
+      baseSuggestions = [trimmed];
+    }
   }
 
   const unique = new Set();
@@ -477,6 +510,132 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
 function mathToLatex(input) {
   const suggestions = getLatexSuggestions(input, 1);
   return suggestions[0];
+}
+
+function normalizeForMatching(value) {
+  return String(value)
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[·⋅×]/g, '*')
+    .replace(/[−–—]/g, '-')
+    .replace(/\^\{-?1\}/g, '^-1')
+    .replace(/\^\(-?1\)/g, '^-1')
+    .replace(/\^\-1/g, '^-1')
+    .replace(/\^\{-?\s*1\}/g, '^-1')
+    .replace(/°/g, 'deg')
+    .trim();
+}
+
+function buildInputVariants(value) {
+  const variants = new Set();
+  const trimmed = String(value).trim();
+  if (!trimmed) return [];
+
+  variants.add(trimmed);
+  variants.add(trimmed.replace(/\s+/g, ''));
+  variants.add(trimmed.replace(/\s+/g, ' '));
+
+  const typoFixed = applyTrigTypoFixes(trimmed);
+  variants.add(typoFixed);
+  variants.add(typoFixed.replace(/\s+/g, ''));
+
+  return Array.from(variants);
+}
+
+function applyTrigTypoFixes(value) {
+  let fixed = String(value);
+  fixed = fixed.replace(/\bsni\b/gi, 'sin');
+  fixed = fixed.replace(/\bsln\b/gi, 'sin');
+  fixed = fixed.replace(/\bcso\b/gi, 'cos');
+  fixed = fixed.replace(/\bcoz\b/gi, 'cos');
+  fixed = fixed.replace(/\btna\b/gi, 'tan');
+  fixed = fixed.replace(/\bta n\b/gi, 'tan');
+  fixed = fixed.replace(/\bacs\b/gi, 'acos');
+  fixed = fixed.replace(/\barsin\b/gi, 'arcsin');
+  fixed = fixed.replace(/\barccos\b/gi, 'arccos');
+  fixed = fixed.replace(/\barctan\b/gi, 'arctan');
+  return fixed;
+}
+
+function getInverseTrigSuggestions(normalized) {
+  const match = normalized.match(/^(arc)?(sin|cos|tan)(\^-?1|-?1)?([a-z]+)?$/i);
+  if (!match) return [];
+
+  const [, arcPrefix, func, invRaw, argRaw] = match;
+  const isInverse = Boolean(arcPrefix) || Boolean(invRaw);
+  if (!isInverse) return [];
+
+  const arg = argRaw || 'x';
+  return [`\\${func.toLowerCase()}^{-1}(${arg})`];
+}
+
+function matchRules(value) {
+  for (const rule of COMPILED_RULES) {
+    const match = value.match(rule.regex);
+    if (!match) continue;
+
+    let suggestions = Array.isArray(rule.replacement)
+      ? rule.replacement
+      : [rule.replacement];
+
+    if (rule.isWildcard) {
+      suggestions = suggestions.map(template => {
+        let result = template;
+        for (let i = 1; i < match.length; i++) {
+          const subInput = match[i];
+          const subLatex = mathToLatex(subInput);
+          result = result.split(`$${i}`).join(subLatex);
+        }
+        return result;
+      });
+    }
+
+    return { found: true, suggestions };
+  }
+
+  return { found: false, suggestions: [] };
+}
+
+function getFuzzySuggestions(value) {
+  const normalized = normalizeForMatching(value);
+  if (!normalized) return [];
+
+  const candidates = FUZZY_TRIG_RULES.map(rule => {
+    const distance = levenshteinDistance(normalized, rule.key);
+    return { ...rule, distance };
+  });
+
+  candidates.sort((a, b) => a.distance - b.distance);
+  const best = candidates[0];
+  if (!best) return [];
+
+  const threshold = normalized.length <= 4 ? 1 : 2;
+  if (best.distance > threshold) return [];
+
+  return best.suggestions;
+}
+
+function levenshteinDistance(a, b) {
+  if (a === b) return 0;
+  const matrix = Array.from({ length: a.length + 1 }, () =>
+    Array(b.length + 1).fill(0)
+  );
+
+  for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+  for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return matrix[a.length][b.length];
 }
 
 // Export for use in app
