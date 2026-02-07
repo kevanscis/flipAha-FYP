@@ -388,8 +388,18 @@ function priorForType(type) {
 }
 
 function trainedTypeScore(type, normalizedInput, model) {
-  if (!model || !model.priors) return 0.5;
+  if (!model) return 0.5;
   if (!type.startsWith('trig')) return 0.5;
+
+  if (model.type === 'logreg' && Array.isArray(model.classes)) {
+    const probabilities = predictLogReg(normalizedInput, model);
+    const index = model.classes.indexOf(type);
+    if (index === -1) return 0.5;
+    const score = probabilities[index];
+    return Number.isFinite(score) ? score : 0.5;
+  }
+
+  if (!model.priors) return 0.5;
 
   const inputCounts = model.inputTypeCounts?.[normalizedInput];
   if (inputCounts && inputCounts[type]) {
@@ -401,6 +411,77 @@ function trainedTypeScore(type, normalizedInput, model) {
   const priorCount = model.priors[type] || 0;
   if (total === 0) return 0.5;
   return priorCount / total;
+}
+
+function predictLogReg(normalizedInput, model) {
+  const input = normalizeExpression(normalizedInput);
+  const ngramMin = Number.isFinite(model.ngramMin) ? model.ngramMin : 1;
+  const ngramMax = Number.isFinite(model.ngramMax) ? model.ngramMax : 3;
+  const vocab = Array.isArray(model.vocab) ? model.vocab : [];
+  const features = Array.isArray(model.features) ? model.features : [];
+
+  if (!model._vocabIndex) {
+    model._vocabIndex = new Map(vocab.map((gram, index) => [gram, index]));
+  }
+
+  const vector = buildLogRegVector(input, model._vocabIndex, ngramMin, ngramMax, features);
+  const logits = model.weights.map((row, k) => dot(row, vector) + model.bias[k]);
+  return softmax(logits);
+}
+
+function buildLogRegVector(input, vocabIndex, ngramMin, ngramMax, featureNames) {
+  const vector = Array(vocabIndex.size + featureNames.length).fill(0);
+  const grams = extractNgrams(input, ngramMin, ngramMax);
+  for (const gram of grams) {
+    const index = vocabIndex.get(gram);
+    if (index !== undefined) vector[index] += 1;
+  }
+
+  const extra = computeLogRegExtras(input);
+  featureNames.forEach((name, idx) => {
+    vector[vocabIndex.size + idx] = extra[name] ? 1 : 0;
+  });
+
+  return vector;
+}
+
+function extractNgrams(input, ngramMin, ngramMax) {
+  const text = String(input || '');
+  const grams = [];
+  for (let n = ngramMin; n <= ngramMax; n += 1) {
+    for (let i = 0; i <= text.length - n; i += 1) {
+      grams.push(text.slice(i, i + n));
+    }
+  }
+  return grams;
+}
+
+function computeLogRegExtras(input) {
+  const text = String(input || '');
+  return {
+    has_power: text.includes('^'),
+    has_inverse: /(sin|cos|tan)(\^-?1|-?1)|arc(sin|cos|tan)/.test(text),
+    has_degree: /°|(?:sin|cos|tan)\d+(?:°|o)?$/.test(text),
+    has_ratio: text.includes('/'),
+    has_product:
+      /(?:sin|cos|tan)[a-z](?:sin|cos|tan)[a-z]/.test(text) ||
+      /^\d+(sin|cos|tan)/.test(text),
+    has_expression: /[+\-]/.test(text),
+    has_parentheses: /[()]/.test(text)
+  };
+}
+
+function dot(a, b) {
+  let sum = 0;
+  for (let i = 0; i < a.length; i += 1) sum += a[i] * b[i];
+  return sum;
+}
+
+function softmax(values) {
+  const max = Math.max(...values);
+  const exps = values.map(value => Math.exp(value - max));
+  const sum = exps.reduce((acc, value) => acc + value, 0) || 1;
+  return exps.map(value => value / sum);
 }
 
 function curriculumConstraintScore(expr, curriculum) {

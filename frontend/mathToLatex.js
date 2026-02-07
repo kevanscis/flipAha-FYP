@@ -410,6 +410,16 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     return inverseSuggestions.slice(0, maxSuggestions);
   }
 
+  const trigNumberMatch = normalized.match(/^(sin|cos|tan)(-?\d+(?:\.\d+)?)(deg)?$/i);
+  if (trigNumberMatch) {
+    const [, func, num, degSuffix] = trigNumberMatch;
+    const latexFunc = `\\${func.toLowerCase()}`;
+    const base = `${latexFunc}(${num})`;
+    const degree = `${latexFunc}(${num}^{\\circ})`;
+    const suggestions = degSuffix ? [degree, base] : [base, degree];
+    return suggestions.slice(0, maxSuggestions);
+  }
+
   // MathLive often emits multiplication as "·" or "\\cdot".
   // Normalize these to '*' so our top-level split logic can detect multiplication.
   // Avoid touching "\\cdots" (ellipsis).

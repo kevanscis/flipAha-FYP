@@ -490,7 +490,7 @@ function handleInputChange() {
     console.log('Suggestions found:', suggestions); // Debug
 
     if (suggestions.length > 0) {
-      suggestionContext = { start, end };
+      suggestionContext = { start, end, query, queryText };
       showSuggestions(suggestions);
     } else {
       hideSuggestions();
@@ -533,8 +533,9 @@ function hideSuggestions() {
 
 function selectSuggestion(latex) {
   if (!questionInput || !mathFieldReady) return;
-  
-  const deleteCount = Math.max(0, (suggestionContext.end || 0) - (suggestionContext.start || 0));
+
+  const { replaceStart, replaceEnd } = computeSuggestionReplacementRange(latex);
+  const deleteCount = Math.max(0, (replaceEnd || 0) - (replaceStart || 0));
 
   try {
     questionInput.defaultMode = 'text';
@@ -554,14 +555,14 @@ function selectSuggestion(latex) {
       questionInput.insert(latex);
     } else {
       const currentValue = getInputTextValue();
-      const prefix = currentValue.slice(0, suggestionContext.start || 0);
-      const suffix = currentValue.slice(suggestionContext.end || 0);
+      const prefix = currentValue.slice(0, replaceStart || 0);
+      const suffix = currentValue.slice(replaceEnd || 0);
       questionInput.setValue(`${prefix}${latex}${suffix}`);
     }
   } catch {
     const currentValue = getInputTextValue();
-    const prefix = currentValue.slice(0, suggestionContext.start || 0);
-    const suffix = currentValue.slice(suggestionContext.end || 0);
+    const prefix = currentValue.slice(0, replaceStart || 0);
+    const suffix = currentValue.slice(replaceEnd || 0);
     questionInput.setValue(`${prefix}${latex}${suffix}`);
   }
 
@@ -577,6 +578,21 @@ function selectSuggestion(latex) {
   requestAnimationFrame(() => {
     questionInput.focus();
   });
+}
+
+function computeSuggestionReplacementRange(latex) {
+  const start = suggestionContext.start || 0;
+  const end = suggestionContext.end || 0;
+  const queryText = suggestionContext.queryText || '';
+  const suggestionText = latexToSmartText(latex || '');
+
+  const coeffMatch = queryText.match(/^(\d+(?:\.\d+)?)(sin|cos|tan)/i);
+  if (coeffMatch && !/^\d/.test(suggestionText)) {
+    const offset = coeffMatch[1].length;
+    return { replaceStart: start + offset, replaceEnd: end };
+  }
+
+  return { replaceStart: start, replaceEnd: end };
 }
 
 // Event Listeners
