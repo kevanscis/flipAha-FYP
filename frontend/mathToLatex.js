@@ -182,9 +182,16 @@ const RULES = [
   ["sin%o", "\\sin($1^{\\circ})"],
   ["cos%o", "\\cos($1^{\\circ})"],
   ["tan%o", "\\tan($1^{\\circ})"],
+  ["csc%o", "\\csc($1^{\\circ})"],
+  ["cosec%o", "\\csc($1^{\\circ})"],
+  ["sec%o", "\\sec($1^{\\circ})"],
+  ["cot%o", "\\cot($1^{\\circ})"],
   ["\\sin%o", "\\sin($1^{\\circ})"],
   ["\\cos%o", "\\cos($1^{\\circ})"],
   ["\\tan%o", "\\tan($1^{\\circ})"],
+  ["\\csc%o", "\\csc($1^{\\circ})"],
+  ["\\sec%o", "\\sec($1^{\\circ})"],
+  ["\\cot%o", "\\cot($1^{\\circ})"],
   
    // Degrees 
   ["deg", "^{\\circ}"],
@@ -199,6 +206,7 @@ const RULES = [
 
   // Constants
   ["pi", "\\pi"],
+  ["%pi", "\\pi"],
   ["inf", "\\infty"],
   ["infinity", "\\infty"],
   ["union", "\\cup"],
@@ -316,6 +324,40 @@ const RULES = [
   ["tan %", "\\tan($1)"],
   ["atan(%)", "\\tan^{-1}($1)"],
   ["arctan(%)", "\\tan^{-1}($1)"],
+
+  // Cosecant (csc/cosec)
+  ["\\csc(%)", "\\csc($1)"],
+  ["\\csc (%)", "\\csc($1)"],
+  ["\\csc", ["\\csc(x)", "\\csc(\\theta)"]],
+  ["\\csc %", "\\csc($1)"],
+  ["csc(%)", "\\csc($1)"],
+  ["csc (%)", "\\csc($1)"],
+  ["csc %", "\\csc($1)"],
+  ["csc", ["\\csc(x)", "\\csc(\\theta)"]],
+  ["cosec(%)", "\\csc($1)"],
+  ["cosec (%)", "\\csc($1)"],
+  ["cosec %", "\\csc($1)"],
+  ["cosec", ["\\csc(x)", "\\csc(\\theta)"]],
+
+  // Secant (sec)
+  ["\\sec(%)", "\\sec($1)"],
+  ["\\sec (%)", "\\sec($1)"],
+  ["\\sec", ["\\sec(x)", "\\sec(\\theta)"]],
+  ["\\sec %", "\\sec($1)"],
+  ["sec(%)", "\\sec($1)"],
+  ["sec (%)", "\\sec($1)"],
+  ["sec %", "\\sec($1)"],
+  ["sec", ["\\sec(x)", "\\sec(\\theta)"]],
+
+  // Cotangent (cot)
+  ["\\cot(%)", "\\cot($1)"],
+  ["\\cot (%)", "\\cot($1)"],
+  ["\\cot", ["\\cot(x)", "\\cot(\\theta)"]],
+  ["\\cot %", "\\cot($1)"],
+  ["cot(%)", "\\cot($1)"],
+  ["cot (%)", "\\cot($1)"],
+  ["cot %", "\\cot($1)"],
+  ["cot", ["\\cot(x)", "\\cot(\\theta)"]],
 
   ["Sin(pi)", ["\\sin( \\frac{\\pi }{6})", "\\sin( \\frac{\\pi }{4})", "\\sin( \\frac{\\pi }{3})", "\\sin( \\frac{\\pi }{2})", "\\sin( \\pi)"]],
   ["Sin(2", ["\\sin( 2\\pi)", "\\sin( \\frac{2\\pi }{3})"]],
