@@ -69,6 +69,7 @@ def add_cors_headers(response):
     origin = request.headers.get("Origin")
     if origin in allowed:
         response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
 
     response.headers["Vary"] = "Origin"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
@@ -93,7 +94,7 @@ def ask_question():
                 'error': 'Not logged in'
             }), 401
         
-        print("User ID from session:", user_id)
+        # print("User ID from session:", user_id)
 
         # 2) Read request
         data = request.get_json(silent=True) or {}
@@ -102,7 +103,7 @@ def ask_question():
         use_suggestion = 1 if data.get('use_suggestion') else 0
         accept_suggestion = 1 if data.get('accept_suggestion') else 0
 
-        print(question)
+        # print(question)
 
         if not question:
             return jsonify({
@@ -124,7 +125,7 @@ def ask_question():
         with conn:
             cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
             user = cursor.fetchone()
-            print(user)
+            # print(user)
             conn.execute("""
                 INSERT INTO questions (
                     question_id, user_id, question_timestamp,
@@ -191,6 +192,8 @@ def health_check():
 # USE CASE 3
 ########################################################################################################################
 
+from analytics import *
+
 app.secret_key = "your-super-secret-key"  # Change this in production
 
 # Load routes in another folder
@@ -214,7 +217,11 @@ def logout():
     session.clear()   # removes user_id and everything in session
     return jsonify({"message": "Logged out successfully"}), 200
 
-from flask import session, jsonify
+@app.route("/dashboard")
+def dashboard_page():
+    return send_from_directory(os.path.join(FRONTEND_ROOT, "Dashboard"), "dashboard.html")
+
+# API CALLS
 
 @app.route("/api/me")
 def get_current_user():
@@ -224,6 +231,37 @@ def get_current_user():
             "user_id": session["user_id"]
         }), 200
     return jsonify({"logged_in": False}), 200
+
+@app.route("/api/dashboard/active-users")
+def active_users_dashboard():
+    daily, weekly, monthly, inactive = get_active_user_counts()
+
+    return jsonify({
+        "daily": daily,
+        "weekly": weekly,
+        "monthly": monthly,
+        "inactive": inactive,
+    })
+
+@app.route("/api/dashboard/new-returning")
+def new_vs_returning_dashboard():
+    new_users, returning_users = get_new_vs_returning_last_7_days()
+
+    return jsonify({
+        "new_active": new_users,
+        "returning_active": returning_users,
+    })
+
+@app.route("/api/dashboard/question-volume")
+def dashboard_question_volume():
+    data = get_weekly_question_volume()
+    return jsonify(data)
+
+@app.route("/api/dashboard/input-method-trends")
+def input_method_trends():
+    data = get_weekly_input_method_trends()
+    return jsonify(data), 200
+
 
 # Serve JS/CSS files
 @app.route("/<path:filename>")

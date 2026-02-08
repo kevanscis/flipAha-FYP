@@ -76,6 +76,78 @@ def get_new_vs_returning_last_7_days():
     conn.close()
     return new_active, returning_active
 
+def get_weekly_question_volume():
+    conn = get_db()
+    cursor = conn.cursor()
+
+    today = datetime.now(SINGAPORE_TZ).date()
+    start_date = today - timedelta(days=6)  # last 7 days incl today
+
+    cursor.execute("""
+        SELECT
+            DATE(question_timestamp) AS day,
+            COUNT(*) AS count
+        FROM questions
+        WHERE DATE(question_timestamp) >= ?
+        GROUP BY day
+        ORDER BY day ASC
+    """, (start_date.isoformat(),))
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    # Convert to dict for easy lookup
+    data = {row["day"]: row["count"] for row in rows}
+
+    # Ensure all 7 days exist (fill missing days with 0)
+    result = []
+    for i in range(7):
+        day = (start_date + timedelta(days=i)).isoformat()
+        result.append({
+            "day": day,
+            "count": data.get(day, 0)
+        })
+
+    return result
+
+
+def get_weekly_input_method_trends():
+    conn = get_db()
+    cur = conn.cursor()
+
+    today = datetime.now(SINGAPORE_TZ).date()
+    start_date = today - timedelta(days=6)  # last 7 days incl today
+
+    cur.execute("""
+        SELECT
+            DATE(question_timestamp) AS day,
+            input_method,
+            COUNT(*) AS count
+        FROM questions
+        WHERE DATE(question_timestamp) >= ?
+          AND input_method IN ('typing', 'suggestion')
+        GROUP BY day, input_method
+        ORDER BY day ASC
+    """, (start_date.isoformat(),))
+
+    rows = cur.fetchall()
+    conn.close()
+
+    # Build lookup: {(day, method): count}
+    lookup = {(r["day"], r["input_method"]): r["count"] for r in rows}
+
+    # Fill missing days with 0s for both series
+    result = []
+    for i in range(7):
+        day = (start_date + timedelta(days=i)).isoformat()
+        result.append({
+            "day": day,
+            "typing": int(lookup.get((day, "typing"), 0)),
+            "suggestion": int(lookup.get((day, "suggestion"), 0))
+        })
+
+    return result
+
 if __name__ == "__main__":
     daily, weekly, monthly, inactive = get_active_user_counts()
     print("Number of Active Students:")

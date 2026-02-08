@@ -5,6 +5,8 @@ let smartRanges = [];
 let prevInputValue = '';
 let suggestionContext = { start: 0, end: 0 };
 // let currentUserID = null;
+let inputMethod = 'typing';
+let usedSuggestion = false;
 
 // Configuration
 const API_BASE_URL = 'http://localhost:5000'; // Update with your backend URL
@@ -65,6 +67,10 @@ async function goLogout() {
 
   window.location.reload();
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////
+// USE CASE 1
+//////////////////////////////////////////////////////////////////////////////////////////////
 
 // DOM Elements
 const messagesContainer = document.getElementById('messagesContainer');
@@ -364,7 +370,12 @@ async function handleSubmitQuestion(e) {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ question: question })
+      body: JSON.stringify({ 
+        question: question,
+        input_method: inputMethod,
+        // use_suggestion: usedSuggestion ? 1 : 0,
+        // accept_suggestion: 0
+      })
     });
 
     if (!response.ok) {
@@ -399,6 +410,8 @@ async function handleSubmitQuestion(e) {
     submitBtn.disabled = false;
     questionInput.disabled = false;
     questionInput.focus();
+    inputMethod = 'typing';
+    usedSuggestion = false;
   }
 }
 
@@ -451,6 +464,10 @@ function updateSmartRanges(prevValue, nextValue) {
 
 function handleInputChange() {
   if (!questionInput || !mathFieldReady) return;
+
+  if (!usedSuggestion){
+    inputMethod = 'typing';
+  }
   
   // Get LaTeX representation - our rules now match LaTeX format
   const latexValue = questionInput.getValue();
@@ -552,8 +569,13 @@ function hideSuggestions() {
 }
 
 function selectSuggestion(latex) {
+
   if (!questionInput || !mathFieldReady) return;
   
+  inputMethod = 'suggestion';
+  usedSuggestion = true;
+
+  console.log(inputMethod, usedSuggestion);
   // Set the LaTeX value in MathLive
   questionInput.setValue(latex);
   
