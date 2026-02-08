@@ -1,4 +1,4 @@
-from flask import Flask, send_from_directory, request, jsonify, session
+from flask import Flask, send_from_directory, request, jsonify, session, abort
 from register import register_bp
 from login import login_bp
 import os
@@ -219,6 +219,10 @@ def logout():
 
 @app.route("/dashboard")
 def dashboard_page():
+    # Only allow admin
+    if session["role"] != "admin":
+        abort(403)  # Forbidden
+
     return send_from_directory(os.path.join(FRONTEND_ROOT, "Dashboard"), "dashboard.html")
 
 # API CALLS
@@ -228,7 +232,8 @@ def get_current_user():
     if "user_id" in session:
         return jsonify({
             "logged_in": True,
-            "user_id": session["user_id"]
+            "user_id": session["user_id"],
+            "role": session["role"] 
         }), 200
     return jsonify({"logged_in": False}), 200
 

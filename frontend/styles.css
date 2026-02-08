@@ -312,6 +312,17 @@ math-field.question-input[disabled] {
     gap: 0.5rem;
 }
 
+#dashboardButton button {
+    background-color: white; /* orange */
+    color: black;
+    margin-right: 1rem;
+    border: none;
+}
+
+#dashboardButton button:hover {
+    color: #f4623a;
+}
+
 .btn-submit {
     background: linear-gradient(135deg, #f4623a, #ff8c42);
     color: white;

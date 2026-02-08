@@ -15,6 +15,10 @@ function goLogin() {
   window.location.href = `${API_BASE_URL}/login`;
 }
 
+function goDashboard() {
+  window.location.href = `${API_BASE_URL}/dashboard`;
+}
+
 function lockChat() {
   const questionInput = document.getElementById('questionInput');
   const sendBtn = document.getElementById('submitBtn');
@@ -44,14 +48,24 @@ async function checkAuthStatus() {
     credentials: 'include'
   });
   const data = await res.json();
+  console.log('API /api/me response:', data);
 
   if (!data.logged_in) {
     document.getElementById('logoutButton').style.display = 'none';
+    document.getElementById('dashboardButton').style.display = 'none';
     lockChat()
   } else {
     document.getElementById('authButtons').style.display = 'none';
     document.getElementById('logoutButton').style.display = 'block';
     unlockChat();
+
+    // Show dashboard only for admin
+    if (data.role === 'admin') {
+      document.getElementById('dashboardButton').style.display = 'block';
+    } else {
+      document.getElementById('dashboardButton').style.display = 'none';
+    }
+
     console.log("Logged in as user ID:", data.user_id);
     // currentUserID = data.user_id;
   }
