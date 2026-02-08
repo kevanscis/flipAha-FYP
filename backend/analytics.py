@@ -162,3 +162,11 @@ if __name__ == "__main__":
     print(f"New Users: {new_users}")
     print(f"Returning Users: {returning_users}")
     print("------------------------------------")
+
+    question_volume = get_weekly_question_volume()
+    print(question_volume)
+    print("------------------------------------")
+
+    input_method_trends = get_weekly_input_method_trends()
+    print(input_method_trends)
+    print("------------------------------------")

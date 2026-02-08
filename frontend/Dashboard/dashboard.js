@@ -25,7 +25,7 @@ async function loadActiveUsers() {
 
 function renderActiveUsersChart(values) {
     const width = 500;
-    const height = 300;
+    const height = 250;
     const margin = { top: 30, right: 20, bottom: 50, left: 50 };
 
     const svg = d3.select('#activeUsersChart')
@@ -79,7 +79,7 @@ async function loadNewReturningUsers() {
 
 function renderNewReturningChart(values) {
     const width = 500;
-    const height = 300;
+    const height = 250;
     const margin = { top: 30, right: 20, bottom: 50, left: 50 };
 
     const svg = d3.select('#newReturningChart')
@@ -125,7 +125,7 @@ async function loadQuestionVolume() {
 }
 function renderQuestionVolumeChart(data) {
     const width = 500;
-    const height = 350;
+    const height = 250;
     const margin = { top: 30, right: 30, bottom: 50, left: 50 };
 
     const svg = d3.select('#questionVolumeChart')
@@ -188,9 +188,10 @@ async function loadInputMethodTrends() {
 
     renderInputMethodTrendChart(data);
 }
+
 function renderInputMethodTrendChart(data) {
     const width = 500;
-    const height = 350;
+    const height = 250;
     const margin = { top: 30, right: 80, bottom: 50, left: 50 };
 
     const svg = d3.select('#inputMethodTrendChart')
@@ -286,4 +287,3 @@ loadActiveUsers();
 loadNewReturningUsers();
 loadQuestionVolume();
 loadInputMethodTrends();
-
