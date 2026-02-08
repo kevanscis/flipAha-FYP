@@ -188,8 +188,11 @@ const RULES = [
   
    // Degrees 
   ["deg", "^{\\circ}"],
+  ["%deg", "$1^{\\circ}"],
   ["degree", "^{\\circ}"],
+  ["%degree", "$1^{\\circ}"],
   ["degrees", "^{\\circ}"],
+  ["%degrees", "$1^{\\circ}"],
   ["°", "^{\\circ}"], 
   ["o", "^{\\circ}"],
   ["%o", "$1^{\\circ}"],
