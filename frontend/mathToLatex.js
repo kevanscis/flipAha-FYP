@@ -178,8 +178,21 @@ const RULES = [
   ["!=", "\\neq"],
   ["+-", "\\pm"],
 
+  // Trig functions with degree symbol - must come before generic %o rule
+  ["sin%o", "\\sin($1^{\\circ})"],
+  ["cos%o", "\\cos($1^{\\circ})"],
+  ["tan%o", "\\tan($1^{\\circ})"],
+  ["\\sin%o", "\\sin($1^{\\circ})"],
+  ["\\cos%o", "\\cos($1^{\\circ})"],
+  ["\\tan%o", "\\tan($1^{\\circ})"],
+  
+   // Degrees 
   ["deg", "^{\\circ}"],
   ["degree", "^{\\circ}"],
+  ["degrees", "^{\\circ}"],
+  ["°", "^{\\circ}"], 
+  ["o", "^{\\circ}"],
+  ["%o", "$1^{\\circ}"],
 
   // Constants
   ["pi", "\\pi"],
