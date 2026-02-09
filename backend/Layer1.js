@@ -2,14 +2,20 @@
 const path = require('path');
 const { pathToFileURL } = require('url');
 
+// The project keeps the canonical mathToLatex at frontend/mathToLatex.js
+// Older path used 'frontend/src/utils/mathToLatex.js' which does not exist.
 const MATH_UTILS_PATH = path.resolve(
   __dirname,
-  '../frontend/src/utils/mathToLatex.js'
+  '..',
+  'frontend',
+  'mathToLatex.js'
 );
 
 async function loadMathUtils() {
   const fileUrl = pathToFileURL(MATH_UTILS_PATH).href;
-  return import(fileUrl);
+  // Import may return a CommonJS module wrapped under `default` or an ESM namespace.
+  const mod = await import(fileUrl);
+  return (mod && mod.default) ? mod.default : mod;
 }
 
 /**

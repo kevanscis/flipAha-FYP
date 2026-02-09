@@ -153,19 +153,15 @@ function normalizeToLatex(input) {
 function getInputTextValue() {
   if (!questionInput) return '';
 
-  try {
-    const textValue = questionInput.getValue('text');
-    if (typeof textValue === 'string' && textValue.trim().length > 0) {
-      return textValue;
-    }
-  } catch {
-    // Ignore if format not supported
-  }
-
+  // Avoid calling unsupported formats on MathLive (some builds throw
+  // "Unexpected format \"text\"" inside their internals). Instead
+  // rely on LaTeX output which is stable across versions and convert
+  // it to a readable/plain form for our suggestion pipeline.
   try {
     const latexValue = questionInput.getValue();
-    return latexToSmartText(latexValue);
-  } catch {
+    return latexToSmartText(latexValue || '');
+  } catch (e) {
+    // If MathLive changed API or the field isn't ready, return empty.
     return '';
   }
 }
