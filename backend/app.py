@@ -20,6 +20,21 @@ MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+from flask import Flask, send_from_directory, request, jsonify
+from register import register_bp
+from login import login_bp
+import os
+import json
+import subprocess
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FRONTEND_ROOT = os.path.join(BASE_DIR, "..", "frontend")
+
+app = Flask(__name__)
+
+########################################################################################################################
+# USE CASE 1
+########################################################################################################################
 
 # Hardcoded responses for different topics
 responses = {
@@ -90,6 +105,39 @@ def ask_question():
             'question': question,
             'answer': answer,
             'topic': topic
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/suggestions', methods=['OPTIONS'])
+def preflight_suggestions():
+    """Explicit CORS preflight for /api/suggestions"""
+    return jsonify({'status': 'ok'}), 200
+
+@app.route('/api/suggestions', methods=['POST'])
+def get_suggestions():
+    """Get LaTeX suggestions based on user input"""
+    try:
+        data = request.json
+        user_input = data.get('input', '').strip()
+
+        layer1_path = os.path.join(os.path.dirname(__file__), 'Layer1.js')
+        result = subprocess.run(
+            ['node', layer1_path, '--input', user_input, '--max', '5'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
+        payload = json.loads(result.stdout.strip() or '{}')
+        suggestions = payload.get('suggestions', [])
+
+        return jsonify({
+            'success': True,
+            'suggestions': suggestions[:5]
         }), 200
     except Exception as e:
         return jsonify({
@@ -624,3 +672,47 @@ if __name__ == '__main__':
         app.run(debug=True, port=5000, host='0.0.0.0', use_reloader=True)
     else:
         app.run(debug=False, port=5000, host='0.0.0.0', use_reloader=False)
+########################################################################################################################
+# USE CASE 3
+########################################################################################################################
+
+app.secret_key = "your-super-secret-key"  # Change this in production
+
+# Load routes in another folder
+app.register_blueprint(register_bp)
+app.register_blueprint(login_bp)
+
+@app.route("/")
+def home_page():
+    return send_from_directory(os.path.join(FRONTEND_ROOT), "index.html")
+
+@app.route("/register")
+def register_page():
+    return send_from_directory(os.path.join(FRONTEND_ROOT, "Login and Register"), "register.html")
+
+@app.route("/login")
+def login_page():
+    return send_from_directory(os.path.join(FRONTEND_ROOT, "Login and Register"), "login.html")
+
+# Serve JS/CSS files
+@app.route("/<path:filename>")
+def serve_file(filename):
+    """
+    Look for the file in all subfolders of frontend dynamically.
+    """
+    # Loop through subfolders
+    for subfolder in os.listdir(FRONTEND_ROOT):
+        subfolder_path = os.path.join(FRONTEND_ROOT, subfolder)
+        file_path = os.path.join(subfolder_path, filename)
+        if os.path.isfile(file_path):
+            return send_from_directory(subfolder_path, filename)
+    
+    # Also check root of frontend
+    file_path = os.path.join(FRONTEND_ROOT, filename)
+    if os.path.isfile(file_path):
+        return send_from_directory(FRONTEND_ROOT, filename)
+
+    return "File Not Found", 404
+
+if __name__ == "__main__":
+    app.run(port=5000, debug=True)
