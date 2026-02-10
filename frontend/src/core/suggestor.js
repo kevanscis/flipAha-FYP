@@ -1,10 +1,10 @@
 // core/suggester.js
-import { extractMathExpression, isValidMathExpression } from './math-extractor.js';
+import { getPrimaryMathExpression, isValidMathExpression } from './math-extractor.js';
 import { generatePermutations } from './permutation-engine.js';
 import { trigModel } from './layer2-trig-model.js';
 
 export function suggest(input, curriculum = 'general', options = {}) {
-  const math = extractMathExpression(input);
+  const math = getPrimaryMathExpression(input);
   if (!isValidMathExpression(math)) return [];
 
   const maxSuggestions = Number.isFinite(options.maxSuggestions)

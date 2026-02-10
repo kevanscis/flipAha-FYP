@@ -411,8 +411,8 @@ function handleInputChange() {
   
   // Get LaTeX representation - our rules now match LaTeX format
   const latexValue = questionInput.getValue();
-  const searchValue = latexValue;
   const textValue = getInputTextValue();
+  const searchValue = textValue;
   
   console.log('LaTeX value:', latexValue); // Debug
   console.log('Search value:', searchValue); // Debug
@@ -426,7 +426,7 @@ function handleInputChange() {
 
   // Extract the current word/phrase for suggestions
   // Match more characters including backslash for LaTeX commands
-  const mathSymbolRegex = /[A-Za-z0-9_\\^/+\-*(),{}<>=!|√∛∜×·⋅≤≥≠±∞∪∩≈∫∑⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ⃗αβγδΔθλμωΩπ\s'"]/;
+  const mathSymbolRegex = /[A-Za-z0-9_\\^/+\-*(),{}<>=!|√∛∜×·⋅≤≥≠±∞∪∩≈∫∑⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ⃗αβγδΔθλμωΩπ'"]/;
   const isChar = (ch) => mathSymbolRegex.test(ch);
 
   // Get current word/phrase
