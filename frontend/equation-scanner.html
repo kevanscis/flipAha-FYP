@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Equation Scanner - flipAha!</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Oswald:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- KaTeX for rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/katex.min.css">
+    
+    <!-- Cropper.js for image cropping -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+    
+    <!-- MathJax for LaTeX rendering -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <!-- Custom styles -->
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .tab-bar {
+            display: flex;
+            gap: 10px;
+            border-bottom: 2px solid #e9ecef;
+            padding: 0 20px;
+            background: white;
+        }
+
+        .tab-button {
+            padding: 12px 20px;
+            background: none;
+            border: none;
+            color: #666;
+            font-size: 1rem;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .tab-button.active {
+            color: #f4623a;
+            border-bottom-color: #f4623a;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+        }
+
+        .tab-content.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Upload Section */
+        .upload-section {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .file-input-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 3px dashed #d94027;
+            border-radius: 12px;
+            padding: 40px 20px;
+            background: #fff5f0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .file-input-wrapper:hover {
+            background: #ffe8e0;
+            border-color: #f4623a;
+        }
+
+        .file-input-wrapper input[type="file"] {
+            display: none;
+        }
+
+        .file-input-text {
+            text-align: center;
+        }
+
+        .file-input-text p {
+            margin: 10px 0;
+            color: #666;
+        }
+
+        .file-input-text .icon {
+            font-size: 3rem;
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: #f4623a;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #d94027;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(244, 98, 58, 0.3);
+        }
+
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .btn-secondary {
+            background: #e9ecef;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #dee2e6;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #842029;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border-left: 4px solid #dc3545;
+        }
+
+        .success-message {
+            background: #d1e7dd;
+            color: #0f5132;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border-left: 4px solid #198754;
+        }
+
+        .warning-message {
+            background: #fff3cd;
+            color: #664d03;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border-left: 4px solid #ffc107;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #f4623a;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Preview Section */
+        .preview-section {
+            text-align: center;
+        }
+
+        .preview-image {
+            max-width: 100%;
+            max-height: 400px;
+            border-radius: 8px;
+            margin: 20px 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        /* LaTeX Editor */
+        .editor-section {
+            display: block !important;
+            width: 100%;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        #editorContent {
+            display: block !important;
+            width: 100%;
+        }
+
+        .latex-input-group {
+            display: block !important;
+            width: 100%;
+            margin-bottom: 25px;
+            clear: both;
+        }
+
+        .latex-input-group label {
+            display: block !important;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+
+        .latex-input-group textarea,
+        .latex-input-group input {
+            display: block !important;
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            box-sizing: border-box;
+        }
+
+        .latex-input-group textarea {
+            resize: vertical;
+            min-height: 150px;
+        }
+
+        .latex-input-group textarea:focus,
+        .latex-input-group input:focus {
+            outline: none;
+            border-color: #f4623a;
+            box-shadow: 0 0 0 3px rgba(244, 98, 58, 0.1);
+        }
+
+        .preview-box {
+            display: block !important;
+            width: 100%;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 30px 20px;
+            background: #f8f9fa;
+            min-height: 150px;
+            text-align: center;
+            box-sizing: border-box;
+        }
+
+        .rating-section {
+            display: block !important;
+            width: 100%;
+            margin-bottom: 25px;
+            clear: both;
+        }
+
+        .rating-section label {
+            display: block !important;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+
+        .star-rating {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .star {
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .star:hover,
+        .star.active {
+            transform: scale(1.2);
+        }
+
+        /* Image Gallery */
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .gallery-item {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .gallery-item:hover {
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+            transform: translateY(-4px);
+        }
+
+        .gallery-item-image {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            cursor: pointer;
+        }
+
+        .gallery-item-info {
+            padding: 12px;
+        }
+
+        .gallery-item-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            word-break: break-all;
+            font-size: 0.9rem;
+        }
+
+        .gallery-item-latex {
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            color: #666;
+            margin-bottom: 8px;
+            max-height: 40px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .gallery-item-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .gallery-item-actions button {
+            flex: 1;
+            padding: 6px;
+            font-size: 0.85rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-view {
+            background: #e7f5ff;
+            color: #0066cc;
+        }
+
+        .btn-view:hover {
+            background: #cce7ff;
+        }
+
+        .btn-delete {
+            background: #ffe0e0;
+            color: #cc0000;
+        }
+
+        .btn-delete:hover {
+            background: #ffcccc;
+        }
+
+        .gallery-stats {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f0f7ff;
+            border-radius: 8px;
+            border-left: 4px solid #0066cc;
+        }
+
+        .stats-item {
+            display: inline-block;
+            margin-right: 20px;
+        }
+
+        .stats-label {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .stats-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #0066cc;
+        }
+
+        /* Quality warnings section */
+        .quality-warnings {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 12px 16px;
+        }
+
+        .quality-warnings h4 {
+            color: #664d03;
+            margin-bottom: 8px;
+        }
+
+        .quality-warnings ul {
+            margin-left: 20px;
+            color: #664d03;
+        }
+
+        .quality-warnings li {
+            margin: 4px 0;
+        }
+
+        /* Back navigation */
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #f4623a;
+            text-decoration: none;
+            margin-bottom: 20px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .back-link:hover {
+            gap: 12px;
+        }
+
+        .header-nav {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .nav-button {
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .nav-button:hover,
+        .nav-button.active {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.6);
+            transform: translateY(-2px);
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #666;
+        }
+
+        .empty-state-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+
+        /* Crop Modal */
+        .crop-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 10000;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .crop-modal.active {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .crop-container {
+            width: 100%;
+            max-width: 900px;
+            max-height: 600px;
+            margin: 20px auto;
+        }
+
+        .crop-container img {
+            max-width: 100%;
+            display: block;
+        }
+
+        .crop-controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .crop-controls .btn {
+            min-width: 120px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>
+                <span class="flip">Flip</span><span class="aha">Aha</span>!
+            </h1>
+            <p>Upload Your Math Equations</p>
+            <div class="header-nav">
+                <a href="index.html" class="nav-button">💬 Chat Tutor</a>
+                <a href="equation-scanner.html" class="nav-button active">📸 Equation Scanner</a>
+            </div>
+        </header>
+
+        <!-- Tab Navigation -->
+        <div class="tab-bar">
+            <button class="tab-button active" data-tab="upload">📤 Upload & Convert</button>
+            <button class="tab-button" data-tab="editor">✏️ Edit LaTeX</button>
+            <button class="tab-button" data-tab="gallery">📸 Gallery</button>
+        </div>
+
+        <!-- Tab Contents -->
+        <main class="tutor-main">
+            <!-- Upload & Convert Tab -->
+            <div class="tab-content active" id="uploadTab">
+                <div class="upload-section">
+                    <div class="file-input-wrapper" id="fileInputWrapper">
+                        <div class="file-input-text">
+                            <span class="icon">📷</span>
+                            <p><strong>Click to upload or drag and drop</strong></p>
+                            <p>PNG, JPG, GIF, BMP up to 10MB</p>
+                        </div>
+                        <input type="file" id="fileInput" accept="image/*">
+                    </div>
+
+                    <div id="uploadError" class="error-message" style="display: none;"></div>
+                    <div id="uploadSuccess" class="success-message" style="display: none;"></div>
+                    <div id="qualityWarnings" class="quality-warnings" style="display: none;">
+                        <h4>⚠️ Quality Warnings</h4>
+                        <ul id="warningsList"></ul>
+                    </div>
+
+                    <div id="previewSection" style="display: none;">
+                        <h3>Preview</h3>
+                        <img id="previewImage" class="preview-image" alt="Preview">
+                        <div class="button-group">
+                            <button id="showCropBtn" class="btn btn-secondary">🔍 Crop Image</button>
+                            <button id="convertBtn" class="btn btn-primary">⚡ Convert to LaTeX</button>
+                        </div>
+
+                        <div id="convertLoading" style="display: none;">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                <p>Converting image to LaTeX...</p>
+                            </div>
+                        </div>
+
+                        <label style="display: flex; gap: 10px; align-items: center; margin-top: 15px;">
+                            <input type="checkbox" id="highAccuracy">
+                            <span>Use High Accuracy Mode (slower)</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LaTeX Editor Tab -->
+            <div class="tab-content" id="editorTab">
+                <div class="editor-section">
+                    <div id="noImageSelected" class="empty-state">
+                        <div class="empty-state-icon">📷</div>
+                        <h3>No Image Selected</h3>
+                        <p>Upload an image and convert it to see the LaTeX editor.</p>
+                    </div>
+
+                    <div id="editorContent" style="display: none;">
+                        <div class="latex-input-group">
+                            <label for="imageNameInput">Image Name:</label>
+                            <input type="text" id="imageNameInput" placeholder="Image name">
+                        </div>
+
+                        <div class="latex-input-group">
+                            <label for="latexInput">LaTeX Expression:</label>
+                            <textarea id="latexInput" rows="6" placeholder="Edit your LaTeX here..."></textarea>
+                        </div>
+
+                        <div class="latex-input-group">
+                            <label>Preview:</label>
+                            <div class="preview-box" id="latexPreview">
+                                <p>Preview will appear here</p>
+                            </div>
+                        </div>
+
+                        <div class="rating-section">
+                            <label>Rate Accuracy:</label>
+                            <div class="star-rating" id="starRating">
+                                <span class="star" data-rating="1">☆</span>
+                                <span class="star" data-rating="2">☆</span>
+                                <span class="star" data-rating="3">☆</span>
+                                <span class="star" data-rating="4">☆</span>
+                                <span class="star" data-rating="5">☆</span>
+                            </div>
+                        </div>
+
+                        <div class="button-group" style="margin-top: 20px;">
+                            <button id="saveLatexBtn" class="btn btn-primary">💾 Save Changes</button>
+                            <button id="exportLatexBtn" class="btn btn-secondary">📋 Copy LaTeX</button>
+                        </div>
+
+                        <div id="editorMessage" class="success-message" style="display: none; margin-top: 15px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gallery Tab -->
+            <div class="tab-content" id="galleryTab">
+                <div>
+                    <h2>Your Converted Images</h2>
+                    
+                    <div id="galleryStats" class="gallery-stats" style="display: none;">
+                        <div class="stats-item">
+                            <div class="stats-label">Total Images</div>
+                            <div class="stats-value" id="totalImages">0</div>
+                        </div>
+                    </div>
+
+                    <div id="galleryLoading" style="display: none;">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                            <p>Loading gallery...</p>
+                        </div>
+                    </div>
+
+                    <div id="galleryError" class="error-message" style="display: none;"></div>
+
+                    <div id="galleryEmpty" class="empty-state">
+                        <div class="empty-state-icon">📸</div>
+                        <h3>No Images Yet</h3>
+                        <p>Upload and convert images to build your gallery.</p>
+                    </div>
+
+                    <div class="gallery-grid" id="galleryGrid" style="display: none;"></div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer>
+            <p>&copy; 2026 FlipAha - Math Tutoring Made Easy</p>
+        </footer>
+    </div>
+
+    <!-- Crop Modal -->
+    <div id="cropModal" class="crop-modal">
+        <div class="crop-container">
+            <img id="cropImage" src="" alt="Image to crop">
+        </div>
+        <div class="crop-controls">
+            <button id="cropConfirmBtn" class="btn btn-primary">✂️ Crop & Apply</button>
+            <button id="cropCancelBtn" class="btn btn-secondary">❌ Cancel</button>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/contrib/auto-render.min.js"></script>
+    <script src="nav.js"></script>
+    <script src="equation-scanner.js"></script>
+</body>
+</html>

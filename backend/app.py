@@ -3,9 +3,9 @@ import re
 import os
 import io
 from werkzeug.utils import secure_filename
-from backend.image_processor import ImageProcessor
-from backend.latex_converter import LatexConverter
-from backend.session_manager import SessionManager
+from image_processor import ImageProcessor
+from latex_converter import LatexConverter
+from session_manager import SessionManager
 
 app = Flask(__name__)
 
