@@ -203,6 +203,16 @@ async function handleConvert() {
             throw new Error(data.error || 'Conversion failed');
         }
 
+        // Log conversion results for debugging
+        console.log('=== Conversion Results ===');
+        console.log('Model used:', data.model || 'unknown');
+        console.log('Confidence:', data.confidence);
+        console.log('LaTeX output:', data.latex);
+        console.log('Preprocess variant:', data.preprocess_variant);
+        console.log('Validation:', data.validation);
+        console.log('Full response:', data);
+        console.log('=========================');
+
         // Update state with conversion results
         state.currentImage = {
             imageId: state.uploadedImageId,
@@ -213,7 +223,8 @@ async function handleConvert() {
         state.currentLatex = {
             imageId: state.uploadedImageId,
             latex: data.latex || '',
-            confidence: data.confidence || 0
+            confidence: data.confidence || 0,
+            model: data.model || 'unknown'
         };
 
         showSuccess('✅ Image converted to LaTeX!');
@@ -411,6 +422,8 @@ function updateEditorDisplay() {
     const noImageSelected = document.getElementById('noImageSelected');
 
     if (state.currentLatex && state.currentImage) {
+        console.log('Editor Display - Model:', state.currentLatex.model, 'Confidence:', state.currentLatex.confidence);
+        
         if (editorContent) editorContent.style.display = 'flex';
         if (noImageSelected) noImageSelected.style.display = 'none';
 
@@ -419,6 +432,16 @@ function updateEditorDisplay() {
 
         if (imageNameInput) imageNameInput.value = state.currentImage.filename || '';
         if (latexInput) latexInput.value = state.currentLatex.latex || '';
+
+        // Display confidence if available
+        const confidenceBadge = document.getElementById('confidenceBadge');
+        const confidenceValue = document.getElementById('confidenceValue');
+        if (state.currentLatex.confidence > 0) {
+            if (confidenceBadge) confidenceBadge.style.display = 'block';
+            if (confidenceValue) confidenceValue.textContent = (state.currentLatex.confidence * 100).toFixed(0) + '%';
+        } else {
+            if (confidenceBadge) confidenceBadge.style.display = 'none';
+        }
 
         state.rating = null;
         document.querySelectorAll('.star').forEach(s => {
@@ -637,6 +660,8 @@ function displayStats(stats) {
 
 async function handleViewImage(image) {
     try {
+        console.log('Loading image from gallery:', image.id, 'Confidence:', image.confidence);
+        
         state.currentImage = {
             imageId: image.id,
             filename: image.filename,
