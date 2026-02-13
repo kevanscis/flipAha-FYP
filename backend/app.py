@@ -226,7 +226,6 @@ def dashboard_page():
     return send_from_directory(os.path.join(FRONTEND_ROOT, "Dashboard"), "dashboard.html")
 
 # API CALLS
-
 @app.route("/api/me")
 def get_current_user():
     if "user_id" in session:
@@ -247,6 +246,23 @@ def active_users_dashboard():
         "monthly": monthly,
         "inactive": inactive,
     })
+
+@app.route("/api/dashboard/active-trend")
+def active_trend():
+    granularity = request.args.get("granularity", "daily")  # daily/weekly/monthly
+
+    if granularity == "daily":
+        data = get_active_users_daily_trend(days=7)
+    elif granularity == "weekly":
+        data = get_active_users_weekly_trend(weeks=4)
+    elif granularity == "monthly":
+        data = get_active_users_monthly_trend(months=6)
+    elif granularity == "inactive":
+        data = get_inactive_users_monthly_trend(months=6)
+    else:
+        return jsonify({"error": "Invalid granularity"}), 400
+
+    return jsonify(data), 200
 
 @app.route("/api/dashboard/new-returning")
 def new_vs_returning_dashboard():

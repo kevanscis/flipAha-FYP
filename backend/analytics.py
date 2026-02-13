@@ -48,6 +48,130 @@ def get_active_user_counts():
     conn.close()
     return daily_count, weekly_count, monthly_count, inactive_count
 
+def get_active_users_daily_trend(days=7):
+    conn = get_db()
+    cur = conn.cursor()
+
+    today = datetime.now(SINGAPORE_TZ).date()
+    start = today - timedelta(days=days-1)
+
+    cur.execute("""
+        SELECT DATE(last_login) AS day,
+               COUNT(DISTINCT user_id) AS count
+        FROM users
+        WHERE last_login IS NOT NULL
+          AND DATE(last_login) >= ?
+        GROUP BY day
+        ORDER BY day ASC
+    """, (start.isoformat(),))
+
+    rows = cur.fetchall()
+    conn.close()
+
+    lookup = {r["day"]: r["count"] for r in rows}
+    result = []
+    for i in range(days):
+        day = (start + timedelta(days=i)).isoformat()
+        result.append({"label": day, "count": int(lookup.get(day, 0))})
+    return result
+
+def get_active_users_weekly_trend(weeks=4):
+    conn = get_db()
+    cur = conn.cursor()
+
+    now = datetime.now(SINGAPORE_TZ)
+    start = (now - timedelta(days=7*(weeks-1))).date()
+
+    # Week label using year-week (YYYY-WW)
+    cur.execute("""
+        SELECT strftime('%Y-W%W', last_login) AS wk,
+               COUNT(DISTINCT user_id) AS count
+        FROM users
+        WHERE last_login IS NOT NULL
+          AND DATE(last_login) >= ?
+        GROUP BY wk
+        ORDER BY wk ASC
+    """, (start.isoformat(),))
+
+    rows = cur.fetchall()
+    conn.close()
+
+    # Fill missing weeks roughly by stepping 7 days
+    lookup = {r["wk"]: r["count"] for r in rows}
+    result = []
+    for i in range(weeks):
+        d = start + timedelta(days=7*i)
+        wk = d.strftime("%Y-W%W")
+        result.append({"label": wk, "count": int(lookup.get(wk, 0))})
+    return result
+
+def get_active_users_monthly_trend(months=6):
+    conn = get_db()
+    cur = conn.cursor()
+
+    now = datetime.now(SINGAPORE_TZ)
+    # approximate start by 31 days*months; good enough for charts
+    start = (now - timedelta(days=31*(months-1))).date()
+
+    cur.execute("""
+        SELECT strftime('%Y-%m', last_login) AS ym,
+               COUNT(DISTINCT user_id) AS count
+        FROM users
+        WHERE last_login IS NOT NULL
+          AND DATE(last_login) >= ?
+        GROUP BY ym
+        ORDER BY ym ASC
+    """, (start.isoformat(),))
+
+    rows = cur.fetchall()
+    conn.close()
+
+    lookup = {r["ym"]: r["count"] for r in rows}
+
+    # Fill missing months by stepping month manually (simple method)
+    result = []
+    y, m = start.year, start.month
+    for _ in range(months):
+        ym = f"{y:04d}-{m:02d}"
+        result.append({"label": ym, "count": int(lookup.get(ym, 0))})
+        m += 1
+        if m == 13:
+            m = 1
+            y += 1
+    return result
+
+def get_inactive_users_monthly_trend(months=6):
+    conn = get_db()
+    cur = conn.cursor()
+
+    now = datetime.now(SINGAPORE_TZ)
+    # start around months-1 months ago (rough)
+    start_date = (now - timedelta(days=31*(months-1))).date()
+
+    result = []
+    y, m = start_date.year, start_date.month
+
+    for _ in range(months):
+        month_start = datetime(y, m, 1, tzinfo=SINGAPORE_TZ).date()
+        cutoff = month_start - timedelta(days=30)
+
+        cur.execute("""
+            SELECT COUNT(*) AS count
+            FROM users
+            WHERE last_login IS NULL OR DATE(last_login) < ?
+        """, (cutoff.isoformat(),))
+
+        count = cur.fetchone()["count"]
+        result.append({"label": f"{y:04d}-{m:02d}", "count": int(count)})
+
+        m += 1
+        if m == 13:
+            m = 1
+            y += 1
+
+    conn.close()
+    return result
+
 def get_new_vs_returning_last_7_days():
     conn = get_db()
     cursor = conn.cursor()

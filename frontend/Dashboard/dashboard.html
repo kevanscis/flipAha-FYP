@@ -48,12 +48,19 @@
             </div>
         </div>
     </div>
-    
+
     <div class="row mt-5">
         <!-- Active Users Chart -->
         <div class="col-md-6">
             <h4 class="text-center">Active Users</h4>
-            <svg id="activeUsersChart"></svg>
+            <div class="d-flex gap-2 justify-content-center mt-4">
+                <button class="btn btn-outline-primary" id="btnDaily">Daily</button>
+                <button class="btn btn-outline-primary" id="btnWeekly">Weekly</button>
+                <button class="btn btn-outline-primary" id="btnMonthly">Monthly</button>
+                <button class="btn btn-outline-primary" id="btnInactive">Inactive</button>
+            </div>
+            <svg id="activeTrendChart" class="mt-3"></svg>
+            <!-- <svg id="activeUsersChart"></svg> -->
         </div>
 
         <!-- New vs Returning Chart -->
