@@ -195,8 +195,8 @@ async function loadNewReturningUsers() {
 
 function renderNewReturningChart(values) {
     const width = 500;
-    const height = 250;
-    const margin = { top: 30, right: 20, bottom: 50, left: 50 };
+    const height = 350;
+    const margin = { top: 30, right: 30, bottom: 50, left: 50 };
 
     const svg = d3.select('#newReturningChart')
         .attr('width', width)
@@ -218,9 +218,15 @@ function renderNewReturningChart(values) {
         .attr('transform', `translate(0,${height - margin.bottom})`)
         .call(d3.axisBottom(x));
 
+    const yMax = Math.ceil(d3.max(values, d => d.value) || 1);
+
     svg.append('g')
         .attr('transform', `translate(${margin.left},0)`)
-        .call(d3.axisLeft(y));
+        .call(
+            d3.axisLeft(y)
+            .tickValues(d3.range(0, yMax + 1, 1))  // 0,1,2,3...
+            .tickFormat(d3.format('d'))
+        );
 
     svg.selectAll('rect')
         .data(values)
@@ -277,9 +283,16 @@ function renderQuestionVolumeChart(data) {
         .attr('transform', `translate(0,${height - margin.bottom})`)
         .call(d3.axisBottom(x).ticks(7).tickFormat(d3.timeFormat('%a')));
 
+    const yMax = Math.ceil(d3.max(data, d => d.count) || 1);
+
     svg.append('g')
         .attr('transform', `translate(${margin.left},0)`)
-        .call(d3.axisLeft(y));
+        .call(
+            d3.axisLeft(y)
+            .tickValues(d3.range(0, yMax + 1, 1))
+            .tickFormat(d3.format('d'))
+        );
+
 
     svg.append('path')
         .datum(data)
@@ -345,9 +358,16 @@ function renderInputMethodTrendChart(data) {
         .attr('transform', `translate(0,${height - margin.bottom})`)
         .call(d3.axisBottom(x).ticks(7).tickFormat(d3.timeFormat('%a')));
 
+    const yMaxInt = Math.ceil(yMax || 1);
+
     svg.append('g')
         .attr('transform', `translate(${margin.left},0)`)
-        .call(d3.axisLeft(y));
+        .call(
+            d3.axisLeft(y)
+            .tickValues(d3.range(0, yMaxInt + 1, 1))
+            .tickFormat(d3.format('d'))
+        );
+
 
     // Line generators
     const lineTyping = d3.line()
@@ -404,6 +424,16 @@ function renderInputMethodTrendChart(data) {
     svg.append('circle').attr('cx', legendX).attr('cy', legendY + 20).attr('r', 5).attr('fill', '#198754');
     svg.append('text').attr('x', legendX + 10).attr('y', legendY + 24).text('Suggestion').style('font-size', '12px');
 }
+
+// Navigation functions
+function goHome() {
+  window.location.href = '../index.html';
+}
+
+function goLogout() {
+  window.location.href = '../Login and Register/login.html';
+}
+
 loadNewReturningUsers();
 loadQuestionVolume();
 loadInputMethodTrends();
