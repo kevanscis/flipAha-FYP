@@ -421,38 +421,43 @@ const RULES = [
   // Fractions
   ["%over%", "\\frac{$1}{$2}"],
   ["%divide%", "\\frac{$1}{$2}"],
-  ["mod", "\\left|x\\right|"],
+  ["mod", "\\left|x\\right|"]
 
-  // Function-squared
-  ["sin%2", "\\sin^{2}($1)"],
-  ["cos%2", "\\cos^{2}($1)"],
-  ["tan%2", "\\tan^{2}($1)"],
-  ["csc%2", "\\csc^{2}($1)"],
-  ["sec%2", "\\sec^{2}($1)"],
-  ["cot%2", "\\cot^{2}($1)"],
+//   // Function-squared
+//   ["sin%2", "\\sin^{2}($1)"],
+//   ["cos%2", "\\cos^{2}($1)"],
+//   ["tan%2", "\\tan^{2}($1)"],
+//   ["csc%2", "\\csc^{2}($1)"],
+//   ["sec%2", "\\sec^{2}($1)"],
+//   ["cot%2", "\\cot^{2}($1)"],
 
-  // Exponent inside parentheses: sin(x^2) → \sin(x^2)
-  ["sin%2", ["\\sin^{2}($1)", "\\sin($1^2)"]],
-  ["cos%2", ["\\cos^{2}($1)", "\\cos($1^2)"]],
-  ["tan%2", ["\\tan^{2}($1)", "\\tan($1^2)"]],
-  ["csc%2", ["\\csc^{2}($1)", "\\csc($1^2)"]],
-  ["sec%2", ["\\sec^{2}($1)", "\\sec($1^2)"]],
-  ["cot%2", ["\\cot^{2}($1)", "\\cot($1^2)"]]
+//   // Exponent inside parentheses: sin(x^2) → \sin(x^2)
+//   ["sin%2", ["\\sin^{2}($1)", "\\sin($1^2)"]],
+//   ["cos%2", ["\\cos^{2}($1)", "\\cos($1^2)"]],
+//   ["tan%2", ["\\tan^{2}($1)", "\\tan($1^2)"]],
+//   ["csc%2", ["\\csc^{2}($1)", "\\csc($1^2)"]],
+//   ["sec%2", ["\\sec^{2}($1)", "\\sec($1^2)"]],
+//   ["cot%2", ["\\cot^{2}($1)", "\\cot($1^2)"]]
+
 ];
 
 // ============================================================================
 // TRIGONOMETRY SYSTEM - Smart trig function detection and suggestion
 // ============================================================================
-
 const TRIG_CONFIG = {
-  // Core trigonometric functions
+  // Core trigonometric functions (with cosec alias)
   functions: ['sin', 'cos', 'tan', 'csc', 'cosec', 'sec', 'cot'],
   
-  // Common argument suggestions
+  // Common argument suggestions (expanded with degree values)
   arguments: [
     'x',
     '\\theta',
     '\\alpha',
+    '45^{\\circ}',
+    '30^{\\circ}',
+    '60^{\\circ}',
+    '90^{\\circ}',
+    '0^{\\circ}',
     '\\beta',
     '\\gamma',
     '\\pi',
@@ -466,32 +471,32 @@ const TRIG_CONFIG = {
     '\\frac{3\\pi}{2}'
   ],
   
-  // Modifiers that can apply to trig functions
+  // FIXED: Removed duplicate '^2' key (invalid JS object syntax)
   modifiers: {
     '^-1': { latex: '^{-1}', label: 'inverse' },
-    '^2': { latex: '^{2}', label: 'squared' },
-    '^2': { latex: '^{2}', label: 'squared' },
-    '^3': { latex: '^{3}', label: 'cubed' },
+    '^2': { latex: '^{2}', label: 'squared', common: true }, // ✅ ONLY ONE ENTRY
+    '^3': { latex: '^{3}', label: 'cubed', common: true },
     '^n': { latex: '^{n}', label: 'nth power' }
   }
 };
 
 /**
  * Parse a trig expression to extract function, modifiers, and argument
- * Examples: "sin", "sin(", "sin^-1", "cos(theta", "tan^2(pi/4)"
+ * Examples: "sin", "sin(", "sin^-1", "cos(theta", "tan^2(pi/4)", "cosec45"
  */
 function parseTrigExpression(input) {
   const normalized = input.toLowerCase().trim();
   
   // Match patterns: func[modifiers](args)
-  // Examples: sin, sin^-1, sin(theta, sin^2(pi/6
   const patterns = [
     // With modifiers and arguments: sin^-1(theta
     /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*\(\s*(.*)$/i,
-    // With modifiers and pi/fraction inline: sin^2pi/6, sinpi/4, sin2pi/3
+    // With modifiers and pi/fraction inline: sin^2pi/6, sinpi/4
     /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*(\d*(?:\\pi|π|pi)(?:\/\d+)?|\d*(?:\\pi|π|pi)\s*\/\s*\d+)$/i,
+    // CRITICAL: Plain number after trig (e.g., "sin45", "cosec30") → degrees
+    /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*(\d+(?:\.\d+)?)$/i,
     // With modifiers and inline arguments: sin^2x, sin2x, cos3\theta
-    /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*([a-z0-9\\πθ]+)$/i,
+    /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*([a-z\\πθ][a-z0-9\\πθ]*)$/i,
     // With modifiers, no args: sin^-1, sin^2
     /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*$/i,
     // With arguments, no modifiers: sin(theta
@@ -506,7 +511,7 @@ function parseTrigExpression(input) {
       const func = match[1].toLowerCase();
       const modifier = match[2] || '';
       let arg = match[3] || '';
-      // Strip a trailing closing parenthesis if the regex captured it
+      
       if (typeof arg === 'string') {
         arg = arg.trim();
         if (arg.endsWith(')')) arg = arg.slice(0, -1).trim();
@@ -516,7 +521,6 @@ function parseTrigExpression(input) {
         function: func,
         modifier: modifier,
         argument: arg,
-        isComplete: false,
         matched: true
       };
     }
@@ -553,13 +557,48 @@ function generateTrigSuggestions(parsed, maxSuggestions = 5) {
   if (argument) {
     const rawArg = String(argument).trim();
 
-    // Handle degree symbol with numbers like 30o, 45o, 30deg, 45degree - CHECK THIS FIRST
-    const degreeMatch = rawArg.match(/^(\d+)\s*(?:o|deg|degree|degrees|°)$/i);
+    // Handle explicit degree symbols first (30o, 45°, etc.)
+    const degreeMatch = rawArg.match(/^(\d+(?:\.\d+)?)\s*(?:o|deg|degree|degrees|°)$/i);
     if (degreeMatch) {
       const num = degreeMatch[1];
       return [`${latexFunc}${modifierLatex}(${num}^{\\circ})`];
     }
 
+    // CRITICAL FIX: Handle plain numbers as degrees (sin45 → sin(45°))
+    // This is the #1 student shorthand pattern in SEAB exams
+    const plainNumberMatch = rawArg.match(/^(\d+)$/); // Integers only (sin2, not sin2.5)
+    if (plainNumberMatch) {
+      const num = plainNumberMatch[1];
+
+        
+      // 🎯 CRITICAL: For "2" with NO modifier, suggest ALL 3 interpretations students need
+      if (num === '2' && !modifierLatex) {
+        return [
+          `${latexFunc}(2^{\\circ})`,        // Degree: sin(2°)
+          `${latexFunc}^{2}(x)`,             // Squared function: sin²(x) ← KEY FOR IDENTITIES
+          `${latexFunc}^{2}(\\theta)`,       // Squared function variant
+          `${latexFunc}(2x)`,                // Double angle: sin(2x)
+          `${latexFunc}(2\\theta)`           // Double angle variant
+        ].slice(0, maxSuggestions);
+      }
+
+      // Special case: 90, 180, 270, 360 → suggest both degree and radian forms
+      if (['90', '180', '270', '360'].includes(num)) {
+        const radianMap = {
+          '90': '\\frac{\\pi}{2}',
+          '180': '\\pi',
+          '270': '\\frac{3\\pi}{2}',
+          '360': '2\\pi'
+        };
+        return [
+          `${latexFunc}${modifierLatex}(${num}^{\\circ})`,
+          `${latexFunc}${modifierLatex}(${radianMap[num]})`
+        ].slice(0, maxSuggestions);
+      }
+      return [`${latexFunc}${modifierLatex}(${num}^{\\circ})`];
+    }
+
+    // Handle coefficient + variable (2x, 3theta) - NOT degrees
     const inlineCoeffMatch = rawArg.match(/^(\d+)(\\[a-zA-Z]+|[a-zA-Z]|π|θ)$/);
     if (inlineCoeffMatch) {
       const coeff = inlineCoeffMatch[1];
@@ -583,11 +622,10 @@ function generateTrigSuggestions(parsed, maxSuggestions = 5) {
         const power = `${latexFunc}^{${coeff}}(${mapped})`;
         return [direct, power].slice(0, maxSuggestions);
       }
-
       return [direct];
     }
 
-    // Directly handle common pi/fraction forms like pi/6, \pi/3, π/4, 2pi/3
+    // Pi fractions (pi/6, 2pi/3, etc.)
     const piMatch = rawArg.match(/^(?:([0-9]+)\s*)?(?:\\pi|π|pi)(?:\s*\/\s*([0-9]+))?$/i);
     if (piMatch) {
       const num = piMatch[1] ? Number(piMatch[1]) : 1;
@@ -595,20 +633,17 @@ function generateTrigSuggestions(parsed, maxSuggestions = 5) {
       const suggestions = [];
       
       if (den) {
-        // Fraction form - sin(pi/6) as \sin(\frac{\pi}{6})
         if (num === 1) {
           suggestions.push(`${latexFunc}${modifierLatex}(\\frac{\\pi}{${den}})`);
         } else {
           suggestions.push(`${latexFunc}${modifierLatex}(\\frac{${num}\\pi}{${den}})`);
         }
-        // Function applied to pi, then divided as fraction: \frac{\sin(\pi)}{6}
         if (num === 1) {
           suggestions.push(`\\frac{${latexFunc}${modifierLatex}(\\pi)}{${den}}`);
         } else {
           suggestions.push(`\\frac{${latexFunc}${modifierLatex}(${num}\\pi)}{${den}}`);
         }
       } else {
-        // No denominator
         if (num === 1) {
           suggestions.push(`${latexFunc}${modifierLatex}(\\pi)`);
         } else {
@@ -620,10 +655,9 @@ function generateTrigSuggestions(parsed, maxSuggestions = 5) {
       return suggestions.slice(0, maxSuggestions);
     }
 
-    // Handle theta and common variable names (θ, theta, t)
+    // Variable names (theta, alpha, x)
     const thetaMatch = rawArg.match(/^(?:\\theta|θ|theta|x|t|alpha|beta|gamma)$/i);
     if (thetaMatch) {
-      // map plain names to LaTeX forms
       const map = {
         'theta': '\\theta',
         'θ': '\\theta',
@@ -638,7 +672,7 @@ function generateTrigSuggestions(parsed, maxSuggestions = 5) {
       return [`${latexFunc}${modifierLatex}(${mapped})`];
     }
 
-    // Fallback: try fuzzy-match against configured arguments (normalize both)
+    // Fallback: fuzzy match against configured arguments
     const lowerArg = rawArg.toLowerCase().replace(/\\/g, '').replace(/[{}\\]/g, '').replace(/\s+/g, '');
     const completedArgs = TRIG_CONFIG.arguments
       .filter(a => {
@@ -650,7 +684,7 @@ function generateTrigSuggestions(parsed, maxSuggestions = 5) {
     return completedArgs.map(arg => `${latexFunc}${modifierLatex}(${arg})`);
   }
   
-  // If no argument yet, suggest common arguments
+  // No argument: suggest common values including degrees
   return TRIG_CONFIG.arguments
     .slice(0, maxSuggestions)
     .map(arg => `${latexFunc}${modifierLatex}(${arg})`);
@@ -694,6 +728,11 @@ const FUZZY_TRIG_RULES = [
   { key: 'sin', suggestions: ['\\sin(x)', '\\sin(\\theta)'] },
   { key: 'cos', suggestions: ['\\cos(x)', '\\cos(\\theta)'] },
   { key: 'tan', suggestions: ['\\tan(x)', '\\tan(\\theta)'] },
+  { key: 'sec', suggestions: ['\\sec(x)', '\\sec(\\theta)'] },
+  { key: 'cosec', suggestions: ['\\csc(x)', '\\csc(\\theta)'] },
+  { key: 'cot', suggestions: ['\\cot(x)', '\\cot(\\theta)'] },
+  { key: 'csc', suggestions: ['\\csc(x)', '\\csc(\\theta)'] },
+
   { key: 'asin', suggestions: ['\\sin^{-1}(x)'] },
   { key: 'arcsin', suggestions: ['\\sin^{-1}(x)'] },
   { key: 'acos', suggestions: ['\\cos^{-1}(x)'] },

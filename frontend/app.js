@@ -53,7 +53,8 @@ async function checkAuthStatus() {
   if (!data.logged_in) {
     document.getElementById('logoutButton').style.display = 'none';
     document.getElementById('dashboardButton').style.display = 'none';
-    lockChat()
+    // lockChat()
+    unlockChat(); // Added this for development without login, but show login button
   } else {
     document.getElementById('authButtons').style.display = 'none';
     document.getElementById('logoutButton').style.display = 'block';
