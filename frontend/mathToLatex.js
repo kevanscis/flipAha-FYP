@@ -162,6 +162,12 @@ const RULES = [
   ["%^(1/3)", "\\sqrt[3]{$1}"],
   ["%^(%/%)", "{$1}^{\\frac{$2}{$3}}"],
 
+  // Single variables (suggest powers including cube root)
+  ["x", ["x", "x^{1/3}", "x^{2}", "x^{3}", "x^{n}"]],
+  ["y", ["y", "y^{1/3}", "y^{2}", "y^{3}", "y^{n}"]],
+  ["z", ["z", "z^{1/3}", "z^{2}", "z^{3}", "z^{n}"]],
+  ["a", ["a", "a^{1/3}", "a^{2}", "a^{3}", "a^{n}"]],
+
   // Exponents
   ["x2", "x^{2}"],
   ["x3", "x^{3}"],
@@ -230,8 +236,6 @@ const RULES = [
   ["int_%^%", "\\int_{$1}^{$2}"],
   ["int% %", "\\int_{$1}^{$2}"],
 
-  // Multiplication
-  ["x", ["{x}", "x^{2}", "x^{3}", "x^{n}"]],
   ["times", "\\times"],
   ["time", "\\times"],
   ["mult", "\\times"],
