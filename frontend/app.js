@@ -120,9 +120,6 @@ function toSuperscriptText(text) {
 }
 
 function applySuperscriptForInsert(text) {
-  // Fix: Ensure we don't greedily match simple characters if they are part of a larger structure
-  // like sin^2(theta). The previous regex ^([A-Za-z0-9+\-=()]+) was too aggressive.
-  // We should only superscript what's immediately after the ^ if it's not braced.
   return text.replace(/\^\{([^}]+)\}|\^([A-Za-z0-9+\-=()])/g, (match, braced, simple) => {
     const content = braced || simple || '';
     return toSuperscriptText(content);
@@ -161,6 +158,9 @@ function latexToSmartText(latex) {
   text = text.replace(/\\sin/g, 'sin');
   text = text.replace(/\\cos/g, 'cos');
   text = text.replace(/\\tan/g, 'tan');
+  text = text.replace(/\\sec/g, 'sec');
+  text = text.replace(/\\csc/g, 'csc');
+  text = text.replace(/\\cot/g, 'cot');
 
   // Vectors
   text = text.replace(/\\overrightarrow\{([^}]+)\}/g, '$1⃗');
@@ -672,7 +672,8 @@ function computeSuggestionReplacementRange(latex) {
   const queryText = suggestionContext.queryText || '';
   const suggestionText = latexToSmartText(latex || '');
 
-  const coeffMatch = queryText.match(/^(\d+(?:\.\d+)?)(sin|cos|tan)/i);
+  // Specific handling for trig functions with coefficients
+  const coeffMatch = queryText.match(/^(\d+(?:\.\d+)?)(sin|cos|tan|sec|csc|cot)/i);
   if (coeffMatch && !/^\d/.test(suggestionText)) {
     const offset = coeffMatch[1].length;
     return { replaceStart: start + offset, replaceEnd: end };
