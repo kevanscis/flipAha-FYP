@@ -553,6 +553,13 @@ function generateTrigSuggestions(parsed, maxSuggestions = 5) {
   if (argument) {
     const rawArg = String(argument).trim();
 
+    // Handle degree symbol with numbers like 30o, 45o, 30deg, 45degree - CHECK THIS FIRST
+    const degreeMatch = rawArg.match(/^(\d+)\s*(?:o|deg|degree|degrees|°)$/i);
+    if (degreeMatch) {
+      const num = degreeMatch[1];
+      return [`${latexFunc}${modifierLatex}(${num}^{\\circ})`];
+    }
+
     const inlineCoeffMatch = rawArg.match(/^(\d+)(\\[a-zA-Z]+|[a-zA-Z]|π|θ)$/);
     if (inlineCoeffMatch) {
       const coeff = inlineCoeffMatch[1];
@@ -779,7 +786,8 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     let out = s;
 
     // 1) Digit or closing paren followed immediately by a backslash (\sin) or letter (cos) or π/pi/θ
-    out = out.replace(/([0-9\)\}\]])\s*(?=\\|[a-zA-Zπθ])/g, '$1*');
+    //    BUT NOT degree markers (o, deg, degree, degrees, °)
+    out = out.replace(/([0-9\)\}\]])\s*(?=\\|(?!o|deg|degree|degrees|°)[a-zA-Zπθ])/g, '$1*');
 
     // 2) Digit immediately followed by 'pi' or 'π' without operator:  "2pi" -> "2*pi"
     out = out.replace(/([0-9])\s*(?=(?:\\pi|π|pi))/gi, '$1*');
