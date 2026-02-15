@@ -228,6 +228,22 @@ function normalizeToLatex(input) {
   return s;
 }
 
+function getInputTextValue() {
+  if (!questionInput) return '';
+
+  // Avoid calling unsupported formats on MathLive (some builds throw
+  // "Unexpected format \"text\"" inside their internals). Instead
+  // rely on LaTeX output which is stable across versions and convert
+  // it to a readable/plain form for our suggestion pipeline.
+  try {
+    const latexValue = questionInput.getValue();
+    return latexToSmartText(latexValue || '');
+  } catch (e) {
+    // If MathLive changed API or the field isn't ready, return empty.
+    return '';
+  }
+}
+
 // Message Rendering
 function createMessageElement(message) {
   const messageDiv = document.createElement('div');
@@ -485,7 +501,8 @@ function handleInputChange() {
   
   // Get LaTeX representation - our rules now match LaTeX format
   const latexValue = questionInput.getValue();
-  const searchValue = latexValue;
+  const textValue = getInputTextValue();
+  const searchValue = textValue;
   
   console.log('LaTeX value:', latexValue); // Debug
   console.log('Search value:', searchValue); // Debug
@@ -499,7 +516,7 @@ function handleInputChange() {
 
   // Extract the current word/phrase for suggestions
   // Match more characters including backslash for LaTeX commands
-  const mathSymbolRegex = /[A-Za-z0-9_\\^/+\-*(),{}<>=!|√∛∜×·⋅≤≥≠±∞∪∩≈∫∑⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ⃗αβγδΔθλμωΩπ\s'"]/;
+  const mathSymbolRegex = /[A-Za-z0-9_\\^/+\-*(),{}<>=!|√∛∜×·⋅≤≥≠±∞∪∩≈∫∑⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ⃗αβγδΔθλμωΩπ'"]/;
   const isChar = (ch) => mathSymbolRegex.test(ch);
 
   // Get current word/phrase
@@ -509,6 +526,7 @@ function handleInputChange() {
   while (end < searchValue.length && isChar(searchValue[end])) end += 1;
   
   let query = searchValue.slice(start, end).trim();
+  const queryText = latexToSmartText(query);
   
   // Clean query from placeholders and empty groups to ensure better matching
   // This allows "log\placeholder" to match the "log" rule
@@ -537,11 +555,28 @@ function handleInputChange() {
       if (searchValue.includes(s)) return false;
       return true;
     });
+
+    if (suggestions.length === 0 && typeof window.getLayer2Suggestions === 'function') {
+      const layer2Input = queryText || textValue || query;
+      const layer2Candidates = window.getLayer2Suggestions(layer2Input, {
+        curriculum: 'o-level',
+        maxSuggestions: 5
+      });
+
+      const layer2Latex = layer2Candidates
+        .map(candidate => {
+          const value = candidate.text || candidate.display || '';
+          return window.mathToLatex ? window.mathToLatex(value) : value;
+        })
+        .filter(s => s && s !== query && !searchValue.includes(s));
+
+      suggestions = [...new Set(layer2Latex)].slice(0, 5);
+    }
     
     console.log('Suggestions found:', suggestions); // Debug
 
     if (suggestions.length > 0) {
-      suggestionContext = { start, end };
+      suggestionContext = { start, end, query, queryText };
       showSuggestions(suggestions);
     } else {
       hideSuggestions();
@@ -593,11 +628,66 @@ function selectSuggestion(latex) {
   // Set the LaTeX value in MathLive
   questionInput.setValue(latex);
   
+
+  const { replaceStart, replaceEnd } = computeSuggestionReplacementRange(latex);
+  const deleteCount = Math.max(0, (replaceEnd || 0) - (replaceStart || 0));
+
+  try {
+    questionInput.defaultMode = 'text';
+    questionInput.mode = 'text';
+  } catch {
+    // Ignore if mode APIs are not supported
+  }
+
+  try {
+    if (typeof questionInput.executeCommand === 'function' && deleteCount > 0) {
+      for (let i = 0; i < deleteCount; i += 1) {
+        questionInput.executeCommand('deleteBackward');
+      }
+    }
+
+    if (typeof questionInput.insert === 'function') {
+      questionInput.insert(latex);
+    } else {
+      const currentValue = getInputTextValue();
+      const prefix = currentValue.slice(0, replaceStart || 0);
+      const suffix = currentValue.slice(replaceEnd || 0);
+      questionInput.setValue(`${prefix}${latex}${suffix}`);
+    }
+  } catch {
+    const currentValue = getInputTextValue();
+    const prefix = currentValue.slice(0, replaceStart || 0);
+    const suffix = currentValue.slice(replaceEnd || 0);
+    questionInput.setValue(`${prefix}${latex}${suffix}`);
+  }
+
+  try {
+    questionInput.defaultMode = 'text';
+    questionInput.mode = 'text';
+  } catch {
+    // Ignore if mode APIs are not supported
+  }
+
   hideSuggestions();
-  
+
   requestAnimationFrame(() => {
     questionInput.focus();
   });
+}
+
+function computeSuggestionReplacementRange(latex) {
+  const start = suggestionContext.start || 0;
+  const end = suggestionContext.end || 0;
+  const queryText = suggestionContext.queryText || '';
+  const suggestionText = latexToSmartText(latex || '');
+
+  const coeffMatch = queryText.match(/^(\d+(?:\.\d+)?)(sin|cos|tan)/i);
+  if (coeffMatch && !/^\d/.test(suggestionText)) {
+    const offset = coeffMatch[1].length;
+    return { replaceStart: start + offset, replaceEnd: end };
+  }
+
+  return { replaceStart: start, replaceEnd: end };
 }
 
 // Event Listeners
