@@ -199,6 +199,20 @@ const RULES = [
   ["+-", "\\pm"],
 
   // Trig functions with degree symbol - must come before generic %o rule
+  ["sin(%o)", "\\sin($1^{\\circ})"],
+  ["cos(%o)", "\\cos($1^{\\circ})"],
+  ["tan(%o)", "\\tan($1^{\\circ})"],
+  ["csc(%o)", "\\csc($1^{\\circ})"],
+  ["cosec(%o)", "\\csc($1^{\\circ})"],
+  ["sec(%o)", "\\sec($1^{\\circ})"],
+  ["cot(%o)", "\\cot($1^{\\circ})"],
+  ["\\sin(%o)", "\\sin($1^{\\circ})"],
+  ["\\cos(%o)", "\\cos($1^{\\circ})"],
+  ["\\tan(%o)", "\\tan($1^{\\circ})"],
+  ["\\csc(%o)", "\\csc($1^{\\circ})"],
+  ["\\sec(%o)", "\\sec($1^{\\circ})"],
+  ["\\cot(%o)", "\\cot($1^{\\circ})"],
+  
   ["sin%o", "\\sin($1^{\\circ})"],
   ["cos%o", "\\cos($1^{\\circ})"],
   ["tan%o", "\\tan($1^{\\circ})"],
@@ -474,6 +488,8 @@ function parseTrigExpression(input) {
   const patterns = [
     // With modifiers and arguments: sin^-1(theta
     /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*\(\s*(.*)$/i,
+    // With modifiers and pi/fraction inline: sin^2pi/6, sinpi/4, sin2pi/3
+    /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*(\d*(?:\\pi|π|pi)(?:\/\d+)?|\d*(?:\\pi|π|pi)\s*\/\s*\d+)$/i,
     // With modifiers and inline arguments: sin^2x, sin2x, cos3\theta
     /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*([a-z0-9\\πθ]+)$/i,
     // With modifiers, no args: sin^-1, sin^2
@@ -569,14 +585,32 @@ function generateTrigSuggestions(parsed, maxSuggestions = 5) {
     if (piMatch) {
       const num = piMatch[1] ? Number(piMatch[1]) : 1;
       const den = piMatch[2] ? Number(piMatch[2]) : null;
-      let argLatex;
+      const suggestions = [];
+      
       if (den) {
-        if (num === 1) argLatex = `\\frac{\\pi}{${den}}`;
-        else argLatex = `\\frac{${num}\\pi}{${den}}`;
+        // Fraction form - sin(pi/6) as \sin(\frac{\pi}{6})
+        if (num === 1) {
+          suggestions.push(`${latexFunc}${modifierLatex}(\\frac{\\pi}{${den}})`);
+        } else {
+          suggestions.push(`${latexFunc}${modifierLatex}(\\frac{${num}\\pi}{${den}})`);
+        }
+        // Function applied to pi, then divided as fraction: \frac{\sin(\pi)}{6}
+        if (num === 1) {
+          suggestions.push(`\\frac{${latexFunc}${modifierLatex}(\\pi)}{${den}}`);
+        } else {
+          suggestions.push(`\\frac{${latexFunc}${modifierLatex}(${num}\\pi)}{${den}}`);
+        }
       } else {
-        argLatex = `\\pi${num !== 1 ? `\\cdot${num}` : ''}`;
+        // No denominator
+        if (num === 1) {
+          suggestions.push(`${latexFunc}${modifierLatex}(\\pi)`);
+        } else {
+          suggestions.push(`${latexFunc}${modifierLatex}(${num}\\pi)`);
+          suggestions.push(`${latexFunc}${modifierLatex}(${num} \\cdot \\pi)`);
+        }
       }
-      return [`${latexFunc}${modifierLatex}(${argLatex})`];
+      
+      return suggestions.slice(0, maxSuggestions);
     }
 
     // Handle theta and common variable names (θ, theta, t)
@@ -705,6 +739,12 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
   if (typeof input !== 'string') return [input];
   let trimmed = input.trim();
   if (!trimmed) return [''];
+
+  // Don't suggest alternatives for basic math symbols - return as-is
+  const basicSymbols = ['+', '-', '=', 'x'];
+  if (basicSymbols.includes(trimmed)) {
+    return [trimmed];
+  }
 
   // MathLive sometimes escapes ^ as \textasciicircum (text mode). Normalize back.
   trimmed = trimmed.replace(/\\textasciicircum/g, '^');
