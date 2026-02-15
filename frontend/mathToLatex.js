@@ -474,6 +474,8 @@ function parseTrigExpression(input) {
   const patterns = [
     // With modifiers and arguments: sin^-1(theta
     /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*\(\s*(.*)$/i,
+    // With modifiers and inline arguments: sin^2x, sin2x, cos3\theta
+    /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*([a-z0-9\\πθ]+)$/i,
     // With modifiers, no args: sin^-1, sin^2
     /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*$/i,
     // With arguments, no modifiers: sin(theta
@@ -534,6 +536,33 @@ function generateTrigSuggestions(parsed, maxSuggestions = 5) {
   // If we have a partial argument, suggest completions
   if (argument) {
     const rawArg = String(argument).trim();
+
+    const inlineCoeffMatch = rawArg.match(/^(\d+)(\\[a-zA-Z]+|[a-zA-Z]|π|θ)$/);
+    if (inlineCoeffMatch) {
+      const coeff = inlineCoeffMatch[1];
+      const varToken = inlineCoeffMatch[2];
+      const key = varToken.replace(/^\\/, '').toLowerCase();
+      const map = {
+        'theta': '\\theta',
+        'θ': '\\theta',
+        'x': 'x',
+        't': 't',
+        'alpha': '\\alpha',
+        'beta': '\\beta',
+        'gamma': '\\gamma',
+        'pi': '\\pi',
+        'π': '\\pi'
+      };
+      const mapped = map[key] || varToken;
+      const direct = `${latexFunc}${modifierLatex}(${coeff}${mapped})`;
+
+      if (!modifierLatex && Number.isFinite(Number(coeff)) && Number(coeff) >= 2) {
+        const power = `${latexFunc}^{${coeff}}(${mapped})`;
+        return [direct, power].slice(0, maxSuggestions);
+      }
+
+      return [direct];
+    }
 
     // Directly handle common pi/fraction forms like pi/6, \pi/3, π/4, 2pi/3
     const piMatch = rawArg.match(/^(?:([0-9]+)\s*)?(?:\\pi|π|pi)(?:\s*\/\s*([0-9]+))?$/i);
@@ -696,6 +725,14 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
   // Remove \left and \right which commonly wrap parentheses in LaTeX output
   trimmed = trimmed.replace(/\\left/g, '').replace(/\\right/g, '');
 
+  // Try smart trigonometry detection before inserting implicit multiplication.
+  // This preserves inline forms like "sin2x" -> "sin(2x)" or "sin^2(x)".
+  const earlyTrigSuggestions = getTrigSuggestions(trimmed, maxSuggestions);
+  if (earlyTrigSuggestions.length > 0) {
+    console.debug('[mathToLatex] input="%s" source=%s suggestions=%o', input, 'SMART_TRIG_INLINE', earlyTrigSuggestions);
+    return earlyTrigSuggestions;
+  }
+
   // Insert implicit multiplication for cases like "8cos(...)", "2x", "3\pi"
   function insertImplicitMultiplication(s) {
     if (!s || typeof s !== 'string') return s;
@@ -719,7 +756,7 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
 
   trimmed = insertImplicitMultiplication(trimmed);
 
-  // Try smart trigonometry detection first
+  // Try smart trigonometry detection after normalization
   const trigSuggestions = getTrigSuggestions(trimmed, maxSuggestions);
   if (trigSuggestions.length > 0) {
     console.debug('[mathToLatex] input="%s" source=%s suggestions=%o', input, 'SMART_TRIG', trigSuggestions);

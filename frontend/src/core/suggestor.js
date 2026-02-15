@@ -11,6 +11,10 @@ export function suggest(input, curriculum = 'general', options = {}) {
     ? Math.max(1, options.maxSuggestions)
     : 5;
 
+  const minConfidence = Number.isFinite(options.minConfidence)
+    ? Math.min(1, Math.max(0, options.minConfidence))
+    : 0.7;
+
   const layer1 = generatePermutations(math).map(text => ({
     text,
     display: text,
@@ -35,10 +39,13 @@ export function suggest(input, curriculum = 'general', options = {}) {
     trigModel
   });
 
-  return ranked.slice(0, maxSuggestions).map((candidate, index) => ({
-    ...candidate,
-    rank: index + 1
-  }));
+  return ranked
+    .filter(candidate => (candidate.score ?? 0) >= minConfidence)
+    .slice(0, maxSuggestions)
+    .map((candidate, index) => ({
+      ...candidate,
+      rank: index + 1
+    }));
 }
 
 function generateLayer2Candidates(input) {
