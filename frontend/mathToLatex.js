@@ -780,7 +780,8 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     return earlyTrigSuggestions;
   }
 
-  // Insert implicit multiplication for cases like "8cos(...)", "2x", "3\pi"
+  // Try to find a top-level split BEFORE inserting implicit multiplication
+  // This preserves trig expressions like "sin2x + cos2x" so recursive calls can detect them
   function insertImplicitMultiplication(s) {
     if (!s || typeof s !== 'string') return s;
     let out = s;
@@ -802,6 +803,58 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     return out;
   }
 
+  const atomicPatterns = [
+    /^sum\s+from\s+/i,
+    /^int\s+from\s+/i,
+    /^sum\s+.+=/i,
+    /^int\s+.+=/i,
+  ];
+  const isAtomic = atomicPatterns.some(p => p.test(trimmed));
+
+  let splitIdx = -1;
+  if (!isAtomic) {
+    splitIdx = findTopLevelSplit(trimmed);
+  }
+
+  // If we found a split, process each side separately (preserves trig detection)
+  if (splitIdx !== -1) {
+    const left = trimmed.slice(0, splitIdx);
+    const op = trimmed[splitIdx];
+    const right = trimmed.slice(splitIdx + 1);
+
+    const limit = 3;
+    const leftSugs = getLatexSuggestions(left, limit);
+    const rightSugs = getLatexSuggestions(right, limit);
+
+    let opLatex = op;
+    if (op === '*') opLatex = '\\times';
+    if (op === '×') opLatex = '\\times';
+
+    const distinct = new Set();
+    const results = [];
+
+    for (const l of leftSugs) {
+      for (const r of rightSugs) {
+        let combined;
+        if (op === '/') {
+          combined = `\\frac{${l}}{${r}}`;
+        } else {
+          combined = `${l} ${opLatex} ${r}`;
+        }
+
+        if (!distinct.has(combined)) {
+          distinct.add(combined);
+          results.push(combined);
+        }
+      }
+    }
+
+    const out = results.slice(0, maxSuggestions);
+    console.debug('[mathToLatex] input="%s" source=%s suggestions=%o', input, 'COMPOSED', out);
+    return out;
+  }
+
+  // No split found, now insert implicit multiplication for cases like "8cos(...)", "2x", "3\pi"
   trimmed = insertImplicitMultiplication(trimmed);
 
   // Try smart trigonometry detection after normalization
@@ -843,56 +896,6 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
   // a missing base. For suggestions, assume a base variable 'x'.
   if (/^[\^_]/.test(trimmed)) {
     trimmed = `x${trimmed}`;
-  }
-
-  const atomicPatterns = [
-    /^sum\s+from\s+/i,
-    /^int\s+from\s+/i,
-    /^sum\s+.+=/i,
-    /^int\s+.+=/i,
-  ];
-  const isAtomic = atomicPatterns.some(p => p.test(trimmed));
-
-  let splitIdx = -1;
-  if (!isAtomic) {
-    splitIdx = findTopLevelSplit(trimmed);
-  }
-
-  if (splitIdx !== -1) {
-    const left = trimmed.slice(0, splitIdx);
-    const op = trimmed[splitIdx];
-    const right = trimmed.slice(splitIdx + 1);
-
-    const limit = 3;
-    const leftSugs = getLatexSuggestions(left, limit);
-    const rightSugs = getLatexSuggestions(right, limit);
-
-    let opLatex = op;
-    if (op === '*') opLatex = '\\times';
-    if (op === '×') opLatex = '\\times';
-
-    const distinct = new Set();
-    const results = [];
-
-    for (const l of leftSugs) {
-      for (const r of rightSugs) {
-        let combined;
-        if (op === '/') {
-          combined = `\\frac{${l}}{${r}}`;
-        } else {
-          combined = `${l} ${opLatex} ${r}`;
-        }
-
-        if (!distinct.has(combined)) {
-          distinct.add(combined);
-          results.push(combined);
-        }
-      }
-    }
-
-    const out = results.slice(0, maxSuggestions);
-    console.debug('[mathToLatex] input="%s" source=%s suggestions=%o', input, 'COMPOSED', out);
-    return out;
   }
 
   let baseSuggestions = [];
