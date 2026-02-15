@@ -626,8 +626,6 @@ function selectSuggestion(latex) {
 
   console.log(inputMethod, usedSuggestion);
   // Set the LaTeX value in MathLive
-  questionInput.setValue(latex);
-  
 
   const { replaceStart, replaceEnd } = computeSuggestionReplacementRange(latex);
   const deleteCount = Math.max(0, (replaceEnd || 0) - (replaceStart || 0));
