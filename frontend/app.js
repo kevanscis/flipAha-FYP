@@ -120,7 +120,10 @@ function toSuperscriptText(text) {
 }
 
 function applySuperscriptForInsert(text) {
-  return text.replace(/\^\{([^}]+)\}|\^([A-Za-z0-9+\-=()]+)/g, (match, braced, simple) => {
+  // Fix: Ensure we don't greedily match simple characters if they are part of a larger structure
+  // like sin^2(theta). The previous regex ^([A-Za-z0-9+\-=()]+) was too aggressive.
+  // We should only superscript what's immediately after the ^ if it's not braced.
+  return text.replace(/\^\{([^}]+)\}|\^([A-Za-z0-9+\-=()])/g, (match, braced, simple) => {
     const content = braced || simple || '';
     return toSuperscriptText(content);
   });
@@ -508,7 +511,8 @@ function handleInputChange() {
   console.log('LaTeX value:', latexValue); // Debug
   console.log('Search value:', searchValue); // Debug
   
-  const caret = searchValue.length;
+  const selection = questionInput.selection;
+  const caret = (selection && selection.ranges && selection.ranges[0]) ? selection.ranges[0][0] : searchValue.length;
 
   smartRanges = updateSmartRanges(prevInputValue, searchValue);
   prevInputValue = searchValue;
@@ -551,7 +555,7 @@ function handleInputChange() {
 
   if (query.length > 0) {
     // Match rules directly with LaTeX input
-    let suggestions = getLatexSuggestions(query).filter(s => {
+    let suggestions = (typeof getLatexSuggestions === 'function' ? getLatexSuggestions(query) : []).filter(s => {
       if (s === query) return false;
       if (searchValue.includes(s)) return false;
       return true;
@@ -626,45 +630,33 @@ function selectSuggestion(latex) {
   usedSuggestion = true;
 
   console.log(inputMethod, usedSuggestion);
-  // Set the LaTeX value in MathLive
+  
+  // Convert LaTeX to the user's preferred smart text symbols before insertion
+  const smartText = latexToSmartText(latex);
 
   const { replaceStart, replaceEnd } = computeSuggestionReplacementRange(latex);
-  const deleteCount = Math.max(0, (replaceEnd || 0) - (replaceStart || 0));
-
+  
+  // Use MathLive's internal selection to perform replacement
   try {
-    questionInput.defaultMode = 'text';
-    questionInput.mode = 'text';
-  } catch {
-    // Ignore if mode APIs are not supported
-  }
-
-  try {
-    if (typeof questionInput.executeCommand === 'function' && deleteCount > 0) {
-      for (let i = 0; i < deleteCount; i += 1) {
-        questionInput.executeCommand('deleteBackward');
-      }
-    }
-
-    if (typeof questionInput.insert === 'function') {
-      questionInput.insert(latex);
-    } else {
-      const currentValue = getInputTextValue();
-      const prefix = currentValue.slice(0, replaceStart || 0);
-      const suffix = currentValue.slice(replaceEnd || 0);
-      questionInput.setValue(`${prefix}${latex}${suffix}`);
-    }
-  } catch {
-    const currentValue = getInputTextValue();
-    const prefix = currentValue.slice(0, replaceStart || 0);
-    const suffix = currentValue.slice(replaceEnd || 0);
-    questionInput.setValue(`${prefix}${latex}${suffix}`);
-  }
-
-  try {
-    questionInput.defaultMode = 'text';
-    questionInput.mode = 'text';
-  } catch {
-    // Ignore if mode APIs are not supported
+    // Set selection to the range we want to replace
+    questionInput.selection = {
+      ranges: [[replaceStart, replaceEnd]],
+      direction: 'forward'
+    };
+    
+    // Insert the smart text at the selection (this replaces the selected content)
+    // Using 'text' mode for insert to ensure symbols are treated as characters
+    questionInput.insert(smartText, {
+        insertionMode: 'replaceSelection',
+        selectionMode: 'after'
+    });
+  } catch (e) {
+    console.warn('Failed to use MathLive selection API, falling back to manual replacement', e);
+    // Fallback logic if selection API fails
+    const currentText = getInputTextValue();
+    const prefix = currentText.slice(0, replaceStart);
+    const suffix = currentText.slice(replaceEnd);
+    questionInput.setValue(`${prefix}${smartText}${suffix}`);
   }
 
   hideSuggestions();
