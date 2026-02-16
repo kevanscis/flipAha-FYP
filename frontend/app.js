@@ -554,27 +554,39 @@ function handleInputChange() {
 
   if (query.length > 0) {
     // Extract the actual term used for suggestions (after operators)
-    // BUT: Don't split if we have math functions or unbalanced parentheses
+    // Split on operators ONLY if they're at the top level (not inside parentheses)
     let queryTerm = query;
     let termStartOffset = 0;
     
-    // Check if input has math functions or unbalanced parentheses
-    const hasMathFunction = /(sin|cos|tan|sec|csc|cot|log|ln|exp|sqrt|arc|a)(sin|cos|tan)?/i.test(query);
+    // Check for unbalanced parentheses (incomplete expression like "sin(pi/6")
     const openParens = (query.match(/\(/g) || []).length;
     const closeParens = (query.match(/\)/g) || []).length;
     const hasUnbalancedParens = openParens !== closeParens;
     
-    // Only extract operator for simple arithmetic (no math functions, balanced parens)
-    if (!hasMathFunction && !hasUnbalancedParens) {
-      // Only split on + or - (safer than * or /)
-      const operatorMatch = query.match(/[+\-]\s*([^+\-]+)$/);
-      if (operatorMatch && operatorMatch[1]) {
-        queryTerm = operatorMatch[1].trim();
-        // Find where this term starts in the original query
-        const termIndex = query.lastIndexOf(queryTerm);
-        if (termIndex !== -1) {
-          termStartOffset = termIndex;
+    if (!hasUnbalancedParens) {
+      // Extract the last term after top-level operators (+, -)
+      // Walk backwards to find the last operator outside parentheses
+      let parenDepth = 0;
+      let lastOperatorIndex = -1;
+      
+      for (let i = query.length - 1; i >= 0; i--) {
+        const char = query[i];
+        if (char === ')') parenDepth++;
+        else if (char === '(') parenDepth--;
+        else if (parenDepth === 0 && (char === '+' || char === '-')) {
+          // Found top-level operator, but check it's not part of inverse trig (sin-1)
+          const beforeOp = query.substring(Math.max(0, i - 3), i).toLowerCase();
+          const isInverseTrig = /(sin|cos|tan)$/.test(beforeOp) && query[i] === '-' && query[i + 1] === '1';
+          if (!isInverseTrig) {
+            lastOperatorIndex = i;
+            break;
+          }
         }
+      }
+      
+      if (lastOperatorIndex !== -1) {
+        queryTerm = query.substring(lastOperatorIndex + 1).trim();
+        termStartOffset = lastOperatorIndex + 1;
       }
     }
     

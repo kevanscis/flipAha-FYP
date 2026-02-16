@@ -101,10 +101,26 @@
       if (plainNumberMatch){
         const num = plainNumberMatch[1];
         if (num==='2' && !modifierLatex) return [ `${latexFunc}(2^{\\circ})`, `${latexFunc}^{2}(x)`, `${latexFunc}^{2}(\\theta)`, `${latexFunc}(2x)`, `${latexFunc}(2\\theta)` ].slice(0,maxSuggestions);
-        if (['90','180','270','360'].includes(num)){
-          const rad = { '90':'\\frac{\\pi}{2}','180':'\\pi','270':'\\frac{3\\pi}{2}','360':'2\\pi' }[num];
+        
+        // Common O-level special angles with degree and radian notation
+        const specialAngles = {
+          '30': '\\frac{\\pi}{6}',
+          '45': '\\frac{\\pi}{4}',
+          '60': '\\frac{\\pi}{3}',
+          '90': '\\frac{\\pi}{2}',
+          '120': '\\frac{2\\pi}{3}',
+          '135': '\\frac{3\\pi}{4}',
+          '150': '\\frac{5\\pi}{6}',
+          '180': '\\pi',
+          '270': '\\frac{3\\pi}{2}',
+          '360': '2\\pi'
+        };
+        
+        if (specialAngles[num]) {
+          const rad = specialAngles[num];
           return [ `${latexFunc}${modifierLatex}(${num}^{\\circ})`, `${latexFunc}${modifierLatex}(${rad})` ].slice(0,maxSuggestions);
         }
+        
         return [`${latexFunc}${modifierLatex}(${num}^{\\circ})`];
       }
       const inlineCoeffMatch = rawArg.match(/^(\d+)(\\[a-zA-Z]+|[a-zA-Z]|π|θ)$/);
