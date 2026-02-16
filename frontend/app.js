@@ -553,9 +553,24 @@ function handleInputChange() {
   console.log('Query for suggestions:', query); // Debug
 
   if (query.length > 0) {
-    // Match rules directly with LaTeX input
-    let suggestions = getLatexSuggestions(query).filter(s => {
-      if (s === query) return false;
+    // Extract the actual term used for suggestions (after operators)
+    let queryTerm = query;
+    let termStartOffset = 0;
+    
+    // Match the last term after any operator (same logic as mathToLatex.js)
+    const operatorMatch = query.match(/(?:[+\-*\/÷×]|\\\w+)\s*(.+)$/);
+    if (operatorMatch && operatorMatch[1]) {
+      queryTerm = operatorMatch[1].trim();
+      // Find where this term starts in the original query
+      const termIndex = query.lastIndexOf(queryTerm);
+      if (termIndex !== -1) {
+        termStartOffset = termIndex;
+      }
+    }
+    
+    // Match rules directly with LaTeX input (use extracted term, not full query)
+    let suggestions = getLatexSuggestions(queryTerm).filter(s => {
+      if (s === queryTerm) return false;
       if (searchValue.includes(s)) return false;
       return true;
     });
@@ -580,7 +595,13 @@ function handleInputChange() {
     console.log('Suggestions found:', suggestions); // Debug
 
     if (suggestions.length > 0) {
-      suggestionContext = { start, end, query, queryText };
+      // Update context to point to just the extracted term, not the full query
+      suggestionContext = { 
+        start: start + termStartOffset, 
+        end: start + termStartOffset + queryTerm.length, 
+        query, 
+        queryText 
+      };
       showSuggestions(suggestions);
     } else {
       hideSuggestions();
