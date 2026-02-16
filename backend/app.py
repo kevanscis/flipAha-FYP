@@ -87,15 +87,15 @@ def ask_question():
     """Handle question submissions + log to DB"""
     try:
         # 1) Require login
-        user_id = "dev_user_123"  # ← Temporary placeholder
+        # user_id = "dev_user_123"  # ← Temporary placeholder
         user_id = session.get("user_id")
         
         # Commenting out login requirement for now to allow testing without login flow
-        # if not user_id:
-        #     return jsonify({
-        #         'success': False,
-        #         'error': 'Not logged in'
-        #     }), 401
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'Not logged in'
+            }), 401
         
         # print("User ID from session:", user_id)
 
