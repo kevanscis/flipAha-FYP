@@ -104,7 +104,15 @@
     <script src="src/core/subjects/vectors.js"></script>
     <script src="src/core/subjects/normal.js"></script>
     
-    <!-- Orchestrator -->
+    <!-- Math parser (must load BEFORE mathToLatex.js) -->
+    <script src="src/core/math-extractor-enhanced.js"></script>
+    
+    <!-- Permutation rule files (must load BEFORE mathToLatex.js) -->
+    <script src="src/core/permutation-rules/log-rules.js"></script>
+    <script src="src/core/permutation-rules/trig-rules.js"></script>
+    <script src="src/core/permutation-rules/algebra-rules.js"></script>
+    
+    <!-- Unified Orchestrator (LaTeX + Permutations) -->
     <script src="mathToLatex.js"></script>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>

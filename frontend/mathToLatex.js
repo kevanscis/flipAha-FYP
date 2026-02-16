@@ -91,31 +91,49 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     .replace(/[·⋅]/g, '*')
     .replace(/\\left/g, '').replace(/\\right/g, '');
 
-  // Extract the last term (after operators like +, -, *, /, ÷, \div, \times, etc.)
-  // This handles: "sin^2(x)+cos^2(x)" or "sin^2(x) + cos^2(x)" → suggests for "cos^2(x)"
-  let queryTerm = trimmed;
-  // Match any top-level operator: +, -, *, /, ÷, ×, with or without spaces
-  const operatorMatch = trimmed.match(/(?:[+\-*\/÷×]|\\\w+)\s*(.+)$/);
-  if (operatorMatch && operatorMatch[1]) {
-    queryTerm = operatorMatch[1].trim();
-  }
+  // No operator extraction here - that's the UI layer's job (app.js)
+  // mathToLatex.js is a PURE ORCHESTRATOR that delegates to subject modules
+  const queryTerm = trimmed;
+
+  const allSuggestions = [];
 
   // 1. Try trig system via trig module (most comprehensive for trig)
   if (typeof globalThis !== 'undefined' && globalThis.subjects && globalThis.subjects.trig) {
     const trigSuggestions = globalThis.subjects.trig.getTrigSuggestions(queryTerm, maxSuggestions);
     if (Array.isArray(trigSuggestions) && trigSuggestions.length) {
-      return trigSuggestions;
+      allSuggestions.push(...trigSuggestions);
     }
   }
 
-  // 2. Fallback: use centralized rule matching (all subject rules)
+  // 2. Try centralized rule matching (all subject rules)
   const matchResult = matchRules(queryTerm);
   if (matchResult.found) {
-    return matchResult.suggestions.slice(0, maxSuggestions);
+    allSuggestions.push(...matchResult.suggestions);
+  }
+
+  // 3. PERMUTATION ENGINE - Generate alternative interpretations
+  if (typeof globalThis !== 'undefined' && globalThis.generatePermutations) {
+    console.log('[getLatexSuggestions] Calling permutation engine for:', queryTerm);
+    const permutations = globalThis.generatePermutations(queryTerm);
+    console.log('[getLatexSuggestions] Permutations returned:', permutations);
+    if (Array.isArray(permutations) && permutations.length > 0) {
+      // Filter out duplicates and the original query
+      const uniquePerms = permutations.filter(perm => 
+        perm !== queryTerm && !allSuggestions.includes(perm)
+      );
+      allSuggestions.push(...uniquePerms);
+    }
   }
   
-  // 3. If still nothing, return queryTerm as-is
-  return [queryTerm];
+  // 4. Deduplicate and limit
+  const uniqueSuggestions = [...new Set(allSuggestions)];
+  
+  // 5. If still nothing, return queryTerm as-is
+  if (uniqueSuggestions.length === 0) {
+    return [queryTerm];
+  }
+  
+  return uniqueSuggestions.slice(0, maxSuggestions);
 }
 
 // Provide a fallback mathToLatex definition for use in matchRules
@@ -124,12 +142,148 @@ function mathToLatex(input) {
   return suggestions[0];
 }
 
+// ============================================================================
+// PERMUTATION ENGINE ORCHESTRATOR
+// ============================================================================
+// Generates alternative interpretations of ambiguous student input
+// Uses math-extractor-enhanced.js for keyword + operand parsing
+// Delegates to subject-specific permutation rule modules
+
+function generatePermutations(input) {
+  const mathExpr = typeof input === 'string' ? input : input?.expr || input?.toString() || '';
+  if (!mathExpr || typeof mathExpr !== 'string') return [];
+  
+  const perms = new Set();
+  perms.add(mathExpr); // Always include raw input
+  
+  // Try to parse the expression into keyword + operand
+  let parsed = null;
+  if (typeof globalThis !== 'undefined' && globalThis.parseExpression) {
+    parsed = globalThis.parseExpression(mathExpr);
+    if (parsed) console.log('[generatePermutations] Parsed:', mathExpr, '→', parsed);
+  } else {
+    console.warn('[generatePermutations] globalThis.parseExpression not available');
+  }
+  
+  // If no parsing available, fallback to direct rule application
+  if (!parsed) {
+    console.log('[generatePermutations] No parse, using fallback rules for:', mathExpr);
+    return applyPermutationRulesDirect(mathExpr);
+  }
+  
+  // Route to appropriate permutation generator based on parsed type
+  if (parsed.type === 'logarithm' && globalThis.logPermutationRules) {
+    const logPerms = globalThis.logPermutationRules.generateLogPermutations(parsed.operand);
+    console.log('[generatePermutations] Log perms for', parsed.operand, ':', logPerms);
+    for (const perm of logPerms) perms.add(perm);
+  }
+  
+  if (parsed.type === 'trigonometry' && globalThis.trigPermutationRules) {
+    const trigPerms = globalThis.trigPermutationRules.generateTrigPermutations(parsed.operand);
+    console.log('[generatePermutations] Trig perms for', parsed.operand, ':', trigPerms);
+    for (const perm of trigPerms) perms.add(perm);
+  }
+  
+  if (parsed.type === 'inverse_trigonometry' && globalThis.trigPermutationRules) {
+    const invTrigPerms = globalThis.trigPermutationRules.generateInverseTrigPermutations(mathExpr);
+    console.log('[generatePermutations] Inverse trig perms for', mathExpr, ':', invTrigPerms);
+    for (const perm of invTrigPerms) perms.add(perm);
+  }
+  
+  if (parsed.type === 'implicit_multiplication' && globalThis.algebraPermutationRules) {
+    // Pass parsed structure instead of string
+    const algPerms = globalThis.algebraPermutationRules.generateImplicitMultiplicationPermutations(
+      parsed.num1, parsed.variable, parsed.num2, parsed.prefix, parsed.suffix
+    );
+    console.log('[generatePermutations] Algebra perms (mult):', algPerms);
+    for (const perm of algPerms) perms.add(perm);
+  }
+  
+  if (parsed.type === 'function_application' && globalThis.algebraPermutationRules) {
+    const algPerms = globalThis.algebraPermutationRules.generateFunctionAppPermutations(
+      parsed.keyword, parsed.variable, parsed.prefix, parsed.suffix
+    );
+    console.log('[generatePermutations] Algebra perms (func):', algPerms);
+    for (const perm of algPerms) perms.add(perm);
+  }
+  
+  if (parsed.type === 'power_ambiguity' && globalThis.algebraPermutationRules) {
+    const algPerms = globalThis.algebraPermutationRules.generatePowerAmbiguityPermutations(
+      parsed.base, parsed.exponent, parsed.variable, parsed.prefix, parsed.suffix
+    );
+    console.log('[generatePermutations] Algebra perms (power):', algPerms);
+    for (const perm of algPerms) perms.add(perm);
+  }
+  
+  const result = Array.from(perms).filter(perm => isValidPermutation(perm));
+  console.log('[generatePermutations] Final result:', result);
+  return result;
+}
+
+/**
+ * Fallback: Apply rules directly without parsing (for backward compatibility)
+ */
+function applyPermutationRulesDirect(input) {
+  const perms = new Set();
+  perms.add(input);
+  
+  if (typeof globalThis !== 'undefined') {
+    if (globalThis.logPermutationRules) {
+      const logPerms = globalThis.logPermutationRules.generateLogPermutations(input);
+      for (const perm of logPerms) perms.add(perm);
+    }
+    if (globalThis.trigPermutationRules) {
+      const trigPerms = globalThis.trigPermutationRules.generateTrigPermutations(input);
+      for (const perm of trigPerms) perms.add(perm);
+    }
+    if (globalThis.algebraPermutationRules) {
+      const algPerms = globalThis.algebraPermutationRules.generateAlgebraPermutations(input);
+      for (const perm of algPerms) perms.add(perm);
+    }
+  }
+  
+  return Array.from(perms).filter(perm => isValidPermutation(perm));
+}
+
+function isValidPermutation(expr) {
+  if (!expr || typeof expr !== 'string') return false;
+  
+  const trimmed = expr.trim();
+  if (trimmed.length === 0) return false;
+  
+  // Try subject-specific validators first
+  if (typeof globalThis !== 'undefined') {
+    if (globalThis.logPermutationRules?.isValidLogExpression(trimmed)) return true;
+    if (globalThis.trigPermutationRules?.isValidTrigExpression?.(trimmed)) return true;
+    if (globalThis.algebraPermutationRules?.isValidAlgebraExpression?.(trimmed)) return true;
+  }
+  
+  // Fallback general validation
+  if (!/\d|[a-zθπα-ω]|π|∞/i.test(trimmed)) return false;
+  if (/\+\+|\*\*|\^\^|--(?!\>)/.test(trimmed)) return false;
+  
+  let parenCount = 0;
+  for (const char of trimmed) {
+    if (char === '(') parenCount++;
+    if (char === ')') parenCount--;
+    if (parenCount < 0) return false;
+  }
+  if (parenCount !== 0) return false;
+  
+  if (trimmed.includes('()')) return false;
+  if (trimmed.match(/\/\s*0(?:\s|$|\))/)) return false;
+  if (/^[-+*^/]|[-+*^/]$/.test(trimmed.split('\\').pop())) return false;
+  
+  return true;
+}
+
 // Export for use in app and Node
 if (typeof globalThis !== 'undefined') {
   globalThis.getLatexSuggestions = getLatexSuggestions;
   globalThis.mathToLatex = mathToLatex;
+  globalThis.generatePermutations = generatePermutations;
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { getLatexSuggestions, mathToLatex };
+  module.exports = { getLatexSuggestions, mathToLatex, generatePermutations };
 }

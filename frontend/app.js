@@ -554,17 +554,27 @@ function handleInputChange() {
 
   if (query.length > 0) {
     // Extract the actual term used for suggestions (after operators)
+    // BUT: Don't split if we have math functions or unbalanced parentheses
     let queryTerm = query;
     let termStartOffset = 0;
     
-    // Match the last term after any operator (same logic as mathToLatex.js)
-    const operatorMatch = query.match(/(?:[+\-*\/÷×]|\\\w+)\s*(.+)$/);
-    if (operatorMatch && operatorMatch[1]) {
-      queryTerm = operatorMatch[1].trim();
-      // Find where this term starts in the original query
-      const termIndex = query.lastIndexOf(queryTerm);
-      if (termIndex !== -1) {
-        termStartOffset = termIndex;
+    // Check if input has math functions or unbalanced parentheses
+    const hasMathFunction = /(sin|cos|tan|sec|csc|cot|log|ln|exp|sqrt|arc|a)(sin|cos|tan)?/i.test(query);
+    const openParens = (query.match(/\(/g) || []).length;
+    const closeParens = (query.match(/\)/g) || []).length;
+    const hasUnbalancedParens = openParens !== closeParens;
+    
+    // Only extract operator for simple arithmetic (no math functions, balanced parens)
+    if (!hasMathFunction && !hasUnbalancedParens) {
+      // Only split on + or - (safer than * or /)
+      const operatorMatch = query.match(/[+\-]\s*([^+\-]+)$/);
+      if (operatorMatch && operatorMatch[1]) {
+        queryTerm = operatorMatch[1].trim();
+        // Find where this term starts in the original query
+        const termIndex = query.lastIndexOf(queryTerm);
+        if (termIndex !== -1) {
+          termStartOffset = termIndex;
+        }
       }
     }
     

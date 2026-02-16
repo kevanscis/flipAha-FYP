@@ -134,15 +134,21 @@
   }
 
   function getTrigSuggestions(input, maxSuggestions = 5){
+    console.log('[trig.js getTrigSuggestions] Input:', input);
+    
     // Try structured parsing first
     const parsed = parseTrigExpression(input);
+    console.log('[trig.js] Parsed result:', parsed);
+    
     if (parsed.matched) {
       const suggestions = generateTrigSuggestions(parsed, maxSuggestions);
+      console.log('[trig.js] Generated suggestions:', suggestions);
       if (suggestions.length) return suggestions;
     }
     
     // Fallback to fuzzy matching
     const fuzzySuggestions = getFuzzySuggestions(input, maxSuggestions);
+    console.log('[trig.js] Fuzzy suggestions:', fuzzySuggestions);
     if (fuzzySuggestions.length) return fuzzySuggestions;
     
     return [];
