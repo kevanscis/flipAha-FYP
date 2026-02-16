@@ -493,9 +493,11 @@ function parseTrigExpression(input) {
     /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*\(\s*(.*)$/i,
     // With modifiers and pi/fraction inline: sin^2pi/6, sinpi/4
     /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*(\d*(?:\\pi|π|pi)(?:\/\d+)?|\d*(?:\\pi|π|pi)\s*\/\s*\d+)$/i,
+    // CRITICAL: Coefficient + variable (e.g., "sin2x", "cos3theta") → double angle or power
+    /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*(\d+[a-z\\πθ][a-z0-9\\πθ]*)$/i,
     // CRITICAL: Plain number after trig (e.g., "sin45", "cosec30") → degrees
     /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*(\d+(?:\.\d+)?)$/i,
-    // With modifiers and inline arguments: sin^2x, sin2x, cos3\theta
+    // With modifiers and inline arguments: sin^2x, sinx, cos\theta
     /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*([a-z\\πθ][a-z0-9\\πθ]*)$/i,
     // With modifiers, no args: sin^-1, sin^2
     /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*$/i,
