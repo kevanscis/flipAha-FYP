@@ -57,10 +57,33 @@
     ["<=", "\\leq"],
     [">=", "\\geq"],
     ["!=", "\\neq"],
-    ["+-", "\\pm"]
+    ["+-", "\\pm"],
+
+    // Greek letters - lowercase (with wildcard support for partial typing)
+    ["al%", "\\alpha"],
+    ["be%", "\\beta"],
+    ["gam%", "\\gamma"],
+    ["del%", "\\delta"],
+    ["the%", "\\theta"],
+    ["lam%", "\\lambda"],
+    ["mu", "\\mu"],
+    ["sig%", "\\sigma"],
+    ["ome%", "\\omega"],
+
+    // Greek letters - uppercase
+    ["Al%", "\\Alpha"],
+    ["Be%", "\\Beta"],
+    ["Gam%", "\\Gamma"],
+    ["Del%", "\\Delta"],
+    ["The%", "\\Theta"],
+    ["Lam%", "\\Lambda"],
+    ["Mu", "\\Mu"],
+    ["Sig%", "\\Sigma"],
+    ["Ome%", "\\Omega"]
+  
   ];
 
-  if (typeof globalThis !== 'undefined'){
+    if (typeof globalThis !== 'undefined'){
     globalThis.NORMAL_RULES = NORMAL_RULES;
   }
   if (typeof module !== 'undefined' && module.exports){
