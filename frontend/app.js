@@ -58,30 +58,41 @@ async function checkAuthStatus() {
     console.log('API /api/me response:', data);
 
     if (!data.logged_in) {
-      document.getElementById('logoutButton').style.display = 'none';
-      document.getElementById('dashboardButton').style.display = 'none';
-      // lockChat()
-      unlockChat(); // Added this for development without login, but show login button
+      // User is not logged in: show login button, hide logout/dashboard and lock chat
+      const logoutEl = document.getElementById('logoutButton');
+      const dashEl = document.getElementById('dashboardButton');
+      const authEl = document.getElementById('authButtons');
+
+      if (logoutEl) logoutEl.style.display = 'none';
+      if (dashEl) dashEl.style.display = 'none';
+      if (authEl) authEl.style.display = 'block';
+
+      lockChat();
     } else {
-      document.getElementById('authButtons').style.display = 'none';
-      document.getElementById('logoutButton').style.display = 'block';
+      // Logged in: hide auth buttons, show logout and enable chat
+      const authEl = document.getElementById('authButtons');
+      const logoutEl = document.getElementById('logoutButton');
+      const dashEl = document.getElementById('dashboardButton');
+
+      if (authEl) authEl.style.display = 'none';
+      if (logoutEl) logoutEl.style.display = 'block';
       unlockChat();
 
       // Show dashboard only for admin
       if (data.role === 'admin') {
-        document.getElementById('dashboardButton').style.display = 'block';
+        if (dashEl) dashEl.style.display = 'block';
       } else {
-        document.getElementById('dashboardButton').style.display = 'none';
+        if (dashEl) dashEl.style.display = 'none';
       }
 
       console.log("Logged in as user ID:", data.user_id);
       // currentUserID = data.user_id;
     }
   } catch (error) {
-    console.warn('Auth check failed, enabling input fallback:', error);
-  } finally {
-    // Never leave input disabled due to auth/network race on load.
-    unlockChat();
+    // If auth check fails (network/server), keep chat locked for safety and show login
+    console.warn('Auth check failed, leaving chat locked until login:', error);
+    try { document.getElementById('authButtons').style.display = 'block'; } catch {}
+    lockChat();
   }
 }
 
@@ -392,8 +403,7 @@ function initializeMathField() {
   
   mathFieldReady = true;
 
-  // Always enable typing once the field exists. Auth UI state can still update separately.
-  unlockChat();
+  // Keep input disabled until authentication is confirmed.
   
   // Configure MathLive - smart mode is set via HTML attribute
   questionInput.mathVirtualKeyboardPolicy = 'manual';
