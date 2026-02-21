@@ -442,7 +442,7 @@ def convert_to_latex():
                 'variant': tag,
                 'success': True,
                 'latex': attempt.get('latex', ''),
-                'confidence': score_info.get('confidence', 0),
+                'confidence': attempt.get('confidence', 0),
                 'score': score_info.get('score', 0)
             })
             
@@ -451,7 +451,7 @@ def convert_to_latex():
                 best = {
                     'variant': tag,
                     'latex': attempt.get('latex', ''),
-                    'confidence': score_info.get('confidence', 0),
+                    'confidence': attempt.get('confidence', 0),
                     'score': score_info.get('score', 0)
                 }
             

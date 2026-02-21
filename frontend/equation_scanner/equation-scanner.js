@@ -450,9 +450,12 @@ function updateEditorDisplay() {
         // Display confidence if available
         const confidenceBadge = document.getElementById('confidenceBadge');
         const confidenceValue = document.getElementById('confidenceValue');
-        if (state.currentLatex.confidence > 0) {
+        if (state.currentLatex.confidence !== undefined && state.currentLatex.confidence !== null) {
             if (confidenceBadge) confidenceBadge.style.display = 'block';
-            if (confidenceValue) confidenceValue.textContent = (state.currentLatex.confidence * 100).toFixed(0) + '%';
+            if (confidenceValue) {
+                const percent = Math.round(state.currentLatex.confidence * 100);
+                confidenceValue.textContent = percent + '%';
+            }
         } else {
             if (confidenceBadge) confidenceBadge.style.display = 'none';
         }
