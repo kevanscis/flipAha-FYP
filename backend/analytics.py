@@ -272,6 +272,32 @@ def get_weekly_input_method_trends():
 
     return result
 
+def get_topic_frequency():
+    """Get the frequency distribution of topics from all questions"""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT
+            topic,
+            COUNT(*) AS count
+        FROM questions
+        GROUP BY topic
+        ORDER BY count DESC
+    """)
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    result = []
+    for row in rows:
+        result.append({
+            "topic": row["topic"],
+            "count": row["count"]
+        })
+
+    return result
+
 if __name__ == "__main__":
     daily, weekly, monthly, inactive = get_active_user_counts()
     print("Number of Active Students:")

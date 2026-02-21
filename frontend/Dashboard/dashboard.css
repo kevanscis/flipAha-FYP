@@ -198,3 +198,9 @@ svg {
 .chart-toolbar-spacer {
   height: 40px;
 }
+
+/* Suggestion feedback styles */
+.chart-card .p-3 h6 {
+  margin-bottom: 10px;
+  font-weight: 600;
+}

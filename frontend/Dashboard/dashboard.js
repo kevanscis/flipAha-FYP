@@ -437,3 +437,156 @@ function goLogout() {
 loadNewReturningUsers();
 loadQuestionVolume();
 loadInputMethodTrends();
+loadTopicDistribution();
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Topic Distribution Chart
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+async function loadTopicDistribution() {
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/dashboard/topic-frequency`, {
+            credentials: 'include'
+        });
+        if (!res.ok) {
+            console.warn('Failed to load topic distribution', res.status);
+            return;
+        }
+
+        const data = await res.json();
+        renderTopicDistribution(data);
+    } catch (e) {
+        console.error('Error loading topic distribution', e);
+    }
+}
+
+function renderTopicDistribution(data) {
+    const width = 500;
+    const height = 350;
+    const margin = { top: 30, right: 30, bottom: 100, left: 50 };
+
+    const svg = d3.select('#topicDistributionChart')
+        .attr('width', width)
+        .attr('height', height);
+
+    svg.selectAll('*').remove();
+
+    // Parse count as number
+    data.forEach(d => {
+        d.count = +d.count;
+    });
+
+    // Create scales
+    const x = d3.scaleBand()
+        .domain(data.map(d => d.topic))
+        .range([margin.left, width - margin.right])
+        .padding(0.3);
+
+    const y = d3.scaleLinear()
+        .domain([0, d3.max(data, d => d.count) || 1])
+        .nice()
+        .range([height - margin.bottom, margin.top]);
+
+    // Color scale
+    const colors = ['#0d6efd', '#198754', '#fd7e14', '#dc3545', '#6f42c1', '#20c997'];
+    const colorScale = d3.scaleOrdinal()
+        .domain(data.map(d => d.topic))
+        .range(colors.concat(d3.schemeCategory10));
+
+    // X axis
+    svg.append('g')
+        .attr('transform', `translate(0,${height - margin.bottom})`)
+        .call(d3.axisBottom(x))
+        .append('text')
+        .attr('x', (width - margin.left - margin.right) / 2 + margin.left)
+        .attr('y', 40)
+        .attr('fill', 'black')
+        .attr('text-anchor', 'middle')
+        .text('Topic');
+
+    // Y axis
+    svg.append('g')
+        .attr('transform', `translate(${margin.left},0)`)
+        .call(d3.axisLeft(y))
+        .append('text')
+        .attr('transform', 'rotate(-90)')
+        .attr('y', 0 - margin.left)
+        .attr('x', 0 - (height - margin.top - margin.bottom) / 2)
+        .attr('dy', '1em')
+        .attr('fill', 'black')
+        .attr('text-anchor', 'middle')
+        .text('Count');
+
+    // Bars
+    svg.selectAll('.topic-bar')
+        .data(data)
+        .enter()
+        .append('rect')
+        .attr('class', 'topic-bar')
+        .attr('x', d => x(d.topic))
+        .attr('y', d => y(d.count))
+        .attr('width', x.bandwidth())
+        .attr('height', d => height - margin.bottom - y(d.count))
+        .attr('fill', d => colorScale(d.topic))
+        .attr('opacity', 0.85)
+        .on('mouseover', function() {
+            d3.select(this).attr('opacity', 1);
+        })
+        .on('mouseout', function() {
+            d3.select(this).attr('opacity', 0.85);
+        });
+
+    // Value labels on bars
+    svg.selectAll('.topic-label')
+        .data(data)
+        .enter()
+        .append('text')
+        .attr('class', 'topic-label')
+        .attr('x', d => x(d.topic) + x.bandwidth() / 2)
+        .attr('y', d => y(d.count) - 5)
+        .attr('text-anchor', 'middle')
+        .attr('fill', 'black')
+        .attr('font-weight', 'bold')
+        .attr('font-size', '12px')
+        .text(d => d.count);
+
+    // Rotate x-axis labels
+    svg.selectAll('.domain, .tick line')
+        .style('stroke', '#ccc');
+
+    svg.selectAll('.tick text')
+        .style('font-size', '11px')
+        .attr('transform', 'rotate(45)')
+        .attr('text-anchor', 'start');
+}
+
+async function loadSuggestionFeedback() {
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/dashboard/suggestion-feedback`, {
+            credentials: 'include'
+        });
+        if (!res.ok) {
+            console.warn('Failed to load suggestion feedback', res.status);
+            return;
+        }
+
+        const data = await res.json();
+        renderSuggestionFeedback(data);
+    } catch (e) {
+        console.error('Error loading suggestion feedback', e);
+    }
+}
+
+function renderSuggestionFeedback(data) {
+    const total = data.total || 0;
+    const useful = data.useful || 0;
+    const notUseful = data.not_useful || (total - useful);
+    const rate = total > 0 ? Math.round((useful / total) * 100) : 0;
+
+    document.getElementById('sfTotal').textContent = total;
+    document.getElementById('sfUseful').textContent = useful;
+    document.getElementById('sfNotUseful').textContent = notUseful;
+    document.getElementById('sfRate').textContent = rate + '%';
+}
+
+// load suggestion feedback after other data
+loadSuggestionFeedback();

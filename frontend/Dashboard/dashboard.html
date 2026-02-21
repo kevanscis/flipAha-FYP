@@ -104,7 +104,7 @@
         </div>
     </div>
     
-    <div class="row g-4">
+    <div class="row g-4 mb-4">
         <!-- Question Volume Chart -->
         <div class="col-md-6">
             <div class="chart-card h-100">
@@ -116,6 +116,29 @@
             <div class="chart-card h-100">
                 <h4 class="chart-title">Typing vs Suggestion (Last 7 Days)</h4>
                 <svg id="inputMethodTrendChart"></svg>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <!-- Topic Distribution Chart -->
+        <div class="col-md-6">
+            <div class="chart-card h-100">
+                <h4 class="chart-title">Topic Distribution</h4>
+                <svg id="topicDistributionChart"></svg>
+            </div>
+        </div>
+        
+        <!-- Suggestion Feedback -->
+        <div class="col-md-6">
+            <div class="chart-card h-100">
+                <h4 class="chart-title">Suggestion Feedback</h4>
+                <div class="p-3">
+                    <h6>Total responses: <span id="sfTotal">–</span></h6>
+                    <h6>Useful: <span id="sfUseful">–</span></h6>
+                    <h6>Not useful: <span id="sfNotUseful">–</span></h6>
+                    <h6>Useful rate: <span id="sfRate">–</span></h6>
+                </div>
             </div>
         </div>
     </div>
