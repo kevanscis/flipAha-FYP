@@ -484,6 +484,52 @@ def convert_to_latex():
             'details': traceback.format_exc()
         }), 500
 
+@app.route('/api/images', methods=['GET'])
+def get_images():
+    """
+    Get all images for a session
+    Query params: session_id
+    Returns: {images: [...], stats: {total_images: N}}
+    """
+    try:
+        import base64
+        
+        session_id = request.args.get('session_id')
+        if not session_id:
+            return jsonify({
+                'success': False,
+                'error': 'Missing session_id parameter'
+            }), 400
+        
+        # Get all images for this session
+        session_images = image_store.get(session_id, {})
+        
+        images = []
+        for image_id, image_bytes in session_images.items():
+            # Convert bytes to base64 for display
+            b64_data = base64.b64encode(image_bytes).decode('utf-8')
+            images.append({
+                'id': image_id,
+                'data': f'data:image/png;base64,{b64_data}',
+                'filename': f'equation_{image_id[:8]}.png',
+                'latex': '',
+                'edited_latex': '',
+                'rating': 0
+            })
+        
+        return jsonify({
+            'success': True,
+            'images': images,
+            'stats': {
+                'total_images': len(images)
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 # Serve JS/CSS files
 @app.route("/<path:filename>")
 def serve_file(filename):
