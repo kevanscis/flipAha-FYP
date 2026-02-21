@@ -4,6 +4,9 @@ from login import login_bp
 import os
 import json
 import subprocess
+import re
+from urllib import request as urlrequest
+from urllib import error as urlerror
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import uuid
@@ -15,6 +18,9 @@ FRONTEND_ROOT = os.path.join(BASE_DIR, "..", "frontend")
 SINGAPORE_TZ = ZoneInfo("Asia/Singapore")
 
 app = Flask(__name__)
+
+CLOUD_LLM_BASE_URL = os.getenv("CLOUD_LLM_BASE_URL", "https://text.pollinations.ai/openai").rstrip("/")
+CLOUD_LLM_MODEL = os.getenv("CLOUD_LLM_MODEL", "openai")
 
 ########################################################################################################################
 # USE CASE 1
@@ -31,6 +37,158 @@ responses = {
     'geometry': 'Geometry is the study of shapes, sizes, and properties of figures and spaces. Key topics include: points, lines, angles, triangles, circles, area, and volume.',
     'trigonometry': 'Trigonometry deals with relationships between angles and sides of triangles. The main ratios are: sin(θ) = opposite/hypotenuse, cos(θ) = adjacent/hypotenuse, tan(θ) = opposite/adjacent.'
 }
+
+FALLBACK_RESPONSE = (
+    "I can help with that. Please share the exact equation or expression you want to solve, "
+    "and I will provide a clear step-by-step explanation."
+)
+
+
+def _normalize_response_text(text):
+    if text is None:
+        return ""
+    normalized = str(text)
+    normalized = normalized.replace("\r\n", "\n").replace("\r", "\n")
+    normalized = re.sub(r"[\t\x0b\x0c]+", " ", normalized)
+    normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+    normalized = re.sub(r"[ ]{2,}", " ", normalized)
+    return normalized.strip()
+
+
+def format_llm_answer_for_chat(text):
+    """Convert markdown/LaTeX-heavy LLM output into plain chat-friendly text."""
+    s = _normalize_response_text(text)
+    s = re.sub(r"\*\*(.*?)\*\*", r"\1", s)
+    s = re.sub(r"^#{1,6}\s*", "", s, flags=re.MULTILINE)
+    s = s.replace("\\[", "").replace("\\]", "")
+    s = s.replace("\\(", "").replace("\\)", "")
+    s = re.sub(r"\n{3,}", "\n\n", s)
+    return s.strip()
+
+
+def evaluate_response_quality(question, answer):
+    """Return quality diagnostics for a generated chatbot response."""
+    q = _normalize_response_text(question)
+    a = _normalize_response_text(answer)
+
+    issues = []
+    score = 100
+
+    if not a:
+        issues.append("empty_answer")
+        score -= 80
+
+    if len(a) < 30:
+        issues.append("too_short")
+        score -= 30
+
+    if len(a) > 2000:
+        issues.append("too_long")
+        score -= 15
+
+    placeholder_patterns = [
+        r"\blorem ipsum\b",
+        r"\btbd\b",
+        r"\bcoming soon\b",
+        r"\bplaceholder\b",
+        r"\bundefined\b",
+        r"\bnull\b",
+    ]
+    if any(re.search(p, a, flags=re.IGNORECASE) for p in placeholder_patterns):
+        issues.append("contains_placeholder_text")
+        score -= 40
+
+    refusal_patterns = [
+        r"sorry[, ]+i can'?t",
+        r"i cannot help",
+        r"as an ai",
+    ]
+    if any(re.search(p, a, flags=re.IGNORECASE) for p in refusal_patterns):
+        issues.append("generic_refusal_or_meta")
+        score -= 25
+
+    if q and not re.search(r"[a-zA-Z0-9]", a):
+        issues.append("no_readable_content")
+        score -= 40
+
+    score = max(0, min(100, score))
+    is_proper = score >= 60 and "empty_answer" not in issues
+
+    return {
+        "is_proper": is_proper,
+        "score": score,
+        "issues": issues,
+        "answer": a,
+    }
+
+
+def generate_llm_answer(question):
+    """
+    Generate a response using a hosted ChatGPT-style endpoint.
+    This requires no local model installation.
+    """
+    payload = {
+        "model": CLOUD_LLM_MODEL,
+        "stream": False,
+        "temperature": 0.2,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a concise and accurate math tutor for O-Level students. "
+                    "Give clear step-by-step explanations when asked to solve. "
+                    "If the input is ambiguous, ask one short clarifying question. "
+                    "IMPORTANT OUTPUT FORMAT: Return plain text only. "
+                    "Do NOT use Markdown (no **, headings, bullet markdown) and do NOT use LaTeX wrappers like \\( \\), \\[ \\]."
+                )
+            },
+            {
+                "role": "user",
+                "content": question
+            }
+        ]
+    }
+
+    req = urlrequest.Request(
+        f"{CLOUD_LLM_BASE_URL}/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0"
+        },
+        method="POST"
+    )
+
+    try:
+        with urlrequest.urlopen(req, timeout=45) as resp:
+            data = json.loads(resp.read().decode("utf-8") or "{}")
+
+        choices = data.get("choices") or []
+        first = choices[0] if choices else {}
+        message = first.get("message") or {}
+        content = (message.get("content") or "").strip()
+
+        if not content:
+            raise ValueError("Empty LLM response")
+
+        content = format_llm_answer_for_chat(content)
+
+        return content, {
+            "provider": "pollinations",
+            "model": CLOUD_LLM_MODEL,
+            "used_fallback": False
+        }
+    except (urlerror.URLError, urlerror.HTTPError, TimeoutError, ValueError, json.JSONDecodeError) as e:
+        content = (
+            "Cloud LLM is unavailable right now. "
+            "Please try again in a moment."
+        )
+        return content, {
+            "provider": "fallback-llm-unavailable",
+            "model": None,
+            "used_fallback": True,
+            "error": str(e)
+        }
 
 def classify_question(question):
     """Classify the question to determine which response to return"""
@@ -87,15 +245,13 @@ def ask_question():
     """Handle question submissions + log to DB"""
     try:
         # 1) Require login
-        user_id = "dev_user_123"  # ← Temporary placeholder
         user_id = session.get("user_id")
-        
-        # # Commenting out login requirement for now to allow testing without login flow
-        # if not user_id:
-        #     return jsonify({
-        #         'success': False,
-        #         'error': 'Not logged in'
-        #     }), 401
+
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'Not logged in'
+            }), 401
         
         # print("User ID from session:", user_id)
 
@@ -114,21 +270,33 @@ def ask_question():
                 'error': 'Question is empty'
             }), 400
 
-        # 3) Your existing logic
+        # 3) Generate answer via hosted LLM
+        answer, llm_meta = generate_llm_answer(question)
         topic = classify_question(question)
-        answer = responses.get(topic, responses['algebra'])
+
+        # Ensure quality before returning to client
+        quality = evaluate_response_quality(question, answer)
+        if not quality["is_proper"]:
+            answer = FALLBACK_RESPONSE
+            quality = evaluate_response_quality(question, answer)
 
         # 4) Insert into DB
         question_id = str(uuid.uuid4())
-
         ts = datetime.now(SINGAPORE_TZ).isoformat()
 
         conn = get_db()
         cursor = conn.cursor()
         with conn:
-            cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
-            user = cursor.fetchone()
-            # print(user)
+            cursor.execute("SELECT 1 FROM users WHERE user_id = ?", (user_id,))
+            user_exists = cursor.fetchone() is not None
+
+            if not user_exists:
+                conn.close()
+                return jsonify({
+                    'success': False,
+                    'error': 'Invalid user session. Please log in again.'
+                }), 403
+
             conn.execute("""
                 INSERT INTO questions (
                     question_id, user_id, question_timestamp,
@@ -144,7 +312,13 @@ def ask_question():
             'question': question,
             'answer': answer,
             'topic': topic,
-            'question_id': question_id
+            'question_id': question_id,
+            'llm': llm_meta,
+            'quality': {
+                'is_proper': quality['is_proper'],
+                'score': quality['score'],
+                'issues': quality['issues']
+            }
         }), 200
 
     except Exception as e:
@@ -185,6 +359,81 @@ def get_suggestions():
             'success': False,
             'error': str(e)
         }), 500
+
+
+@app.route('/api/response-quality', methods=['OPTIONS'])
+def preflight_response_quality():
+    """Explicit CORS preflight for /api/response-quality"""
+    return jsonify({'status': 'ok'}), 200
+
+
+@app.route('/api/response-quality', methods=['POST'])
+def response_quality():
+    """Validate chatbot response quality for moderation/QA checks."""
+    try:
+        data = request.get_json(silent=True) or {}
+        question = (data.get('question') or '').strip()
+        answer = data.get('answer')
+
+        result = evaluate_response_quality(question, answer)
+
+        return jsonify({
+            'success': True,
+            'quality': {
+                'is_proper': result['is_proper'],
+                'score': result['score'],
+                'issues': result['issues']
+            },
+            'normalized_answer': result['answer']
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/llm/health', methods=['GET'])
+def llm_health_check():
+    """Check if hosted LLM service is reachable."""
+    try:
+        payload = {
+            "model": CLOUD_LLM_MODEL,
+            "stream": False,
+            "messages": [
+                {"role": "user", "content": "Respond with OK"}
+            ],
+            "max_tokens": 8,
+            "temperature": 0
+        }
+        req = urlrequest.Request(
+            f"{CLOUD_LLM_BASE_URL}/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0"
+            },
+            method="POST"
+        )
+        with urlrequest.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read().decode("utf-8") or "{}")
+
+        choices = data.get("choices") or []
+        ok = bool(choices)
+        return jsonify({
+            'success': ok,
+            'provider': 'pollinations',
+            'base_url': CLOUD_LLM_BASE_URL,
+            'configured_model': CLOUD_LLM_MODEL
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'provider': 'pollinations',
+            'base_url': CLOUD_LLM_BASE_URL,
+            'configured_model': CLOUD_LLM_MODEL,
+            'error': str(e)
+        }), 503
 
 @app.route('/health', methods=['GET'])
 def health_check():
