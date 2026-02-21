@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify, session
+import hashlib
 from werkzeug.security import check_password_hash
 from database.db import get_db
 from datetime import datetime, timedelta
@@ -28,8 +29,15 @@ def login_user():
         if not user:
             return jsonify({"message": "User not found"}), 404
 
+        stored_password_hash = user["password"]
+
+        if stored_password_hash.startswith("scrypt:") and not hasattr(hashlib, "scrypt"):
+            return jsonify({
+                "message": "This account uses a legacy password format not supported by the current Python runtime. Please reset the password or re-register this account."
+            }), 503
+
         # Check password
-        if not check_password_hash(user["password"], password):
+        if not check_password_hash(stored_password_hash, password):
             return jsonify({"message": "Incorrect password"}), 401
 
         # Store current user_id and role in session

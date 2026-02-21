@@ -26,7 +26,7 @@ def register_user():
 
     role = "admin" if is_admin else "student"
     user_id = str(uuid.uuid4())
-    hashed_password = generate_password_hash(password)
+    hashed_password = generate_password_hash(password, method="pbkdf2:sha256")
     
     singapore_tz = ZoneInfo("Asia/Singapore")
     created_at = datetime.now(singapore_tz).isoformat()
