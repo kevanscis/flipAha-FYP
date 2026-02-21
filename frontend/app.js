@@ -746,6 +746,8 @@ async function sendSuggestionFeedback(latex, rating) {
     // remove UI after sending
     setTimeout(removeSuggestionFeedbackUI, 800);
   }
+}
+
 function computeSuggestionReplacementRange(latex) {
   const start = suggestionContext.start || 0;
   const end = suggestionContext.end || 0;
