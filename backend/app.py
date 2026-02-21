@@ -5,8 +5,7 @@ import os
 import json
 import subprocess
 import re
-from urllib import request as urlrequest
-from urllib import error as urlerror
+import requests
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import uuid
@@ -164,19 +163,18 @@ def generate_llm_answer(question):
         ]
     }
 
-    req = urlrequest.Request(
-        f"{CLOUD_LLM_BASE_URL}/chat/completions",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0"
-        },
-        method="POST"
-    )
-
     try:
-        with urlrequest.urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read().decode("utf-8") or "{}")
+        resp = requests.post(
+            f"{CLOUD_LLM_BASE_URL}/chat/completions",
+            json=payload,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0"
+            },
+            timeout=60
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
         choices = data.get("choices") or []
         first = choices[0] if choices else {}
@@ -193,7 +191,7 @@ def generate_llm_answer(question):
             "model": CLOUD_LLM_MODEL,
             "used_fallback": False
         }
-    except (urlerror.URLError, urlerror.HTTPError, TimeoutError, ValueError, json.JSONDecodeError) as e:
+    except (requests.RequestException, TimeoutError, ValueError) as e:
         content = (
             "Cloud LLM is unavailable right now. "
             "Please try again in a moment."
@@ -235,19 +233,18 @@ def classify_question_topic(question):
         ]
     }
 
-    req = urlrequest.Request(
-        f"{CLOUD_LLM_BASE_URL}/chat/completions",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0"
-        },
-        method="POST"
-    )
-
     try:
-        with urlrequest.urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read().decode("utf-8") or "{}")
+        resp = requests.post(
+            f"{CLOUD_LLM_BASE_URL}/chat/completions",
+            json=payload,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0"
+            },
+            timeout=60
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
         choices = data.get("choices") or []
         first = choices[0] if choices else {}
@@ -538,17 +535,17 @@ def llm_health_check():
             "max_tokens": 8,
             "temperature": 0
         }
-        req = urlrequest.Request(
+        resp = requests.post(
             f"{CLOUD_LLM_BASE_URL}/chat/completions",
-            data=json.dumps(payload).encode("utf-8"),
+            json=payload,
             headers={
                 "Content-Type": "application/json",
                 "User-Agent": "Mozilla/5.0"
             },
-            method="POST"
+            timeout=20
         )
-        with urlrequest.urlopen(req, timeout=20) as resp:
-            data = json.loads(resp.read().decode("utf-8") or "{}")
+        resp.raise_for_status()
+        data = resp.json()
 
         choices = data.get("choices") or []
         ok = bool(choices)
