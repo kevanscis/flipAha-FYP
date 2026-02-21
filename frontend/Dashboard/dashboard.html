@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlipAha Dashboard</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Oswald:wght@400;700&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap for layout -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <link rel="stylesheet" href="dashboard.css" />
+
+    <!-- D3.js -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+
+</head>
+
+<body>
+    <!-- Header -->
+    <header class="dashboard-header">
+        <div class="header-content">
+            <div class="brand-section">
+                <h1 class="brand-title">
+                    <span class="flip">Flip</span><span class="aha">Aha</span>!
+                </h1>
+                <p class="brand-subtitle">Analytics & Insights</p>
+            </div>
+            <div class="nav-section">
+                <button class="btn btn-light" onclick="goHome()">← Back to Home</button>
+                <button class="btn btn-light" onclick="goLogout()">Logout</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="dashboard-container">
+        <div class="container-fluid py-4">
+            <h2 class="dashboard-title mb-4">📊 Dashboard Overview</h2>
+
+    <!-- KPI cards -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="kpi-card">
+                <div class="kpi-icon">👥</div>
+                <h6 class="kpi-label">Daily Active Users</h6>
+                <h2 id="dailyCount" class="kpi-value">–</h2>
+            </div>
+        </div>
+
+        <div class="col-md-3 mb-3">
+            <div class="kpi-card">
+                <div class="kpi-icon">📈</div>
+                <h6 class="kpi-label">Weekly Active Users</h6>
+                <h2 id="weeklyCount" class="kpi-value">–</h2>
+            </div>
+        </div>
+
+        <div class="col-md-3 mb-3">
+            <div class="kpi-card">
+                <div class="kpi-icon">📊</div>
+                <h6 class="kpi-label">Monthly Active Users</h6>
+                <h2 id="monthlyCount" class="kpi-value">–</h2>
+            </div>
+        </div>
+
+        <div class="col-md-3 mb-3">
+            <div class="kpi-card kpi-inactive">
+                <div class="kpi-icon">⏸️</div>
+                <h6 class="kpi-label">Inactive Users</h6>
+                <h2 id="inactiveCount" class="kpi-value">–</h2>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <!-- Active Users -->
+        <div class="col-md-6">
+            <div class="chart-card h-100">
+                <h4 class="chart-title">Active Users Trend</h4>
+
+                <div class="chart-controls">
+                    <button class="btn btn-sm btn-control active-btn" id="btnDaily">Daily</button>
+                    <button class="btn btn-sm btn-control" id="btnWeekly">Weekly</button>
+                    <button class="btn btn-sm btn-control" id="btnMonthly">Monthly</button>
+                    <button class="btn btn-sm btn-control" id="btnInactive">Inactive</button>
+                </div>
+
+                <svg id="activeTrendChart" class="chart-svg"></svg>
+            </div>
+        </div>
+
+        <!-- New vs Returning -->
+        <div class="col-md-6">
+            <div class="chart-card h-100">
+                <h4 class="chart-title">New vs Returning Users</h4>
+                <div class="chart-toolbar-spacer"></div>
+                <svg id="newReturningChart" class="chart-svg"></svg>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row g-4">
+        <!-- Question Volume Chart -->
+        <div class="col-md-6">
+            <div class="chart-card h-100">
+                <h4 class="chart-title">Question Volume (Last 7 Days)</h4>
+                <svg id="questionVolumeChart"></svg>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="chart-card h-100">
+                <h4 class="chart-title">Typing vs Suggestion (Last 7 Days)</h4>
+                <svg id="inputMethodTrendChart"></svg>
+            </div>
+        </div>
+    </div>
+        </div>
+    </div>
+
+
+    <!-- JS -->
+    <script src="dashboard.js"></script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from werkzeug.security import generate_password_hash
 from database.db import get_db
@@ -30,6 +30,7 @@ def register_user():
     
     singapore_tz = ZoneInfo("Asia/Singapore")
     created_at = datetime.now(singapore_tz).isoformat()
+    # created_at = (datetime.now(ZoneInfo("Asia/Singapore")) - timedelta(days=45)).isoformat() #--- For testing inactive users
 
     try:
         conn = get_db()

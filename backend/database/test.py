@@ -71,5 +71,5 @@ def delete_all_users(db_path):
 DB_PATH = "app.db"
 
 # print_db_schema(DB_PATH)
-view_users(DB_PATH) # username: 123 password: 123
+view_users(DB_PATH) # admin - username: 123 password: 123 | student - username: student password: student
 # delete_all_users(DB_PATH)

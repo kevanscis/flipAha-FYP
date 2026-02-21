@@ -1,11 +1,20 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, send_from_directory, request, jsonify, send_file, session, abort
 import re
 import os
 import io
+import json
 from werkzeug.utils import secure_filename
 from image_processor import ImageProcessor
 from latex_converter import LatexConverter
 from session_manager import SessionManager
+from register import register_bp
+from login import login_bp
+import subprocess
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import uuid
+from database.db import get_db
+
 
 app = Flask(__name__)
 
@@ -20,15 +29,11 @@ MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-from flask import Flask, send_from_directory, request, jsonify
-from register import register_bp
-from login import login_bp
-import os
-import json
-import subprocess
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_ROOT = os.path.join(BASE_DIR, "..", "frontend")
+
+SINGAPORE_TZ = ZoneInfo("Asia/Singapore")
 
 app = Flask(__name__)
 
@@ -75,16 +80,22 @@ def classify_question(question):
 
 @app.after_request
 def add_cors_headers(response):
-    """Add CORS headers to every response"""
-    origin = request.headers.get('Origin', '')
-    # Allow common local dev origins (Vite may pick a different port).
-    if origin and re.match(r'^http://(localhost|127\.0\.0\.1)(:\d+)?$', origin):
-        response.headers['Access-Control-Allow-Origin'] = origin
-    else:
-        response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-    response.headers['Access-Control-Max-Age'] = '86400'
+    allowed = {
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5000",
+        "http://127.0.0.1:5000",
+    }
+
+    origin = request.headers.get("Origin")
+    if origin in allowed:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+
+    response.headers["Vary"] = "Origin"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Max-Age"] = "86400"
     return response
 
 @app.route('/api/questions', methods=['OPTIONS'])
@@ -92,20 +103,71 @@ def preflight_questions():
     """Explicit CORS preflight for /api/questions"""
     return jsonify({'status': 'ok'}), 200
 
-@app.route('/api/questions', methods=['POST'])
+@app.route('/api/questions', methods=['POST']) # Updates data on questions table
 def ask_question():
-    """Handle question submissions"""
+    """Handle question submissions + log to DB"""
     try:
-        data = request.json
-        question = data.get('question', '').strip()
+        # 1) Require login
+        # user_id = "dev_user_123"  # ← Temporary placeholder
+        user_id = session.get("user_id")
+        
+        # Commenting out login requirement for now to allow testing without login flow
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'Not logged in'
+            }), 401
+        
+        # print("User ID from session:", user_id)
+
+        # 2) Read request
+        data = request.get_json(silent=True) or {}
+        question = (data.get('question') or '').strip()
+        input_method = (data.get('input_method') or 'typing').strip()
+        use_suggestion = 1 if data.get('use_suggestion') else 0
+        accept_suggestion = 1 if data.get('accept_suggestion') else 0
+
+        # print(question)
+
+        if not question:
+            return jsonify({
+                'success': False,
+                'error': 'Question is empty'
+            }), 400
+
+        # 3) Your existing logic
         topic = classify_question(question)
         answer = responses.get(topic, responses['algebra'])
+
+        # 4) Insert into DB
+        question_id = str(uuid.uuid4())
+
+        ts = datetime.now(SINGAPORE_TZ).isoformat()
+
+        conn = get_db()
+        cursor = conn.cursor()
+        with conn:
+            cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+            user = cursor.fetchone()
+            # print(user)
+            conn.execute("""
+                INSERT INTO questions (
+                    question_id, user_id, question_timestamp,
+                    input_method, topic, use_suggestion, accept_suggestion
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (question_id, user_id, ts, input_method, topic, use_suggestion, accept_suggestion))
+        conn.close()
+
+        # 5) Return response
         return jsonify({
             'success': True,
             'question': question,
             'answer': answer,
-            'topic': topic
+            'topic': topic,
+            'question_id': question_id
         }), 200
+
     except Exception as e:
         return jsonify({
             'success': False,
@@ -676,6 +738,8 @@ if __name__ == '__main__':
 # USE CASE 3
 ########################################################################################################################
 
+from analytics import *
+
 app.secret_key = "your-super-secret-key"  # Change this in production
 
 # Load routes in another folder
@@ -693,6 +757,78 @@ def register_page():
 @app.route("/login")
 def login_page():
     return send_from_directory(os.path.join(FRONTEND_ROOT, "Login and Register"), "login.html")
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.clear()   # removes user_id and everything in session
+    return jsonify({"message": "Logged out successfully"}), 200
+
+@app.route("/dashboard")
+def dashboard_page():
+    # Only allow admin
+    if session["role"] != "admin":
+        abort(403)  # Forbidden
+
+    return send_from_directory(os.path.join(FRONTEND_ROOT, "Dashboard"), "dashboard.html")
+
+# API CALLS
+@app.route("/api/me")
+def get_current_user():
+    if "user_id" in session:
+        return jsonify({
+            "logged_in": True,
+            "user_id": session["user_id"],
+            "role": session["role"] 
+        }), 200
+    return jsonify({"logged_in": False}), 200
+
+@app.route("/api/dashboard/active-users")
+def active_users_dashboard():
+    daily, weekly, monthly, inactive = get_active_user_counts()
+
+    return jsonify({
+        "daily": daily,
+        "weekly": weekly,
+        "monthly": monthly,
+        "inactive": inactive,
+    })
+
+@app.route("/api/dashboard/active-trend")
+def active_trend():
+    granularity = request.args.get("granularity", "daily")  # daily/weekly/monthly
+
+    if granularity == "daily":
+        data = get_active_users_daily_trend(days=7)
+    elif granularity == "weekly":
+        data = get_active_users_weekly_trend(weeks=4)
+    elif granularity == "monthly":
+        data = get_active_users_monthly_trend(months=6)
+    elif granularity == "inactive":
+        data = get_inactive_users_monthly_trend(months=6)
+    else:
+        return jsonify({"error": "Invalid granularity"}), 400
+
+    return jsonify(data), 200
+
+@app.route("/api/dashboard/new-returning")
+def new_vs_returning_dashboard():
+    new_users, returning_users = get_new_vs_returning_last_7_days()
+
+    return jsonify({
+        "new_active": new_users,
+        "returning_active": returning_users,
+    })
+
+@app.route("/api/dashboard/question-volume")
+def dashboard_question_volume():
+    data = get_weekly_question_volume()
+    return jsonify(data)
+
+@app.route("/api/dashboard/input-method-trends")
+def input_method_trends():
+    data = get_weekly_input_method_trends()
+    return jsonify(data), 200
+
 
 # Serve JS/CSS files
 @app.route("/<path:filename>")

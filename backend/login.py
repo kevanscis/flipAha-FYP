@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, session
 from werkzeug.security import check_password_hash
 from database.db import get_db
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 login_bp = Blueprint("login_bp", __name__)
@@ -32,11 +32,13 @@ def login_user():
         if not check_password_hash(user["password"], password):
             return jsonify({"message": "Incorrect password"}), 401
 
-        # Store current user_id in session
+        # Store current user_id and role in session
         session["user_id"] = user["user_id"]
+        session["role"] = user["role"]
 
-        # Optional: update last_login timestamp
         last_login = datetime.now(ZoneInfo("Asia/Singapore")).isoformat()
+        # last_login = (datetime.now(ZoneInfo("Asia/Singapore")) - timedelta(days=45)).isoformat()
+
         conn = get_db()
         with conn:
             conn.execute("UPDATE users SET last_login = ? WHERE username = ?", (last_login, username))

@@ -32,7 +32,7 @@ form.addEventListener('submit', async (e) => {
 
     if (response.ok) {
       // equivalent to onSuccess()
-      window.location.href = 'index.html'; // or dashboard.html
+      window.location.href = `${API_BASE_URL}/`;
     }
   } catch (err) {
     console.error(err);

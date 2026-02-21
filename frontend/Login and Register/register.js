@@ -53,7 +53,7 @@ form.addEventListener('submit', async (e) => {
     statusMessage.textContent = data.message;
 
     if (response.ok) {
-      window.location.href = 'login.html';
+      window.location.href = `${API_BASE_URL}/login`;
     }
   } catch (err) {
     console.error(err);
