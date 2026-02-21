@@ -174,6 +174,11 @@
       .replace(/(?<!\\)\bsquareroot\(([^()]+)\)/gi, '\\sqrt{$1}')
       .replace(/(?<!\\)\bsquareroot([a-z0-9]+)/gi, '\\sqrt{$1}');
 
+    normalized = normalized.replace(
+      /^([+\-]?(?:\d+(?:\.\d+)?))\/(\d+(?:\.\d+)?)([a-z\\α-ωΑ-Ωπθδλμσωβγ].*)$/i,
+      (_, numerator, denominator, tail) => `\\frac{${numerator}}{${denominator}}${tail}`
+    );
+
     if (!/\\frac\{/.test(normalized)) {
       const simpleFrac = normalized.match(/^([^/]+)\/([^/]+)$/);
       if (simpleFrac) {
@@ -193,6 +198,19 @@
     const suggestions = new Set();
     const normalizedArg = normalizeTrigArgument(rawArg);
     suggestions.add(`${latexFunc}${modifierLatex}(${normalizedArg})`);
+
+    const compactRawArg = String(rawArg).trim().replace(/\s+/g, '');
+    const fractionAmbiguities = (typeof globalThis !== 'undefined' && typeof globalThis.buildFractionAmbiguityCandidates === 'function')
+      ? globalThis.buildFractionAmbiguityCandidates(compactRawArg)
+      : [];
+
+    if (fractionAmbiguities.length > 0) {
+      for (const fracArg of fractionAmbiguities) {
+        suggestions.add(`${latexFunc}${modifierLatex}(${fracArg})`);
+      }
+    } else if (compactRawArg.includes('/')) {
+      suggestions.add(`${latexFunc}${modifierLatex}(${compactRawArg})`);
+    }
 
     if (!modifierLatex) {
       const compactRaw = String(rawArg).trim().replace(/\s+/g, '');

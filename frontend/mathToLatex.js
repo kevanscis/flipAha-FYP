@@ -115,6 +115,14 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     allSuggestions.push(...matchResult.suggestions);
   }
 
+  // 2.5 Fraction ambiguity (algebra): a/bx can mean (a/b)x or a/(bx)
+  if (typeof globalThis !== 'undefined' && typeof globalThis.buildFractionAmbiguityCandidates === 'function') {
+    const fractionAmbiguities = globalThis.buildFractionAmbiguityCandidates(queryTerm);
+    if (Array.isArray(fractionAmbiguities) && fractionAmbiguities.length) {
+      allSuggestions.push(...fractionAmbiguities);
+    }
+  }
+
   // 3. PERMUTATION ENGINE - Generate alternative interpretations
   if (typeof globalThis !== 'undefined' && globalThis.generatePermutations) {
     console.log('[getLatexSuggestions] Calling permutation engine for:', queryTerm);
@@ -206,7 +214,20 @@ function generatePermutations(input) {
         .replace(/θ/g, '\\theta');
       return out;
     };
-    const normalizedOperand = normalizeTrigOperand(rawOperand);
+    const sanitizeIncompleteOperand = (operand) => {
+      let out = String(operand || '').trim();
+      if (!out) return out;
+
+      const openCount = (out.match(/\(/g) || []).length;
+      const closeCount = (out.match(/\)/g) || []).length;
+      if (openCount > closeCount && out.startsWith('(')) {
+        out = out.slice(1).trim();
+      }
+
+      return out;
+    };
+
+    const normalizedOperand = normalizeTrigOperand(sanitizeIncompleteOperand(rawOperand));
     const rawPrefix = String(parsed.prefix || '');
 
     if (normalizedFunc && normalizedOperand) {
