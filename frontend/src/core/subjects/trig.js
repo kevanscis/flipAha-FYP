@@ -61,7 +61,9 @@
     const normalized = String(input).toLowerCase().trim();
     const patterns = [
       /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*\(\s*(.*)$/i,
+      /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)(-1)\s*\(\s*(.*)$/i,
       /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*(\d*(?:\\pi|π|pi)(?:\/\d+)?|\d*(?:\\pi|π|pi)\s*\/\s*\d+)$/i,
+      /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*(-?[a-z0-9\\πθ][a-z0-9\\πθ+\-*/().°]*)$/i,
       /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*(\d+[a-z\\πθ][a-z0-9\\πθ]*)$/i,
       /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*(\d+(?:\.\d+)?)$/i,
       /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*([a-z\\πθ][a-z0-9\\πθ]*)$/i,
@@ -86,6 +88,47 @@
     return { matched: false };
   }
 
+  function normalizeTrigArgument(rawArg){
+    return String(rawArg)
+      .trim()
+      .replace(/\s+/g, '')
+      .replace(/\bpi\b/gi, '\\pi')
+      .replace(/π/g, '\\pi')
+      .replace(/\btheta\b/gi, '\\theta')
+      .replace(/θ/g, '\\theta')
+      .replace(/(\d+(?:\.\d+)?)\s*(?:°|deg|degree|degrees)/gi, '$1^{\\circ}')
+      .replace(/(^|[^a-zA-Z0-9_\\])(\d*)\\pi\/(\d+)/g, (match, left, coeffRaw, denom) => {
+        const coeff = coeffRaw || '1';
+        if (coeff === '1') return `${left}\\frac{\\pi}{${denom}}`;
+        return `${left}\\frac{${coeff}\\pi}{${denom}}`;
+      });
+  }
+
+  function generateTrigExpressionSuggestions(rawArg, latexFunc, modifierLatex){
+    const suggestions = new Set();
+    const normalizedArg = normalizeTrigArgument(rawArg);
+    suggestions.add(`${latexFunc}${modifierLatex}(${normalizedArg})`);
+
+    const compact = String(rawArg).trim().replace(/\s+/g, '');
+    const ambigMatch = compact.match(/^(.+)\+((\d*)?(?:\\pi|π|pi))\/(\d+)$/i);
+    if (ambigMatch) {
+      const lhsRaw = ambigMatch[1];
+      const coeff = ambigMatch[3] || '1';
+      const denom = ambigMatch[4];
+
+      const lhs = normalizeTrigArgument(lhsRaw);
+      const piTerm = coeff === '1' ? '\\pi' : `${coeff}\\pi`;
+      const rhsFraction = coeff === '1'
+        ? `\\frac{\\pi}{${denom}}`
+        : `\\frac{${coeff}\\pi}{${denom}}`;
+
+      suggestions.add(`${latexFunc}${modifierLatex}(${lhs}+${rhsFraction})`);
+      suggestions.add(`${latexFunc}${modifierLatex}(\\frac{${lhs}+${piTerm}}{${denom}})`);
+    }
+
+    return Array.from(suggestions);
+  }
+
   function generateTrigSuggestions(parsed, maxSuggestions = 5){
     if (!parsed.matched) return [];
     const func = parsed.function; const modifier = parsed.modifier; const argument = parsed.argument;
@@ -95,6 +138,10 @@
     if (modifier){ if (modifier.includes('-1')||modifier==='^-1') modifierLatex='^{-1}'; else if (modifier==='^2') modifierLatex='^{2}'; else if (modifier==='^3') modifierLatex='^{3}'; }
     if (argument){
       const rawArg = String(argument).trim();
+      if (/[+\-*/]/.test(rawArg) || /(?:pi|π)/i.test(rawArg)) {
+        return generateTrigExpressionSuggestions(rawArg, latexFunc, modifierLatex).slice(0, maxSuggestions);
+      }
+
       const degreeMatch = rawArg.match(/^(\d+(?:\.\d+)?)\s*(?:o|deg|degree|degrees|°)$/i);
       if (degreeMatch) return [`${latexFunc}${modifierLatex}(${degreeMatch[1]}^{\\circ})`];
       const plainNumberMatch = rawArg.match(/^(\d+)$/);

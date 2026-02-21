@@ -108,8 +108,9 @@ function generateLayer2Candidates(input) {
 
 function generateTrigCandidates(normalized) {
   const candidates = [];
+  const trigGroup = '(sin|cos|tan|sec|csc|cot)';
 
-  const simpleMatch = normalized.match(/^(sin|cos|tan)([a-z])$/);
+  const simpleMatch = normalized.match(new RegExp(`^${trigGroup}([a-zθ])$`));
   if (simpleMatch) {
     const [, func, arg] = simpleMatch;
     candidates.push({
@@ -120,7 +121,7 @@ function generateTrigCandidates(normalized) {
     });
   }
 
-  const numberMatch = normalized.match(/^(sin|cos|tan)(-?\d+(?:\.\d+)?)(°|o)?$/);
+  const numberMatch = normalized.match(new RegExp(`^${trigGroup}(-?\\d+(?:\\.\\d+)?)(°|o)?$`));
   if (numberMatch) {
     const [, func, num, degreeSymbol] = numberMatch;
     if (degreeSymbol) {
@@ -148,7 +149,7 @@ function generateTrigCandidates(normalized) {
     }
   }
 
-  const argMatch = normalized.match(/^(sin|cos|tan)\((.+)\)$/);
+  const argMatch = normalized.match(new RegExp(`^${trigGroup}\\((.+)\\)$`));
   if (argMatch) {
     const [, func, arg] = argMatch;
     const type = /[+\-\/]/.test(arg) ? 'trig_expression' : 'trig_argument';
@@ -160,7 +161,7 @@ function generateTrigCandidates(normalized) {
     });
   }
 
-  const inverseMatch = normalized.match(/^(arc)?(sin|cos|tan)(\^-?1|-?1)([a-z]+)?$/);
+  const inverseMatch = normalized.match(new RegExp(`^(arc)?${trigGroup}(\\^-?1|-?1)([a-zθ]+)?$`));
   if (inverseMatch) {
     const [, arcPrefix, func, , argRaw] = inverseMatch;
     const arg = argRaw || 'x';
@@ -173,7 +174,7 @@ function generateTrigCandidates(normalized) {
     });
   }
 
-  const arcMatch = normalized.match(/^arc(sin|cos|tan)([a-z]+)$/);
+  const arcMatch = normalized.match(new RegExp(`^arc${trigGroup}([a-zθ]+)$`));
   if (arcMatch) {
     const [, func, argRaw] = arcMatch;
     const arg = argRaw || 'x';
@@ -185,7 +186,7 @@ function generateTrigCandidates(normalized) {
     });
   }
 
-  const doubleMatch = normalized.match(/^(sin|cos|tan)(\d+)([a-z])$/);
+  const doubleMatch = normalized.match(new RegExp(`^${trigGroup}(\\d+)([a-zθ])$`));
   if (doubleMatch) {
     const [, func, num, arg] = doubleMatch;
     candidates.push({
@@ -202,7 +203,7 @@ function generateTrigCandidates(normalized) {
     });
   }
 
-  const powerMatch = normalized.match(/^(sin|cos|tan)\^(\d+)([a-z])?$/);
+  const powerMatch = normalized.match(new RegExp(`^${trigGroup}\\^(\\d+)([a-zθ])?$`));
   if (powerMatch) {
     const [, func, pow, argRaw] = powerMatch;
     const arg = argRaw || 'x';
@@ -214,7 +215,7 @@ function generateTrigCandidates(normalized) {
     });
   }
 
-  const suffixMatch = normalized.match(/^(sin|cos|tan)([a-z])(\d+)$/);
+  const suffixMatch = normalized.match(new RegExp(`^${trigGroup}([a-zθ])(\\d+)$`));
   if (suffixMatch) {
     const [, func, arg, pow] = suffixMatch;
     candidates.push({
@@ -231,7 +232,7 @@ function generateTrigCandidates(normalized) {
     });
   }
 
-  const exprMatch = normalized.match(/^(sin|cos|tan)([a-z])(.*)$/);
+  const exprMatch = normalized.match(new RegExp(`^${trigGroup}([a-zθ])(.*)$`));
   if (exprMatch && /[+\-\/]/.test(exprMatch[3])) {
     const [, func, arg, rest] = exprMatch;
     candidates.push({
@@ -251,9 +252,45 @@ function generateTrigCandidates(normalized) {
     }
   }
 
-  const productMatch = normalized.match(/^(sin|cos|tan)[a-z](sin|cos|tan)[a-z]$/);
+  const compactExprMatch = normalized.match(new RegExp(`^${trigGroup}(-?[a-zθπ][a-z0-9θπ+\\-*/().]*)$`));
+  if (compactExprMatch) {
+    const [, func, rawArg] = compactExprMatch;
+    const arg = rawArg.replace(/\bpi\b/g, 'π').replace(/theta/g, 'θ');
+
+    candidates.push({
+      text: `${func}(${arg})`,
+      display: `${func}(${arg})`,
+      type: 'trig_expression',
+      baseScore: 0.95
+    });
+
+    const ambigMatch = rawArg.match(/^(.+)\+((\d*)?(?:π|pi))\/(\d+)$/);
+    if (ambigMatch) {
+      const lhs = ambigMatch[1].replace(/\bpi\b/g, 'π').replace(/theta/g, 'θ');
+      const coeff = ambigMatch[3] || '1';
+      const denom = ambigMatch[4];
+      const piTerm = coeff === '1' ? 'π' : `${coeff}π`;
+      const rhsTerm = coeff === '1' ? 'π' : `${coeff}π`;
+
+      candidates.push({
+        text: `${func}(${lhs}+${rhsTerm}/${denom})`,
+        display: `${func}(${lhs}+${rhsTerm}/${denom})`,
+        type: 'trig_expression',
+        baseScore: 0.92
+      });
+
+      candidates.push({
+        text: `${func}((${lhs}+${piTerm})/${denom})`,
+        display: `${func}((${lhs}+${piTerm})/${denom})`,
+        type: 'trig_expression',
+        baseScore: 0.9
+      });
+    }
+  }
+
+  const productMatch = normalized.match(new RegExp(`^${trigGroup}[a-zθ]${trigGroup}[a-zθ]$`));
   if (productMatch) {
-    const product = normalized.replace(/(sin|cos|tan)([a-z])/g, '$1($2)');
+    const product = normalized.replace(new RegExp(`${trigGroup}([a-zθ])`, 'g'), '$1($2)');
     candidates.push({
       text: product,
       display: product,
@@ -262,7 +299,7 @@ function generateTrigCandidates(normalized) {
     });
   }
 
-  const coefficientMatch = normalized.match(/^(\d+)(sin|cos|tan)([a-z])$/);
+  const coefficientMatch = normalized.match(new RegExp(`^(\\d+)${trigGroup}([a-zθ])$`));
   if (coefficientMatch) {
     const [, coef, func, arg] = coefficientMatch;
     candidates.push({
@@ -273,7 +310,7 @@ function generateTrigCandidates(normalized) {
     });
   }
 
-  const ratioMatch = normalized.match(/^(sin|cos|tan)([a-z])\/([0-9]+)$/);
+  const ratioMatch = normalized.match(new RegExp(`^${trigGroup}([a-zθ])\/([0-9]+)$`));
   if (ratioMatch) {
     const [, func, arg, denom] = ratioMatch;
     candidates.push({
@@ -540,6 +577,7 @@ function levenshteinDistance(a, b) {
 function normalizeExpression(expr) {
   return String(expr)
     .toLowerCase()
+    .replace(/π/g, 'pi')
     .replace(/[×*]/g, '*')
     .replace(/[÷]/g, '/')
     .replace(/\s+/g, '')

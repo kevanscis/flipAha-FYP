@@ -563,7 +563,9 @@ function handleInputChange() {
     const closeParens = (query.match(/\)/g) || []).length;
     const hasUnbalancedParens = openParens !== closeParens;
     
-    if (!hasUnbalancedParens) {
+    const compactTrigExpression = /^(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)(?!\s*\().+/i.test(query);
+
+    if (!hasUnbalancedParens && !compactTrigExpression) {
       // Extract the last term after top-level operators (+, -)
       // Walk backwards to find the last operator outside parentheses
       let parenDepth = 0;
