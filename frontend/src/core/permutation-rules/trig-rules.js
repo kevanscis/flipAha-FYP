@@ -18,6 +18,7 @@
     
     perms.addAll(generateTrigDigitPermutations(trimmed));
     perms.addAll(generateTrigVarPermutations(trimmed));
+    perms.addAll(generateTrigAmbiguityPermutations(trimmed));
     perms.addAll(generateInverseTrigPermutations(trimmed));
     perms.addAll(generateTrigPiPermutations(trimmed));
     
@@ -48,7 +49,7 @@
 
   function generateTrigVarPermutations(input) {
     const perms = new Set();
-    const match = input.match(/^(.*?)(sin|cos|tan|sec|csc|cot|cosec)(\d+)([a-zθαβγ])(.*)$/i);
+    const match = input.match(/^(.*?)(sin|cos|tan|sec|csc|cot|cosec)(\d+)([a-zθαβγδλωμπσ])(?![a-z])(.*)$/i);
     if (!match) return perms;
     
     const [_, prefix, func, num, varName, suffix] = match;
@@ -60,6 +61,99 @@
     perms.add(`${prefix}\\${normalizedFunc}(${num})*${varName}${suffix}`);
     
     return perms;
+  }
+
+  function generateTrigAmbiguityPermutations(input) {
+    const perms = new Set();
+    if (!input || typeof input !== 'string') return perms;
+
+    const normalizedInput = normalizeMathTypos(input.trim());
+    if (!normalizedInput) return perms;
+
+    let match = normalizedInput.match(/^(.*?)(sin|cos|tan|sec|csc|cot|cosec)\s*(\d+)([a-zα-ω\\]+)([+\-].+)?$/i);
+    if (match) {
+      const [_, prefix, func, coeff, varToken, tailRaw] = match;
+      const normalizedFunc = normalizeTrigFunc(func);
+      const normalizedVar = normalizeGreekToken(varToken);
+      const tail = normalizeTrigText(tailRaw || '');
+      perms.add(`${prefix}\\${normalizedFunc}(${coeff}${normalizedVar}${tail})`);
+      perms.add(`${prefix}\\${normalizedFunc}^{${coeff}}(${normalizedVar})${tail}`);
+      if (tail) {
+        perms.add(`${prefix}\\${normalizedFunc}^{${coeff}}(${normalizedVar}${tail})`);
+      }
+      return perms;
+    }
+
+    match = normalizedInput.match(/^(.*?)(sin|cos|tan|sec|csc|cot|cosec)\s*(\d+)\((.+)\)(.*)$/i);
+    if (match) {
+      const [_, prefix, func, coeff, inside, suffix] = match;
+      const normalizedFunc = normalizeTrigFunc(func);
+      const normalizedInside = normalizeTrigText(inside);
+      const normalizedSuffix = normalizeTrigText(suffix || '');
+      perms.add(`${prefix}\\${normalizedFunc}(${coeff}(${normalizedInside}))${normalizedSuffix}`);
+      perms.add(`${prefix}\\${normalizedFunc}^{${coeff}}(${normalizedInside})${normalizedSuffix}`);
+      return perms;
+    }
+
+    return perms;
+  }
+
+  function normalizeMathTypos(text) {
+    return String(text ?? '')
+      .replace(/thetha|tetha|thta|thita|theeta/gi, 'theta')
+      .replace(/alpah|alhpa|aplha/gi, 'alpha')
+      .replace(/betha|btea/gi, 'beta')
+      .replace(/gama|gammar|gammma/gi, 'gamma')
+      .replace(/delat|detla|dalta/gi, 'delta')
+      .replace(/lamda|lamba|lmbda|lambada/gi, 'lambda')
+      .replace(/sigam|simga|sogma/gi, 'sigma')
+      .replace(/omgea|omeag|oemga|omeega/gi, 'omega');
+  }
+
+  function normalizeGreekToken(token) {
+    const raw = String(token ?? '').trim();
+    const key = raw.replace(/^\\/, '').toLowerCase();
+    const map = {
+      theta: '\\theta',
+      alpha: '\\alpha',
+      beta: '\\beta',
+      gamma: '\\gamma',
+      delta: '\\delta',
+      lambda: '\\lambda',
+      mu: '\\mu',
+      sigma: '\\sigma',
+      omega: '\\omega',
+      pi: '\\pi',
+      'θ': '\\theta',
+      'α': '\\alpha',
+      'β': '\\beta',
+      'γ': '\\gamma',
+      'δ': '\\delta',
+      'λ': '\\lambda',
+      'μ': '\\mu',
+      'σ': '\\sigma',
+      'ω': '\\omega',
+      'π': '\\pi'
+    };
+    return map[key] || raw;
+  }
+
+  function normalizeTrigText(text) {
+    let output = normalizeMathTypos(String(text ?? ''));
+    output = output.replace(/(\d+(?:\.\d+)?)\s*(?:°|deg|degree|degrees)/gi, '$1^\\circ');
+    output = output.replace(/π/g, '\\pi').replace(/θ/g, '\\theta');
+
+    const replacements = [
+      ['theta', '\\theta'], ['alpha', '\\alpha'], ['beta', '\\beta'], ['gamma', '\\gamma'],
+      ['delta', '\\delta'], ['lambda', '\\lambda'], ['mu', '\\mu'], ['sigma', '\\sigma'],
+      ['omega', '\\omega'], ['pi', '\\pi']
+    ];
+    for (const [token, latex] of replacements) {
+      const pattern = new RegExp(`(^|[^a-zA-Z\\\\])${token}(?=[^a-zA-Z]|$)`, 'gi');
+      output = output.replace(pattern, (m, prefix) => `${prefix}${latex}`);
+    }
+
+    return output;
   }
 
   function generateInverseTrigPermutations(input) {
@@ -230,6 +324,7 @@
       generateTrigPermutations,
       generateTrigDigitPermutations,
       generateTrigVarPermutations,
+      generateTrigAmbiguityPermutations,
       generateInverseTrigPermutations,
       generateTrigPiPermutations,
       isValidTrigExpression
@@ -240,6 +335,7 @@
       generateTrigPermutations,
       generateTrigDigitPermutations,
       generateTrigVarPermutations,
+      generateTrigAmbiguityPermutations,
       generateInverseTrigPermutations,
       generateTrigPiPermutations,
       isValidTrigExpression

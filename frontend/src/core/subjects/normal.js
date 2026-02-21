@@ -1,5 +1,27 @@
 
 (function(){
+  function normalizeCommonMathTypos(input){
+    let output = String(input ?? '');
+
+    const typoPatterns = [
+      { regex: /alpah|alhpa|aplha/gi, canonical: 'alpha' },
+      { regex: /betha|btea/gi, canonical: 'beta' },
+      { regex: /gama|gammar|gammma/gi, canonical: 'gamma' },
+      { regex: /delat|detla|dalta/gi, canonical: 'delta' },
+      { regex: /thetha|tetha|thta|thita|theeta/gi, canonical: 'theta' },
+      { regex: /lamda|lamba|lmbda|lambada/gi, canonical: 'lambda' },
+      { regex: /mew/gi, canonical: 'mu' },
+      { regex: /sigam|simga|sogma/gi, canonical: 'sigma' },
+      { regex: /omgea|omeag|oemga|omeega/gi, canonical: 'omega' }
+    ];
+
+    for (const entry of typoPatterns) {
+      output = output.replace(entry.regex, entry.canonical);
+    }
+
+    return output;
+  }
+
   // Export normal/general rules for centralized compilation in mathToLatex.js
   const NORMAL_RULES = [
     ["%over%", "\\frac{$1}{$2}"],
@@ -85,8 +107,9 @@
 
     if (typeof globalThis !== 'undefined'){
     globalThis.NORMAL_RULES = NORMAL_RULES;
+    globalThis.normalizeCommonMathTypos = normalizeCommonMathTypos;
   }
   if (typeof module !== 'undefined' && module.exports){
-    module.exports = { NORMAL_RULES };
+    module.exports = { NORMAL_RULES, normalizeCommonMathTypos };
   }
 })();

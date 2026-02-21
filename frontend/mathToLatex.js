@@ -91,6 +91,10 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     .replace(/[·⋅]/g, '*')
     .replace(/\\left/g, '').replace(/\\right/g, '');
 
+  if (typeof globalThis !== 'undefined' && typeof globalThis.normalizeCommonMathTypos === 'function') {
+    trimmed = globalThis.normalizeCommonMathTypos(trimmed);
+  }
+
   // No operator extraction here - that's the UI layer's job (app.js)
   // mathToLatex.js is a PURE ORCHESTRATOR that delegates to subject modules
   const queryTerm = trimmed;
