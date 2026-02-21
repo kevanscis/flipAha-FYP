@@ -355,35 +355,62 @@ def upload_image():
 def convert_to_latex():
     """
     Convert uploaded image to LaTeX
-    JSON: {file (as multipart), options?: {high_accuracy?: bool, preprocess?: 'auto'|'none'|'mild'|'binarize'}}
+    Accepts either:
+    1. JSON with 'image_data' (base64 encoded) OR 'file_path'
+    2. Multipart form data with 'file'
+    Options: high_accuracy (bool), preprocess ('auto'|'none'|'mild'|'binarize')
     """
     try:
-        if 'file' not in request.files:
+        # Get image data - try multiple input methods
+        original_bytes = None
+        
+        # Method 1: Multipart file upload
+        if 'file' in request.files:
+            file = request.files['file']
+            if file.filename == '':
+                return jsonify({
+                    'success': False,
+                    'error': 'No file selected'
+                }), 400
+            if not allowed_file(file.filename):
+                return jsonify({
+                    'success': False,
+                    'error': f'Invalid file type. Allowed types: {", ".join(ALLOWED_EXTENSIONS)}'
+                }), 400
+            original_bytes = file.read()
+        
+        # Method 2: JSON with base64 image
+        elif request.is_json:
+            data = request.json or {}
+            if 'image_data' in data:
+                import base64
+                try:
+                    original_bytes = base64.b64decode(data['image_data'])
+                except Exception as e:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Invalid base64 image data: {str(e)}'
+                    }), 400
+        
+        # If still no image, return error
+        if original_bytes is None:
             return jsonify({
                 'success': False,
-                'error': 'No image file provided'
+                'error': 'No image file provided (use multipart file or JSON image_data)'
             }), 400
         
-        file = request.files['file']
+        # Get options from form, JSON, or defaults
+        high_accuracy = False
+        preprocess_mode = 'auto'
         
-        if file.filename == '':
-            return jsonify({
-                'success': False,
-                'error': 'No file selected'
-            }), 400
-        
-        if not allowed_file(file.filename):
-            return jsonify({
-                'success': False,
-                'error': f'Invalid file type. Allowed types: {", ".join(ALLOWED_EXTENSIONS)}'
-            }), 400
-        
-        # Read file data
-        original_bytes = file.read()
-        
-        # Get options from form or JSON
-        high_accuracy = request.form.get('high_accuracy') == 'true' or request.form.get('high_accuracy') == '1'
-        preprocess_mode = (request.form.get('preprocess') or 'auto').strip().lower()
+        if request.is_json:
+            data = request.json or {}
+            options = data.get('options', {})
+            high_accuracy = bool(options.get('high_accuracy') or data.get('high_accuracy'))
+            preprocess_mode = (options.get('preprocess') or data.get('preprocess') or 'auto').strip().lower()
+        else:
+            high_accuracy = request.form.get('high_accuracy') in ('true', '1', 'True')
+            preprocess_mode = (request.form.get('preprocess') or 'auto').strip().lower()
         
         def pil_to_bytes(pil_img):
             """Convert PIL image to bytes"""
@@ -436,6 +463,10 @@ def convert_to_latex():
                     'confidence': score_info.get('confidence', 0),
                     'score': score_info.get('score', 0)
                 }
+            
+            # Fast path: if not in high-accuracy mode and got a valid result, stop
+            if not high_accuracy and score_info.get('valid', False):
+                break
         
         if best is None:
             return jsonify({
@@ -451,13 +482,15 @@ def convert_to_latex():
             'confidence': best['confidence'],
             'score': best['score'],
             'message': 'Equation converted to LaTeX successfully',
-            'attempts': attempts
+            'attempts': attempts if high_accuracy else None
         }), 200
     
     except Exception as e:
+        import traceback
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': str(e),
+            'details': traceback.format_exc()
         }), 500
 
 # Serve JS/CSS files
