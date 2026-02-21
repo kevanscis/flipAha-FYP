@@ -64,6 +64,85 @@
 
   function generateInverseTrigPermutations(input) {
     const perms = new Set();
+    const trimmed = typeof input === 'string' ? input.trim() : '';
+    if (!trimmed) return perms;
+
+    const addInverse = (func, arg) => {
+      const normalizedFunc = normalizeTrigFunc(func);
+      const cleanArg = typeof arg === 'string' ? arg.trim() : '';
+      if (cleanArg) {
+        perms.add(`\\${normalizedFunc}^{-1}(${cleanArg})`);
+      } else {
+        perms.add(`\\${normalizedFunc}^{-1}`);
+      }
+    };
+
+    const readBalancedParenArg = (source, startIdx) => {
+      if (!source || source[startIdx] !== '(') return null;
+      let depth = 0;
+      for (let i = startIdx; i < source.length; i++) {
+        const ch = source[i];
+        if (ch === '(') depth++;
+        if (ch === ')') {
+          depth--;
+          if (depth === 0) {
+            return {
+              arg: source.slice(startIdx + 1, i),
+              endIndex: i + 1
+            };
+          }
+        }
+      }
+      return null;
+    };
+
+    const readInlineArg = (source, startIdx) => {
+      if (!source || startIdx >= source.length) return '';
+      let idx = startIdx;
+      while (idx < source.length && /\s/.test(source[idx])) idx++;
+      if (idx >= source.length) return '';
+
+      if (source[idx] === '(') {
+        const balanced = readBalancedParenArg(source, idx);
+        return balanced ? balanced.arg.trim() : '';
+      }
+
+      const tail = source.slice(idx);
+      const rawMatch = tail.match(/^([a-zθαβγ0-9\\π√\[\]{}().+\-*/^_\s]+)/i);
+      if (!rawMatch) return '';
+
+      const cleaned = rawMatch[1]
+        .replace(/\s+(?:in|for|where|when|if)\b.*$/i, '')
+        .replace(/\s+(?:degrees?|radians?|rad)\b.*$/i, '')
+        .trim();
+
+      return cleaned;
+    };
+
+    let inlineMatch = trimmed.match(/\b(?:arc\s*(sin|cos|tan|sec|csc|cot|cosec)|a(sin|cos|tan))\b/i);
+    if (inlineMatch) {
+      const func = inlineMatch[1] || inlineMatch[2];
+      const arg = readInlineArg(trimmed, inlineMatch.index + inlineMatch[0].length);
+      addInverse(func, arg);
+      perms.add(`\\text{arc${normalizeTrigFunc(func)}}${arg ? `(${arg.trim()})` : ''}`);
+      return perms;
+    }
+
+    inlineMatch = trimmed.match(/\b(sin|cos|tan|sec|csc|cot|cosec)\s*(?:\^\s*[−-]\s*1|⁻¹)/i);
+    if (inlineMatch) {
+      const func = inlineMatch[1];
+      const arg = readInlineArg(trimmed, inlineMatch.index + inlineMatch[0].length);
+      addInverse(func, arg);
+      return perms;
+    }
+
+    inlineMatch = trimmed.match(/\b(sin|cos|tan|sec|csc|cot|cosec)\s*[−-]\s*1(?=\s|\(|$)/i);
+    if (inlineMatch) {
+      const func = inlineMatch[1];
+      const arg = readInlineArg(trimmed, inlineMatch.index + inlineMatch[0].length);
+      addInverse(func, arg);
+      return perms;
+    }
     
     let match = input.match(/^(.*?)(arc)(sin|cos|tan|sec|csc|cot|cosec)(.*)$/i);
     if (match) {
@@ -82,7 +161,7 @@
       return perms;
     }
     
-    match = input.match(/^(.*?)(sin|cos|tan|sec|csc|cot|cosec)(?:\^)?-?1(?:\(([^)]*)\))?(.*)$/i);
+    match = input.match(/^(.*?)(sin|cos|tan|sec|csc|cot|cosec)(?:\^\s*)?[−-]\s*1(?=\s|\(|$)(?:\(([^)]*)\))?(.*)$/i);
     if (match) {
       const [_, prefix, func, arg, suffix] = match;
       const normalizedFunc = normalizeTrigFunc(func);
@@ -133,7 +212,7 @@
     }
     
     const invArgMatch = trimmed.match(/\\(sin|cos)(?:\^{-1})?\((-?[\d.]+)\)/);
-    if (invArgMatch && invArgMatch[1] !== 'tan') {
+    if (invArgMatch) {
       const arg = parseFloat(invArgMatch[2]);
       if (!isNaN(arg) && (arg < -1 || arg > 1)) return false;
     }

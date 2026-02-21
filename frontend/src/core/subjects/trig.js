@@ -89,7 +89,7 @@
   }
 
   function normalizeTrigArgument(rawArg){
-    return String(rawArg)
+    let normalized = String(rawArg)
       .trim()
       .replace(/\s+/g, '')
       .replace(/\bpi\b/gi, '\\pi')
@@ -102,6 +102,26 @@
         if (coeff === '1') return `${left}\\frac{\\pi}{${denom}}`;
         return `${left}\\frac{${coeff}\\pi}{${denom}}`;
       });
+
+    normalized = normalized
+      .replace(/\b(?:sqrt|root)\(([^()]+)\)/gi, '\\sqrt{$1}')
+      .replace(/\b(?:sqrt|root)([a-z0-9\\pi\\theta]+)/gi, '\\sqrt{$1}')
+      .replace(/\\sqrt\{(\\pi|\\theta)([a-z0-9]+)\}/gi, '\\sqrt{$1$2}')
+      .replace(/(?<!\\)\bsquareroot\(([^()]+)\)/gi, '\\sqrt{$1}')
+      .replace(/(?<!\\)\bsquareroot([a-z0-9]+)/gi, '\\sqrt{$1}');
+
+    if (!/\\frac\{/.test(normalized)) {
+      const simpleFrac = normalized.match(/^([^/]+)\/([^/]+)$/);
+      if (simpleFrac) {
+        const numerator = simpleFrac[1];
+        const denominator = simpleFrac[2];
+        if (numerator && denominator) {
+          normalized = `\\frac{${numerator}}{${denominator}}`;
+        }
+      }
+    }
+
+    return normalized;
   }
 
   function generateTrigExpressionSuggestions(rawArg, latexFunc, modifierLatex){
