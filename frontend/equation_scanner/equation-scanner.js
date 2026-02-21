@@ -620,7 +620,11 @@ async function loadGallery() {
         if (state.images.length === 0) {
             if (galleryEmpty) galleryEmpty.style.display = 'block';
             if (galleryStats) galleryStats.style.display = 'none';
+            if (galleryGrid) galleryGrid.style.display = 'none';
+            if (galleryError) galleryError.style.display = 'none';
         } else {
+            if (galleryEmpty) galleryEmpty.style.display = 'none';
+            if (galleryError) galleryError.style.display = 'none';
             renderGallery();
             if (data.stats) {
                 displayStats(data.stats);
