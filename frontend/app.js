@@ -140,7 +140,7 @@ function applySuperscriptForInsert(text) {
 }
 
 function latexToSmartText(latex) {
-  let text = latex;
+  let text = normalizeMathLiveArtifacts(latex);
 
   text = text.replace(/\\left\|/g, '|').replace(/\\right\|/g, '|');
   text = text.replace(/\\text\{([^}]*)\}/g, '$1');
@@ -225,8 +225,19 @@ function normalizeLatexForOverlay(latex) {
     .replace(/\\ln/g, '\\mathrm{ln}');
 }
 
+function normalizeMathLiveArtifacts(value) {
+  return String(value ?? '')
+    .replace(/\\textasciicircum/g, '^')
+    .replace(/\\textasteriskcentered/g, '*')
+    .replace(/\\ast\b/g, '*')
+    .replace(/\\cdot(?!s)/g, '*')
+    .replace(/\\times/g, '*')
+    .replace(/\\left/g, '')
+    .replace(/\\right/g, '');
+}
+
 function normalizeToLatex(input) {
-  let s = input;
+  let s = normalizeMathLiveArtifacts(input);
 
   // Logs
   s = s.replace(/\blog\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/g, '\\log_{$1}($2)');
@@ -262,6 +273,36 @@ function normalizeSuggestionLatex(value) {
   return normalizeToLatex(raw);
 }
 
+function renderMixedTextMath(rawText, bubbleDiv) {
+  const raw = normalizeMathLiveArtifacts(rawText);
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    bubbleDiv.textContent = raw;
+    return;
+  }
+
+  const cleaned = trimmed
+    .replace(/\\\$/g, ' ')
+    .replace(/\$/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const normalized = normalizeToLatex(preservePlainTextSegments(cleaned));
+
+  try {
+    katex.render(normalized, bubbleDiv, {
+      throwOnError: false,
+      displayMode: false
+    });
+
+    if (bubbleDiv.querySelector('.katex-error')) {
+      bubbleDiv.textContent = cleaned || raw;
+    }
+  } catch {
+    bubbleDiv.textContent = cleaned || raw;
+  }
+}
+
 function getInputTextValue() {
   if (!questionInput) return '';
 
@@ -287,18 +328,7 @@ function createMessageElement(message) {
   bubbleDiv.className = 'message-bubble';
 
   if (message.role === 'user') {
-    const raw = String(message?.text ?? '');
-    const mathText = raw.trim().replace(/^\$+/, '').replace(/\$+$/, '');
-    const normalized = normalizeToLatex(mathText);
-    
-    try {
-      katex.render(normalized, bubbleDiv, {
-        throwOnError: false,
-        displayMode: false
-      });
-    } catch (e) {
-      bubbleDiv.textContent = raw;
-    }
+    renderMixedTextMath(message?.text, bubbleDiv);
   } else if (message.role === 'loading') {
     bubbleDiv.textContent = message.text;
   } else {
@@ -405,7 +435,8 @@ async function handleSubmitQuestion(e) {
     return;
   }
 
-  const question = questionInput.getValue('latex-expanded').trim();
+  const rawQuestion = questionInput.getValue('latex-expanded').trim();
+  const question = normalizeMathLiveArtifacts(rawQuestion).trim();
   
   if (!question) {
     showResponseStatus('error', 'Please enter a math question');
@@ -839,6 +870,7 @@ function preservePlainTextSegments(value) {
       continue;
     }
 
+    const prevChar = i > 0 ? source[i - 1] : '';
     let j = i;
     while (j < source.length && /[A-Za-z]/.test(source[j])) j += 1;
     const token = source.slice(i, j);
@@ -848,7 +880,8 @@ function preservePlainTextSegments(value) {
     while (k < source.length && /\s/.test(source[k])) k += 1;
     const trailingWhitespace = source.slice(j, k);
 
-    const shouldPreserveAsText = token.length > 2 && !knownMathWords.has(lower);
+    const isLatexCommandToken = prevChar === '\\';
+    const shouldPreserveAsText = token.length > 2 && !knownMathWords.has(lower) && !isLatexCommandToken;
     if (shouldPreserveAsText) {
       output += `\\text{${token}${trailingWhitespace}}`;
     } else {
