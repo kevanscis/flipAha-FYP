@@ -1,75 +1,90 @@
 # FlipAha
 
-FlipAha is a local, full-stack demo app with:
+FlipAha is a full-stack mathematical education application with:
 
-- 💬 **Chat Tutor**: simple math Q&A (keyword-based responses)
-- 📸 **Equation Scanner**: upload/crop an equation image → convert to LaTeX → edit/rate/delete → browse session gallery
+- 💬 **Chat Tutor**: Interactive math Q&A (keyword-based responses)
+- 📸 **Equation Scanner**: Upload equation images → Convert to LaTeX → Edit/Rate → Browse gallery
 
-The backend is **Flask** (Python), and the frontend is **React + Vite**.
+**Backend**: Flask (Python)  
+**Frontend**: Vanilla JavaScript + HTML/CSS
 
 ## Quick Start
 
 ### Prerequisites
 
-- Python 3.10+ recommended
-- Node.js 16+
+- Python 3.10+ (required for dependencies)
+- Pip (Python package manager)
+- Browser (Chrome, Safari, Firefox)
 
-### Install
+### 1. Setup Backend with Virtual Environment
 
-Backend:
-
-```bash
-pip install -r requirements.txt
-```
-
-Frontend:
+Navigate to the project root and create/activate a Python virtual environment:
 
 ```bash
-cd frontend
-npm install
+# Create virtual environment (one time only)
+python3 -m venv venv
+
+# Activate the virtual environment
+# On macOS/Linux:
+source venv/bin/activate
+
+# On Windows:
+# venv\Scripts\activate
+
+# Install dependencies
+pip install -r backend/requirements.txt
 ```
 
-### Run
+**Note**: Always activate the virtual environment before running the backend!
 
-Terminal 1 (backend):
+### 2. Run the Backend
+
+From the project root (with `venv` activated):
 
 ```bash
-python app.py
+./venv/bin/python backend/app.py
 ```
 
-Terminal 2 (frontend):
-
-```bash
-cd frontend
-npm run dev
+You should see:
+```
+* Running on http://127.0.0.1:5000
+* Debug mode: on
 ```
 
-Open: http://localhost:5173
+### 3. Open Frontend
+
+Open your browser and go to:
+
+```
+http://127.0.0.1:5000
+```
+
+The frontend is served directly from the Flask backend (no separate build needed).
 
 ## Configuration
 
-### Frontend API base URL
+### Backend Environment Variables
 
-Set in `frontend/.env` (optional):
-
-```env
-VITE_API_BASE_URL=http://localhost:5000
-```
-
-### OCR engine selection
-
-Default OCR engine is **Pix2Text**.
-
-To switch back to **Pix2Tex**:
+Optional - set before running the backend:
 
 ```bash
-LATEX_OCR_ENGINE=pix2tex python app.py
+# Choose OCR engine (default: pix2text)
+export LATEX_OCR_ENGINE=pix2text
+
+# Or to use the older Pix2Tex model:
+export LATEX_OCR_ENGINE=pix2tex
+
+# Run with environment variable set
+python backend/app.py
 ```
 
-Notes:
+### Frontend API Configuration
 
-- Pix2Text may download/initialize models on first use; the first conversion can be slow.
-- The server startup is kept fast by lazily initializing the OCR model on first conversion.
+If the backend is on a different host/port, edit `frontend/equation-scanner.js`:
+
+```javascript
+const API_BASE_URL = 'http://localhost:5000';  // Change this
+```
 
 ## Usage
 
