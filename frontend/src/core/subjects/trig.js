@@ -134,6 +134,11 @@
     let normalized = normalizeCommonTypos(rawArg)
       .trim()
       .replace(/\s+/g, '')
+      .replace(/(^|[^a-zA-Z0-9_\\])(\d*)pi\/(\d+)(?=$|[^a-zA-Z0-9_])/gi, (match, left, coeffRaw, denom) => {
+        const coeff = coeffRaw || '1';
+        if (coeff === '1') return `${left}\\frac{\\pi}{${denom}}`;
+        return `${left}\\frac{${coeff}\\pi}{${denom}}`;
+      })
       .replace(/π/g, '\\pi')
       .replace(/θ/g, '\\theta')
       .replace(/α/g, '\\alpha')
@@ -174,7 +179,8 @@
       if (simpleFrac) {
         const numerator = simpleFrac[1];
         const denominator = simpleFrac[2];
-        if (numerator && denominator) {
+        const hasTopLevelAddSub = /[+\-]/.test(numerator.slice(1)) || /[+\-]/.test(denominator.slice(1));
+        if (numerator && denominator && !hasTopLevelAddSub) {
           normalized = `\\frac{${numerator}}{${denominator}}`;
         }
       }

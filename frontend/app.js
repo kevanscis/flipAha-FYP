@@ -573,52 +573,39 @@ function handleInputChange() {
     let queryTerm = query;
     let termStartOffset = 0;
     let queryTermText = latexToSmartText(queryTerm);
-    
-    // Check for unbalanced parentheses (incomplete expression like "sin(pi/6")
-    const openParens = (query.match(/\(/g) || []).length;
-    const closeParens = (query.match(/\)/g) || []).length;
-    const hasUnbalancedParens = openParens !== closeParens;
-    
-    const compactTrigExpression = /^(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)(?!\s*\().+/i.test(query);
-    const hasTopLevelPlusMinus = (() => {
-      let depth = 0;
-      for (let i = 0; i < query.length; i++) {
-        const char = query[i];
-        if (char === '(') depth++;
-        else if (char === ')') depth--;
-        else if (depth === 0 && (char === '+' || char === '-')) {
-          const beforeOp = query.substring(Math.max(0, i - 3), i).toLowerCase();
-          const isInverseTrig = /(sin|cos|tan)$/.test(beforeOp) && char === '-' && query[i + 1] === '1';
-          if (!isInverseTrig) return true;
-        }
-      }
-      return false;
-    })();
 
-    if (!hasUnbalancedParens && (!compactTrigExpression || hasTopLevelPlusMinus)) {
-      // Extract the last term after top-level operators (+, -)
-      // Walk backwards to find the last operator outside parentheses
-      let parenDepth = 0;
+    const findLastTopLevelOperatorIndex = (expr) => {
+      let depth = 0;
       let lastOperatorIndex = -1;
-      
-      for (let i = query.length - 1; i >= 0; i--) {
-        const char = query[i];
-        if (char === ')') parenDepth++;
-        else if (char === '(') parenDepth--;
-        else if (parenDepth === 0 && (char === '+' || char === '-')) {
-          // Found top-level operator, but check it's not part of inverse trig (sin-1)
-          const beforeOp = query.substring(Math.max(0, i - 3), i).toLowerCase();
-          const isInverseTrig = /(sin|cos|tan)$/.test(beforeOp) && query[i] === '-' && query[i + 1] === '1';
+      for (let i = 0; i < expr.length; i++) {
+        const char = expr[i];
+        if (char === '(') {
+          depth += 1;
+          continue;
+        }
+        if (char === ')') {
+          depth = Math.max(0, depth - 1);
+          continue;
+        }
+        if (depth === 0 && (char === '+' || char === '-')) {
+          const beforeOp = expr.substring(Math.max(0, i - 3), i).toLowerCase();
+          const isInverseTrig = /(sin|cos|tan)$/.test(beforeOp) && char === '-' && expr[i + 1] === '1';
           if (!isInverseTrig) {
             lastOperatorIndex = i;
-            break;
           }
         }
       }
-      
-      if (lastOperatorIndex !== -1) {
-        queryTerm = query.substring(lastOperatorIndex + 1).trim();
-        termStartOffset = lastOperatorIndex + 1;
+      return lastOperatorIndex;
+    };
+    
+    const compactTrigExpression = /^(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)(?!\s*\().+/i.test(query);
+    const lastTopLevelOperatorIndex = findLastTopLevelOperatorIndex(query);
+    const hasTopLevelPlusMinus = lastTopLevelOperatorIndex !== -1;
+
+    if (!compactTrigExpression || hasTopLevelPlusMinus) {
+      if (lastTopLevelOperatorIndex !== -1) {
+        queryTerm = query.substring(lastTopLevelOperatorIndex + 1).trim();
+        termStartOffset = lastTopLevelOperatorIndex + 1;
         queryTermText = latexToSmartText(queryTerm);
       }
     }
@@ -629,6 +616,15 @@ function handleInputChange() {
       if (searchValue.includes(s)) return false;
       return true;
     });
+
+    const trigNames = ['sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'cosec'];
+    const alphaTail = (queryTermText || queryTerm || '').match(/[A-Za-z]+$/);
+    const trigPrefix = alphaTail ? alphaTail[0].toLowerCase() : '';
+    const typingTrigPrefix = trigPrefix && trigNames.some(name => name.startsWith(trigPrefix));
+
+    if (typingTrigPrefix) {
+      suggestions = suggestions.filter(s => /(?:^|\\)(sin|cos|tan|sec|csc|cot|cosec)\b/i.test(String(s)));
+    }
 
     if (suggestions.length === 0 && typeof window.getLayer2Suggestions === 'function') {
       const layer2Input = queryText || textValue || query;
@@ -727,8 +723,8 @@ function selectSuggestion(latex) {
   console.log(inputMethod, usedSuggestion);
   // Set the LaTeX value in MathLive
 
-  const { replaceStart, replaceEnd } = computeSuggestionReplacementRange(latex);
-  const deleteCount = Math.max(0, (replaceEnd || 0) - (replaceStart || 0));
+  const currentValue = getInputTextValue();
+  const { replaceStart, replaceEnd } = computeSuggestionReplacementRange(latex, currentValue);
 
   try {
     questionInput.defaultMode = 'text';
@@ -737,27 +733,9 @@ function selectSuggestion(latex) {
     // Ignore if mode APIs are not supported
   }
 
-  try {
-    if (typeof questionInput.executeCommand === 'function' && deleteCount > 0) {
-      for (let i = 0; i < deleteCount; i += 1) {
-        questionInput.executeCommand('deleteBackward');
-      }
-    }
-
-    if (typeof questionInput.insert === 'function') {
-      questionInput.insert(latex);
-    } else {
-      const currentValue = getInputTextValue();
-      const prefix = currentValue.slice(0, replaceStart || 0);
-      const suffix = currentValue.slice(replaceEnd || 0);
-      questionInput.setValue(`${prefix}${latex}${suffix}`);
-    }
-  } catch {
-    const currentValue = getInputTextValue();
-    const prefix = currentValue.slice(0, replaceStart || 0);
-    const suffix = currentValue.slice(replaceEnd || 0);
-    questionInput.setValue(`${prefix}${latex}${suffix}`);
-  }
+  const prefix = currentValue.slice(0, replaceStart || 0);
+  const suffix = currentValue.slice(replaceEnd || 0);
+  questionInput.setValue(`${prefix}${latex}${suffix}`);
 
   try {
     questionInput.defaultMode = 'text';
@@ -781,11 +759,34 @@ function selectSuggestion(latex) {
   });
 }
 
-function computeSuggestionReplacementRange(latex) {
+function computeSuggestionReplacementRange(latex, currentValue = '') {
   const start = suggestionContext.start || 0;
   const end = suggestionContext.end || 0;
   const queryText = suggestionContext.queryTermText || suggestionContext.queryText || '';
   const suggestionText = latexToSmartText(latex || '');
+
+  const isTrigSuggestion = /^(sin|cos|tan|sec|csc|cot)\b/i.test(suggestionText);
+
+  if (isTrigSuggestion && currentValue) {
+    const trigNames = ['sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'cosec'];
+    const caret = currentValue.length;
+    let tokenStart = caret;
+    while (tokenStart > 0 && /[A-Za-z\\]/.test(currentValue[tokenStart - 1])) {
+      tokenStart -= 1;
+    }
+    const rawToken = currentValue.slice(tokenStart, caret);
+    const token = rawToken.replace(/^\\/, '').toLowerCase();
+    if (token && trigNames.some(name => name.startsWith(token))) {
+      return { replaceStart: tokenStart, replaceEnd: caret };
+    }
+  }
+
+  // Preserve multiplicative prefixes like "3x" in "3xcos" by replacing only the trailing trig token.
+  const trigSuffixMatch = queryText.match(/^(.*?)(sin|cos|tan|sec|csc|cot|cosec)$/i);
+  if (isTrigSuggestion && trigSuffixMatch && trigSuffixMatch[1]) {
+    const prefix = trigSuffixMatch[1];
+    return { replaceStart: start + prefix.length, replaceEnd: end };
+  }
 
   // Specific handling for trig functions with coefficients
   const coeffMatch = queryText.match(/^(\d+(?:\.\d+)?)(sin|cos|tan|sec|csc|cot)/i);

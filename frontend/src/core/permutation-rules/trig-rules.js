@@ -32,6 +32,13 @@
     
     const [_, prefix, func, digits, suffix] = match;
     const normalizedFunc = normalizeTrigFunc(func);
+    const trimmedSuffix = String(suffix || '').trim();
+    const degreeSuffixOnly = /^(?:°|deg|degree|degrees)$/i.test(trimmedSuffix);
+
+    if (degreeSuffixOnly) {
+      perms.add(`${prefix}\\${normalizedFunc}(${digits}^{\\circ})`);
+      return perms;
+    }
     
     perms.add(`${prefix}\\${normalizedFunc}(${digits})${suffix}`);
     for (let splitPos = 1; splitPos < digits.length; splitPos++) {
@@ -74,6 +81,14 @@
     if (match) {
       const [_, prefix, func, coeff, varToken, tailRaw] = match;
       const normalizedFunc = normalizeTrigFunc(func);
+      const varLower = String(varToken || '').toLowerCase();
+      const isDegreeWord = /^(deg|degree|degrees|°)$/.test(varLower);
+      if (isDegreeWord) {
+        const tail = normalizeTrigText(tailRaw || '');
+        perms.add(`${prefix}\\${normalizedFunc}(${coeff}^{\\circ}${tail})`);
+        return perms;
+      }
+
       const normalizedVar = normalizeGreekToken(varToken);
       const tail = normalizeTrigText(tailRaw || '');
       perms.add(`${prefix}\\${normalizedFunc}(${coeff}${normalizedVar}${tail})`);
@@ -296,17 +311,27 @@
     const [_, prefix, func, coeff, denom, suffix] = match;
     const normalizedFunc = normalizeTrigFunc(func);
     const c = coeff || '1';
+    const piTerm = c === '1' ? '\\pi' : `${c}\\pi`;
+    const normalizedSuffix = normalizeTrigText(suffix || '');
+    const suffixStartsWithOp = /^[+\-]/.test(String(suffix || '').trim());
     
     if (denom) {
-      perms.add(`${prefix}\\${normalizedFunc}(${c}\\pi/${denom})${suffix}`);
-      perms.add(`${prefix}\\${normalizedFunc}(${c}*\\pi/${denom})${suffix}`);
-      if (c !== '1') {
-        perms.add(`${prefix}\\${normalizedFunc}(\\frac{${c}\\pi}{${denom}})${suffix}`);
+      const fracTerm = c === '1' ? `\\frac{\\pi}{${denom}}` : `\\frac{${c}\\pi}{${denom}}`;
+      if (suffixStartsWithOp) {
+        perms.add(`${prefix}\\${normalizedFunc}(${fracTerm}${normalizedSuffix})`);
+      } else {
+        perms.add(`${prefix}\\${normalizedFunc}(${piTerm}/${denom})${suffix}`);
+        perms.add(`${prefix}\\${normalizedFunc}(${piTerm}*1/${denom})${suffix}`);
+        perms.add(`${prefix}\\${normalizedFunc}(${fracTerm})${suffix}`);
       }
     } else {
-      perms.add(`${prefix}\\${normalizedFunc}(${c}\\pi)${suffix}`);
-      if (c !== '1') {
-        perms.add(`${prefix}\\${normalizedFunc}(${c}*\\pi)${suffix}`);
+      if (suffixStartsWithOp) {
+        perms.add(`${prefix}\\${normalizedFunc}(${piTerm}${normalizedSuffix})`);
+      } else {
+        perms.add(`${prefix}\\${normalizedFunc}(${piTerm})${suffix}`);
+        if (c !== '1') {
+          perms.add(`${prefix}\\${normalizedFunc}(${c}*\\pi)${suffix}`);
+        }
       }
     }
     

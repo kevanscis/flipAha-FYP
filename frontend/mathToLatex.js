@@ -183,9 +183,46 @@ function generatePermutations(input) {
   }
   
   if (parsed.type === 'trigonometry' && globalThis.trigPermutationRules) {
-    const trigPerms = globalThis.trigPermutationRules.generateTrigPermutations(parsed.operand);
-    console.log('[generatePermutations] Trig perms for', parsed.operand, ':', trigPerms);
+    const trigSource = `${parsed.prefix || ''}${parsed.keyword || ''}${parsed.operand || ''}`;
+    const trigPerms = globalThis.trigPermutationRules.generateTrigPermutations(trigSource);
+    console.log('[generatePermutations] Trig perms for', trigSource, ':', trigPerms);
     for (const perm of trigPerms) perms.add(perm);
+
+    const rawKeyword = String(parsed.keyword || '').toLowerCase();
+    const normalizedFunc = rawKeyword === 'cosec' ? 'csc' : rawKeyword;
+    const rawOperand = String(parsed.operand || '').trim();
+    const normalizeTrigOperand = (operand) => {
+      let out = String(operand || '').trim();
+      out = out
+        .replace(/\b(?:sqrt|root)\(([^()]+)\)/gi, '\\sqrt{$1}')
+        .replace(/\b(?:sqrt|root)([a-z0-9\\pi\\theta]+)/gi, '\\sqrt{$1}')
+        .replace(/(^|[^a-zA-Z0-9_\\])(\d*)pi\/(\d+)(?=$|[^a-zA-Z0-9_])/gi, (match, left, coeffRaw, denom) => {
+          const coeff = coeffRaw || '1';
+          if (coeff === '1') return `${left}\\frac{\\pi}{${denom}}`;
+          return `${left}\\frac{${coeff}\\pi}{${denom}}`;
+        })
+        .replace(/(\d+(?:\.\d+)?)\s*(?:°|deg|degree|degrees)/gi, '$1^{\\circ}')
+        .replace(/π/g, '\\pi')
+        .replace(/θ/g, '\\theta');
+      return out;
+    };
+    const normalizedOperand = normalizeTrigOperand(rawOperand);
+    const rawPrefix = String(parsed.prefix || '');
+
+    if (normalizedFunc && normalizedOperand) {
+      const alreadyWrapped = /^\(.*\)$/.test(normalizedOperand);
+      const trigCall = alreadyWrapped
+        ? `\\${normalizedFunc}${normalizedOperand}`
+        : `\\${normalizedFunc}(${normalizedOperand})`;
+      perms.add(trigCall);
+      if (rawPrefix) {
+        perms.add(`${rawPrefix}${trigCall}`);
+        const needsStar = /[a-z0-9)πθα-ω]$/i.test(rawPrefix);
+        if (needsStar) {
+          perms.add(`${rawPrefix}*${trigCall}`);
+        }
+      }
+    }
   }
   
   if (parsed.type === 'inverse_trigonometry' && globalThis.trigPermutationRules) {

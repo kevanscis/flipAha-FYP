@@ -88,10 +88,11 @@
     const funcAppMatch = trimmed.match(/^(.*?)([fghpqrstuv])([a-zθαβγ])(.*)$/i);
     if (funcAppMatch) {
       const [_, prefix, func, varName, suffix] = funcAppMatch;
+      const compactPair = `${String(func || '').toLowerCase()}${String(varName || '').toLowerCase()}`;
       const prefixEndsWithLetter = /[a-z]$/i.test(prefix);
       const suffixStartsWithLetter = /^[a-z]/i.test(suffix || '');
       // Only treat as function application in math-like context, not inside normal words like "solve"
-      if (!prefixEndsWithLetter && !suffixStartsWithLetter && !suffix.startsWith('(')) {
+      if (compactPair !== 'pi' && !prefixEndsWithLetter && !suffixStartsWithLetter && !suffix.startsWith('(')) {
         return {
           keyword: func,
           prefix,
