@@ -41,12 +41,16 @@ def create_tables():
         FOREIGN KEY (question_id) REFERENCES questions(question_id)
     );
                         
-    CREATE TABLE IF NOT EXISTS feedback (
+    
+    CREATE TABLE IF NOT EXISTS suggestion_feedback (
         feedback_id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL,
-        rating REAL NOT NULL,
+        question_id TEXT,
+        suggestion_text TEXT NOT NULL,
+        rating INTEGER NOT NULL,
         feedback_timestamp DATETIME NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users(user_id)                    
+        FOREIGN KEY (user_id) REFERENCES users(user_id),
+        FOREIGN KEY (question_id) REFERENCES questions(question_id)
     );
     """)
     db.commit()

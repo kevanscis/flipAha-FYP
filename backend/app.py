@@ -183,6 +183,90 @@ def get_suggestions():
             'error': str(e)
         }), 500
 
+
+@app.route('/api/suggestion-feedback', methods=['OPTIONS'])
+def preflight_suggestion_feedback():
+    return jsonify({'status': 'ok'}), 200
+
+
+@app.route('/api/suggestion-feedback', methods=['POST'])
+def submit_suggestion_feedback():
+    """Record thumbs-up / thumbs-down feedback for a suggestion"""
+    try:
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'success': False, 'error': 'Not logged in'}), 401
+
+        data = request.get_json(silent=True) or {}
+        suggestion_text = (data.get('suggestion_text') or '').strip()
+        question_id = data.get('question_id')
+        # Accept either 'rating' (preferred) or legacy 'useful' boolean
+        if 'rating' in data:
+            try:
+                rating = int(data.get('rating') or 0)
+            except Exception:
+                rating = 0
+        else:
+            rating = 1 if data.get('useful') else 0
+
+        if not suggestion_text:
+            return jsonify({'success': False, 'error': 'Missing suggestion_text'}), 400
+
+        feedback_id = str(uuid.uuid4())
+        ts = datetime.now(SINGAPORE_TZ).isoformat()
+
+        conn = get_db()
+        with conn:
+            conn.execute("""
+                INSERT INTO suggestion_feedback (
+                    feedback_id, user_id, question_id, suggestion_text, rating, feedback_timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            """, (feedback_id, user_id, question_id, suggestion_text, rating, ts))
+        conn.close()
+
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/dashboard/suggestion-feedback')
+def dashboard_suggestion_feedback():
+    # Only allow admin
+    if session.get('role') != 'admin':
+        abort(403)
+
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+
+        cursor.execute('SELECT COUNT(*) AS total FROM suggestion_feedback')
+        total = cursor.fetchone()['total'] or 0
+
+        cursor.execute('SELECT COUNT(*) AS useful FROM suggestion_feedback WHERE rating = 1')
+        useful = cursor.fetchone()['useful'] or 0
+
+        cursor.execute('SELECT suggestion_text, COUNT(*) AS cnt, SUM(rating) AS useful_count FROM suggestion_feedback GROUP BY suggestion_text ORDER BY cnt DESC LIMIT 20')
+        rows = cursor.fetchall()
+
+        top = []
+        for r in rows:
+            top.append({
+                'suggestion_text': r['suggestion_text'],
+                'count': r['cnt'],
+                'useful_count': r['useful_count'] if r['useful_count'] is not None else 0
+            })
+
+        conn.close()
+
+        return jsonify({
+            'total': total,
+            'useful': useful,
+            'not_useful': total - useful,
+            'top_suggestions': top
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""

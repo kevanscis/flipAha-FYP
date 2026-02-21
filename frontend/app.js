@@ -595,9 +595,80 @@ function selectSuggestion(latex) {
   
   hideSuggestions();
   
+  // Show feedback UI so user can thumbs-up or thumbs-down the suggestion
+  showSuggestionFeedbackUI(latex);
+
   requestAnimationFrame(() => {
     questionInput.focus();
   });
+}
+
+function showSuggestionFeedbackUI(latex) {
+  removeSuggestionFeedbackUI();
+
+  const container = document.createElement('div');
+  container.id = 'suggestionFeedbackUI';
+  container.style.marginTop = '6px';
+  container.style.display = 'flex';
+  container.style.gap = '8px';
+
+  const prompt = document.createElement('div');
+  prompt.textContent = 'Was this suggestion useful?';
+  prompt.style.alignSelf = 'center';
+  container.appendChild(prompt);
+
+  const up = document.createElement('button');
+  up.textContent = '👍';
+  up.title = 'Yes';
+  up.onclick = async () => {
+    up.disabled = true; down.disabled = true;
+    await sendSuggestionFeedback(latex, 1);
+    showResponseStatus('success', 'Thanks for your feedback!');
+  };
+
+  const down = document.createElement('button');
+  down.textContent = '👎';
+  down.title = 'No';
+  down.onclick = async () => {
+    up.disabled = true; down.disabled = true;
+    await sendSuggestionFeedback(latex, 0);
+    showResponseStatus('success', 'Thanks for your feedback!');
+  };
+
+  container.appendChild(up);
+  container.appendChild(down);
+
+  // Insert after the input field
+  const parent = questionInput.parentNode || document.body;
+  parent.insertBefore(container, questionInput.nextSibling);
+}
+
+function removeSuggestionFeedbackUI() {
+  const existing = document.getElementById('suggestionFeedbackUI');
+  if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+}
+
+async function sendSuggestionFeedback(latex, rating) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/suggestion-feedback`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ suggestion_text: latex, rating })
+    });
+
+    const data = await res.json();
+    if (!data.success) {
+      console.warn('Feedback not recorded:', data);
+      showResponseStatus('error', 'Could not record feedback');
+    }
+  } catch (e) {
+    console.error('Error sending suggestion feedback', e);
+    showResponseStatus('error', 'Could not record feedback');
+  } finally {
+    // remove UI after sending
+    setTimeout(removeSuggestionFeedbackUI, 800);
+  }
 }
 
 // Event Listeners

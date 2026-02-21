@@ -437,3 +437,38 @@ function goLogout() {
 loadNewReturningUsers();
 loadQuestionVolume();
 loadInputMethodTrends();
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Suggestion Feedback (Total + Top Suggestions)
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+async function loadSuggestionFeedback() {
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/dashboard/suggestion-feedback`, {
+            credentials: 'include'
+        });
+        if (!res.ok) {
+            console.warn('Failed to load suggestion feedback', res.status);
+            return;
+        }
+
+        const data = await res.json();
+        renderSuggestionFeedback(data);
+    } catch (e) {
+        console.error('Error loading suggestion feedback', e);
+    }
+}
+
+function renderSuggestionFeedback(data) {
+    const total = data.total || 0;
+    const useful = data.useful || 0;
+    const notUseful = data.not_useful || (total - useful);
+    const rate = total > 0 ? Math.round((useful / total) * 100) : 0;
+
+    document.getElementById('sfTotal').textContent = total;
+    document.getElementById('sfUseful').textContent = useful;
+    document.getElementById('sfNotUseful').textContent = notUseful;
+    document.getElementById('sfRate').textContent = rate + '%';
+}
+
+// load suggestion feedback after other data
+loadSuggestionFeedback();
