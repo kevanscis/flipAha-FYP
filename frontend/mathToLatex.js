@@ -199,33 +199,15 @@ function generatePermutations(input) {
     const rawKeyword = String(parsed.keyword || '').toLowerCase();
     const normalizedFunc = rawKeyword === 'cosec' ? 'csc' : rawKeyword;
     const rawOperand = String(parsed.operand || '').trim();
-    const normalizeTrigOperand = (operand) => {
-      let out = String(operand || '').trim();
-      out = out
-        .replace(/\b(?:sqrt|root)\(([^()]+)\)/gi, '\\sqrt{$1}')
-        .replace(/\b(?:sqrt|root)([a-z0-9\\pi\\theta]+)/gi, '\\sqrt{$1}')
-        .replace(/(^|[^a-zA-Z0-9_\\])(\d*)pi\/(\d+)(?=$|[^a-zA-Z0-9_])/gi, (match, left, coeffRaw, denom) => {
-          const coeff = coeffRaw || '1';
-          if (coeff === '1') return `${left}\\frac{\\pi}{${denom}}`;
-          return `${left}\\frac{${coeff}\\pi}{${denom}}`;
-        })
-        .replace(/(\d+(?:\.\d+)?)\s*(?:°|deg|degree|degrees)/gi, '$1^{\\circ}')
-        .replace(/π/g, '\\pi')
-        .replace(/θ/g, '\\theta');
-      return out;
-    };
-    const sanitizeIncompleteOperand = (operand) => {
-      let out = String(operand || '').trim();
-      if (!out) return out;
-
-      const openCount = (out.match(/\(/g) || []).length;
-      const closeCount = (out.match(/\)/g) || []).length;
-      if (openCount > closeCount && out.startsWith('(')) {
-        out = out.slice(1).trim();
-      }
-
-      return out;
-    };
+    const trigSubject = globalThis.subjects?.trig || {};
+    const sanitizeIncompleteOperand =
+      typeof trigSubject.sanitizeIncompleteTrigOperand === 'function'
+        ? trigSubject.sanitizeIncompleteTrigOperand
+        : (operand) => String(operand || '').trim();
+    const normalizeTrigOperand =
+      typeof trigSubject.normalizeTrigArgument === 'function'
+        ? trigSubject.normalizeTrigArgument
+        : (operand) => String(operand || '').trim();
 
     const normalizedOperand = normalizeTrigOperand(sanitizeIncompleteOperand(rawOperand));
     const rawPrefix = String(parsed.prefix || '');

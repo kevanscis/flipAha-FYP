@@ -194,6 +194,19 @@
     return normalized;
   }
 
+  function sanitizeIncompleteTrigOperand(rawOperand) {
+    let output = String(rawOperand || '').trim();
+    if (!output) return output;
+
+    const openCount = (output.match(/\(/g) || []).length;
+    const closeCount = (output.match(/\)/g) || []).length;
+    if (openCount > closeCount && output.startsWith('(')) {
+      output = output.slice(1).trim();
+    }
+
+    return output;
+  }
+
   function generateTrigExpressionSuggestions(rawArg, latexFunc, modifierLatex){
     const suggestions = new Set();
     const normalizedArg = normalizeTrigArgument(rawArg);
@@ -353,9 +366,23 @@
   // attach to globalThis.subjects and export for Node
   if (typeof globalThis !== 'undefined'){
     globalThis.subjects = globalThis.subjects || {};
-    globalThis.subjects.trig = { getTrigSuggestions, parseTrigExpression, generateTrigSuggestions, getFuzzySuggestions };
+    globalThis.subjects.trig = {
+      getTrigSuggestions,
+      parseTrigExpression,
+      generateTrigSuggestions,
+      getFuzzySuggestions,
+      normalizeTrigArgument,
+      sanitizeIncompleteTrigOperand
+    };
   }
   if (typeof module !== 'undefined' && module.exports){
-    module.exports = { getTrigSuggestions, parseTrigExpression, generateTrigSuggestions, getFuzzySuggestions };
+    module.exports = {
+      getTrigSuggestions,
+      parseTrigExpression,
+      generateTrigSuggestions,
+      getFuzzySuggestions,
+      normalizeTrigArgument,
+      sanitizeIncompleteTrigOperand
+    };
   }
 })();

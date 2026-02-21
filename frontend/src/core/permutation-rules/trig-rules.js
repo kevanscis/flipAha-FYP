@@ -114,15 +114,11 @@
   }
 
   function normalizeMathTypos(text) {
-    return String(text ?? '')
-      .replace(/thetha|tetha|thta|thita|theeta/gi, 'theta')
-      .replace(/alpah|alhpa|aplha/gi, 'alpha')
-      .replace(/betha|btea/gi, 'beta')
-      .replace(/gama|gammar|gammma/gi, 'gamma')
-      .replace(/delat|detla|dalta/gi, 'delta')
-      .replace(/lamda|lamba|lmbda|lambada/gi, 'lambda')
-      .replace(/sigam|simga|sogma/gi, 'sigma')
-      .replace(/omgea|omeag|oemga|omeega/gi, 'omega');
+    const raw = String(text ?? '');
+    if (typeof globalThis !== 'undefined' && typeof globalThis.normalizeCommonMathTypos === 'function') {
+      return globalThis.normalizeCommonMathTypos(raw);
+    }
+    return raw;
   }
 
   function normalizeGreekToken(token) {
@@ -154,39 +150,16 @@
   }
 
   function normalizeTrigText(text) {
-    let output = normalizeMathTypos(String(text ?? ''));
-    output = output.replace(/(\d+(?:\.\d+)?)\s*(?:°|deg|degree|degrees)/gi, '$1^{\\circ}');
-    output = output.replace(/π/g, '\\pi').replace(/θ/g, '\\theta');
-
-    const replacements = [
-      ['theta', '\\theta'], ['alpha', '\\alpha'], ['beta', '\\beta'], ['gamma', '\\gamma'],
-      ['delta', '\\delta'], ['lambda', '\\lambda'], ['mu', '\\mu'], ['sigma', '\\sigma'],
-      ['omega', '\\omega'], ['pi', '\\pi']
-    ];
-    for (const [token, latex] of replacements) {
-      const pattern = new RegExp(`(^|[^a-zA-Z\\\\])${token}(?=[^a-zA-Z]|$)`, 'gi');
-      output = output.replace(pattern, (m, prefix) => `${prefix}${latex}`);
+    const normalizedInput = normalizeMathTypos(String(text ?? ''));
+    if (
+      typeof globalThis !== 'undefined' &&
+      globalThis.subjects &&
+      globalThis.subjects.trig &&
+      typeof globalThis.subjects.trig.normalizeTrigArgument === 'function'
+    ) {
+      return globalThis.subjects.trig.normalizeTrigArgument(normalizedInput);
     }
-
-    output = output
-      .replace(/\b(?:sqrt|root)\(([^()]+)\)/gi, '\\sqrt{$1}')
-      .replace(/\b(?:sqrt|root)([a-z0-9\\pi\\theta]+)/gi, '\\sqrt{$1}')
-      .replace(/\\sqrt\{(\\pi|\\theta)([a-z0-9]+)\}/gi, '\\sqrt{$1$2}')
-      .replace(/(?<!\\)\bsquareroot\(([^()]+)\)/gi, '\\sqrt{$1}')
-      .replace(/(?<!\\)\bsquareroot([a-z0-9]+)/gi, '\\sqrt{$1}');
-
-    if (!/\\frac\{/.test(output)) {
-      const simpleFrac = output.match(/^([^/]+)\/([^/]+)$/);
-      if (simpleFrac) {
-        const numerator = simpleFrac[1];
-        const denominator = simpleFrac[2];
-        if (numerator && denominator) {
-          output = `\\frac{${numerator}}{${denominator}}`;
-        }
-      }
-    }
-
-    return output;
+    return normalizedInput;
   }
 
   function generateInverseTrigPermutations(input) {

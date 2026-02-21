@@ -7,6 +7,7 @@ let suggestionContext = { start: 0, end: 0 };
 // let currentUserID = null;
 let inputMethod = 'typing';
 let usedSuggestion = false;
+let suppressSuggestionForValue = '';
 
 // Configuration
 const API_BASE_URL = 'http://localhost:5000'; // Update with your backend URL
@@ -539,6 +540,15 @@ function handleInputChange() {
   const latexValue = questionInput.getValue();
   const textValue = getInputTextValue();
   const searchValue = textValue;
+  const normalizedSearchValue = String(searchValue || '').replace(/\s+/g, '');
+
+  if (suppressSuggestionForValue && normalizedSearchValue === suppressSuggestionForValue) {
+    hideSuggestions();
+    return;
+  }
+  if (suppressSuggestionForValue && normalizedSearchValue !== suppressSuggestionForValue) {
+    suppressSuggestionForValue = '';
+  }
   
   console.log('LaTeX value:', latexValue); // Debug
   console.log('Search value:', searchValue); // Debug
@@ -615,6 +625,13 @@ function handleInputChange() {
           }
 
           if (char === '*' || char === '/' || char === ',' || char === '=' || /\s/.test(char)) {
+            if (char === '/') {
+              const beforeSlash = expr.slice(0, i);
+              const looksLikeTrigPiFraction = /(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)\s*\d*(?:\\pi|π|pi)$/i.test(beforeSlash);
+              if (looksLikeTrigPiFraction) {
+                continue;
+              }
+            }
             lastOperatorIndex = i;
             continue;
           }
@@ -675,10 +692,16 @@ function handleInputChange() {
     }
 
     const trailingTrigStart = findLastTopLevelTrigStart(query);
-    if (trailingTrigStart > termStartOffset) {
-      queryTerm = query.substring(trailingTrigStart).trim();
-      termStartOffset = trailingTrigStart;
-      queryTermText = latexToSmartText(queryTerm);
+    if (trailingTrigStart !== -1) {
+      const trailingTrigTerm = query.substring(trailingTrigStart).trim();
+      const isCompactTrigAmbiguity = /^(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)\s*\d*[a-zα-ω\\()]+\s*[+\-].+/i.test(trailingTrigTerm);
+      const shouldPreferTrailingTrig = trailingTrigStart > termStartOffset || isCompactTrigAmbiguity;
+
+      if (shouldPreferTrailingTrig) {
+        queryTerm = trailingTrigTerm;
+        termStartOffset = trailingTrigStart;
+        queryTermText = latexToSmartText(queryTerm);
+      }
     }
     
     // Match rules directly with LaTeX input (use extracted term, not full query)
@@ -793,6 +816,51 @@ function hideSuggestions() {
   suggestionList.style.display = 'none';
 }
 
+function preservePlainTextSegments(value) {
+  const source = String(value || '');
+  if (!source) return source;
+
+  const knownMathWords = new Set([
+    'sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'cosec',
+    'asin', 'acos', 'atan', 'arcsin', 'arccos', 'arctan',
+    'log', 'ln', 'sqrt', 'root', 'pi', 'theta',
+    'alpha', 'beta', 'gamma', 'delta', 'lambda', 'mu', 'sigma', 'omega',
+    'x', 'y', 'z'
+  ]);
+
+  let i = 0;
+  let output = '';
+
+  while (i < source.length) {
+    const char = source[i];
+    if (!/[A-Za-z]/.test(char)) {
+      output += char;
+      i += 1;
+      continue;
+    }
+
+    let j = i;
+    while (j < source.length && /[A-Za-z]/.test(source[j])) j += 1;
+    const token = source.slice(i, j);
+    const lower = token.toLowerCase();
+
+    let k = j;
+    while (k < source.length && /\s/.test(source[k])) k += 1;
+    const trailingWhitespace = source.slice(j, k);
+
+    const shouldPreserveAsText = token.length > 2 && !knownMathWords.has(lower);
+    if (shouldPreserveAsText) {
+      output += `\\text{${token}${trailingWhitespace}}`;
+    } else {
+      output += token + trailingWhitespace;
+    }
+
+    i = k;
+  }
+
+  return output;
+}
+
 function selectSuggestion(latex) {
 
   if (!questionInput || !mathFieldReady) return;
@@ -833,7 +901,9 @@ function selectSuggestion(latex) {
     }
   }
 
-  questionInput.setValue(`${prefix}${suggestionLatex}${suffix}`);
+  const safePrefix = preservePlainTextSegments(prefix);
+  const safeSuffix = preservePlainTextSegments(suffix);
+  questionInput.setValue(`${safePrefix}${suggestionLatex}${safeSuffix}`);
 
   try {
     questionInput.defaultMode = 'text';
@@ -848,6 +918,7 @@ function selectSuggestion(latex) {
   // Some MathLive builds don't emit consistent input events for insert(),
   // which can leave suggestion extraction stale until another full edit cycle.
   prevInputValue = getInputTextValue();
+  suppressSuggestionForValue = String(prevInputValue || '').replace(/\s+/g, '');
   smartRanges = [];
   usedSuggestion = false;
 
