@@ -11,7 +11,7 @@ def create_tables():
         created_at DATETIME NOT NULL,
         last_login DATETIME
     );
-                        
+    
     CREATE TABLE IF NOT EXISTS user_activity (
         user_activity_id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL,
@@ -41,7 +41,6 @@ def create_tables():
         FOREIGN KEY (question_id) REFERENCES questions(question_id)
     );
                         
-    
     CREATE TABLE IF NOT EXISTS suggestion_feedback (
         feedback_id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL,
