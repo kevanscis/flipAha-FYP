@@ -23,6 +23,8 @@ function lockChat() {
   const questionInput = document.getElementById('questionInput');
   const sendBtn = document.getElementById('submitBtn');
 
+  if (!questionInput || !sendBtn) return;
+
   questionInput.disabled = true;
   sendBtn.disabled = true;
 
@@ -35,6 +37,9 @@ function lockChat() {
 function unlockChat() {
   const questionInput = document.getElementById('questionInput');
   const sendBtn = document.getElementById('submitBtn');
+
+  if (!questionInput || !sendBtn) return;
+
   questionInput.disabled = false;
   sendBtn.disabled = false;
   questionInput.setAttribute(
@@ -44,31 +49,38 @@ function unlockChat() {
 }
 
 async function checkAuthStatus() {
-  const res = await fetch(`${API_BASE_URL}/api/me`, {
-    credentials: 'include'
-  });
-  const data = await res.json();
-  console.log('API /api/me response:', data);
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/me`, {
+      credentials: 'include'
+    });
+    const data = await res.json();
+    console.log('API /api/me response:', data);
 
-  if (!data.logged_in) {
-    document.getElementById('logoutButton').style.display = 'none';
-    document.getElementById('dashboardButton').style.display = 'none';
-    // lockChat()
-    unlockChat(); // Added this for development without login, but show login button
-  } else {
-    document.getElementById('authButtons').style.display = 'none';
-    document.getElementById('logoutButton').style.display = 'block';
-    unlockChat();
-
-    // Show dashboard only for admin
-    if (data.role === 'admin') {
-      document.getElementById('dashboardButton').style.display = 'block';
-    } else {
+    if (!data.logged_in) {
+      document.getElementById('logoutButton').style.display = 'none';
       document.getElementById('dashboardButton').style.display = 'none';
-    }
+      // lockChat()
+      unlockChat(); // Added this for development without login, but show login button
+    } else {
+      document.getElementById('authButtons').style.display = 'none';
+      document.getElementById('logoutButton').style.display = 'block';
+      unlockChat();
 
-    console.log("Logged in as user ID:", data.user_id);
-    // currentUserID = data.user_id;
+      // Show dashboard only for admin
+      if (data.role === 'admin') {
+        document.getElementById('dashboardButton').style.display = 'block';
+      } else {
+        document.getElementById('dashboardButton').style.display = 'none';
+      }
+
+      console.log("Logged in as user ID:", data.user_id);
+      // currentUserID = data.user_id;
+    }
+  } catch (error) {
+    console.warn('Auth check failed, enabling input fallback:', error);
+  } finally {
+    // Never leave input disabled due to auth/network race on load.
+    unlockChat();
   }
 }
 
@@ -331,6 +343,9 @@ function initializeMathField() {
   }
   
   mathFieldReady = true;
+
+  // Always enable typing once the field exists. Auth UI state can still update separately.
+  unlockChat();
   
   // Configure MathLive - smart mode is set via HTML attribute
   questionInput.mathVirtualKeyboardPolicy = 'manual';
