@@ -557,6 +557,7 @@ function handleInputChange() {
     // Split on operators ONLY if they're at the top level (not inside parentheses)
     let queryTerm = query;
     let termStartOffset = 0;
+    let queryTermText = latexToSmartText(queryTerm);
     
     // Check for unbalanced parentheses (incomplete expression like "sin(pi/6")
     const openParens = (query.match(/\(/g) || []).length;
@@ -564,8 +565,22 @@ function handleInputChange() {
     const hasUnbalancedParens = openParens !== closeParens;
     
     const compactTrigExpression = /^(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)(?!\s*\().+/i.test(query);
+    const hasTopLevelPlusMinus = (() => {
+      let depth = 0;
+      for (let i = 0; i < query.length; i++) {
+        const char = query[i];
+        if (char === '(') depth++;
+        else if (char === ')') depth--;
+        else if (depth === 0 && (char === '+' || char === '-')) {
+          const beforeOp = query.substring(Math.max(0, i - 3), i).toLowerCase();
+          const isInverseTrig = /(sin|cos|tan)$/.test(beforeOp) && char === '-' && query[i + 1] === '1';
+          if (!isInverseTrig) return true;
+        }
+      }
+      return false;
+    })();
 
-    if (!hasUnbalancedParens && !compactTrigExpression) {
+    if (!hasUnbalancedParens && (!compactTrigExpression || hasTopLevelPlusMinus)) {
       // Extract the last term after top-level operators (+, -)
       // Walk backwards to find the last operator outside parentheses
       let parenDepth = 0;
@@ -589,6 +604,7 @@ function handleInputChange() {
       if (lastOperatorIndex !== -1) {
         queryTerm = query.substring(lastOperatorIndex + 1).trim();
         termStartOffset = lastOperatorIndex + 1;
+        queryTermText = latexToSmartText(queryTerm);
       }
     }
     
@@ -619,12 +635,32 @@ function handleInputChange() {
     console.log('Suggestions found:', suggestions); // Debug
 
     if (suggestions.length > 0) {
+      const rawStart = start + termStartOffset;
+      const rawEnd = rawStart + queryTerm.length;
+      const replaceableCharRegex = /[A-Za-z0-9_\\√∛∜α-ωΑ-Ωπθδλμσωβγ]/;
+      let replaceStart = rawStart;
+      let replaceEnd = rawEnd;
+
+      while (replaceStart < replaceEnd && !replaceableCharRegex.test(searchValue[replaceStart] || '')) {
+        replaceStart += 1;
+      }
+      while (replaceEnd > replaceStart && !replaceableCharRegex.test(searchValue[replaceEnd - 1] || '')) {
+        replaceEnd -= 1;
+      }
+
+      if (replaceStart >= replaceEnd) {
+        replaceStart = rawStart;
+        replaceEnd = rawEnd;
+      }
+
       // Update context to point to just the extracted term, not the full query
       suggestionContext = { 
-        start: start + termStartOffset, 
-        end: start + termStartOffset + queryTerm.length, 
+        start: replaceStart,
+        end: replaceEnd,
         query, 
-        queryText 
+        queryText,
+        queryTerm,
+        queryTermText
       };
       showSuggestions(suggestions);
     } else {
@@ -717,15 +753,23 @@ function selectSuggestion(latex) {
 
   hideSuggestions();
 
+  // Reset suggestion-tracking state after programmatic insertion.
+  // Some MathLive builds don't emit consistent input events for insert(),
+  // which can leave suggestion extraction stale until another full edit cycle.
+  prevInputValue = getInputTextValue();
+  smartRanges = [];
+  usedSuggestion = false;
+
   requestAnimationFrame(() => {
     questionInput.focus();
+    handleInputChange();
   });
 }
 
 function computeSuggestionReplacementRange(latex) {
   const start = suggestionContext.start || 0;
   const end = suggestionContext.end || 0;
-  const queryText = suggestionContext.queryText || '';
+  const queryText = suggestionContext.queryTermText || suggestionContext.queryText || '';
   const suggestionText = latexToSmartText(latex || '');
 
   // Specific handling for trig functions with coefficients

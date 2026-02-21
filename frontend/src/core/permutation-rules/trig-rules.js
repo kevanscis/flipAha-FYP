@@ -140,7 +140,7 @@
 
   function normalizeTrigText(text) {
     let output = normalizeMathTypos(String(text ?? ''));
-    output = output.replace(/(\d+(?:\.\d+)?)\s*(?:°|deg|degree|degrees)/gi, '$1^\\circ');
+    output = output.replace(/(\d+(?:\.\d+)?)\s*(?:°|deg|degree|degrees)/gi, '$1^{\\circ}');
     output = output.replace(/π/g, '\\pi').replace(/θ/g, '\\theta');
 
     const replacements = [
@@ -153,6 +153,24 @@
       output = output.replace(pattern, (m, prefix) => `${prefix}${latex}`);
     }
 
+    output = output
+      .replace(/\b(?:sqrt|root)\(([^()]+)\)/gi, '\\sqrt{$1}')
+      .replace(/\b(?:sqrt|root)([a-z0-9\\pi\\theta]+)/gi, '\\sqrt{$1}')
+      .replace(/\\sqrt\{(\\pi|\\theta)([a-z0-9]+)\}/gi, '\\sqrt{$1$2}')
+      .replace(/(?<!\\)\bsquareroot\(([^()]+)\)/gi, '\\sqrt{$1}')
+      .replace(/(?<!\\)\bsquareroot([a-z0-9]+)/gi, '\\sqrt{$1}');
+
+    if (!/\\frac\{/.test(output)) {
+      const simpleFrac = output.match(/^([^/]+)\/([^/]+)$/);
+      if (simpleFrac) {
+        const numerator = simpleFrac[1];
+        const denominator = simpleFrac[2];
+        if (numerator && denominator) {
+          output = `\\frac{${numerator}}{${denominator}}`;
+        }
+      }
+    }
+
     return output;
   }
 
@@ -163,7 +181,7 @@
 
     const addInverse = (func, arg) => {
       const normalizedFunc = normalizeTrigFunc(func);
-      const cleanArg = typeof arg === 'string' ? arg.trim() : '';
+      const cleanArg = typeof arg === 'string' ? normalizeTrigText(arg).trim() : '';
       if (cleanArg) {
         perms.add(`\\${normalizedFunc}^{-1}(${cleanArg})`);
       } else {
@@ -216,7 +234,7 @@
     let inlineMatch = trimmed.match(/\b(?:arc\s*(sin|cos|tan|sec|csc|cot|cosec)|a(sin|cos|tan))\b/i);
     if (inlineMatch) {
       const func = inlineMatch[1] || inlineMatch[2];
-      const arg = readInlineArg(trimmed, inlineMatch.index + inlineMatch[0].length);
+      const arg = normalizeTrigText(readInlineArg(trimmed, inlineMatch.index + inlineMatch[0].length));
       addInverse(func, arg);
       perms.add(`\\text{arc${normalizeTrigFunc(func)}}${arg ? `(${arg.trim()})` : ''}`);
       return perms;
@@ -260,7 +278,7 @@
       const [_, prefix, func, arg, suffix] = match;
       const normalizedFunc = normalizeTrigFunc(func);
       if (arg) {
-        perms.add(`${prefix}\\${normalizedFunc}^{-1}(${arg})${suffix}`);
+        perms.add(`${prefix}\\${normalizedFunc}^{-1}(${normalizeTrigText(arg)})${suffix}`);
       } else {
         perms.add(`${prefix}\\${normalizedFunc}^{-1}${suffix}`);
       }
