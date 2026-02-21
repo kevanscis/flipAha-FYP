@@ -64,10 +64,12 @@
     const perms = new Set();
     
     // Try function application pattern (still using string matching)
-    const funcAppMatch = trimmed.match(/^(.*)([fghpqrstuv])([a-zθαβγ])(.*)$/i);
+    const funcAppMatch = trimmed.match(/^(.*?)([fghpqrstuv])([a-zθαβγ])(.*)$/i);
     if (funcAppMatch) {
       const [_, prefix, func, varName, suffix] = funcAppMatch;
-      if (!suffix.startsWith('(')) {
+      const prefixEndsWithLetter = /[a-z]$/i.test(prefix);
+      const suffixStartsWithLetter = /^[a-z]/i.test(suffix || '');
+      if (!prefixEndsWithLetter && !suffixStartsWithLetter && !suffix.startsWith('(')) {
         perms.addAll(generateFunctionAppPermutations(func, varName, prefix, suffix));
       }
     }

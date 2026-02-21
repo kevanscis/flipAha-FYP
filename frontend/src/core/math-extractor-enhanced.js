@@ -85,11 +85,13 @@
     
     // === FUNCTION APPLICATION: letter-var ===
     // fx → f(x) or f*x
-    const funcAppMatch = trimmed.match(/^(.*)([fghpqrstuv])([a-zθαβγ])(.*)$/i);
+    const funcAppMatch = trimmed.match(/^(.*?)([fghpqrstuv])([a-zθαβγ])(.*)$/i);
     if (funcAppMatch) {
       const [_, prefix, func, varName, suffix] = funcAppMatch;
-      // Skip if not actual function app context
-      if (!suffix.startsWith('(')) {
+      const prefixEndsWithLetter = /[a-z]$/i.test(prefix);
+      const suffixStartsWithLetter = /^[a-z]/i.test(suffix || '');
+      // Only treat as function application in math-like context, not inside normal words like "solve"
+      if (!prefixEndsWithLetter && !suffixStartsWithLetter && !suffix.startsWith('(')) {
         return {
           keyword: func,
           prefix,
