@@ -7,7 +7,11 @@ import subprocess
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import uuid
+import io
 from database.db import get_db
+from image_processor import ImageProcessor
+from latex_converter import LatexConverter
+from werkzeug.utils import secure_filename
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_ROOT = os.path.join(BASE_DIR, "..", "frontend")
@@ -15,6 +19,18 @@ FRONTEND_ROOT = os.path.join(BASE_DIR, "..", "frontend")
 SINGAPORE_TZ = ZoneInfo("Asia/Singapore")
 
 app = Flask(__name__)
+
+# Initialize services for image processing and LaTeX conversion
+image_processor = ImageProcessor()
+latex_converter = LatexConverter()
+
+# Configuration for file uploads
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'}
+MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB
+
+def allowed_file(filename):
+    """Check if file extension is allowed"""
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 ########################################################################################################################
 # USE CASE 1
@@ -286,6 +302,163 @@ def input_method_trends():
     data = get_weekly_input_method_trends()
     return jsonify(data), 200
 
+########################################################################################################################
+# IMAGE UPLOAD & LATEX CONVERSION (USE CASE 2)
+########################################################################################################################
+
+@app.route('/api/upload', methods=['POST'])
+def upload_image():
+    """
+    Upload an equation image and convert to LaTeX
+    Form data: file (image file)
+    """
+    try:
+        # Check if file is present
+        if 'file' not in request.files:
+            return jsonify({
+                'success': False,
+                'error': 'No file provided'
+            }), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({
+                'success': False,
+                'error': 'No file selected'
+            }), 400
+        
+        if not allowed_file(file.filename):
+            return jsonify({
+                'success': False,
+                'error': f'Invalid file type. Allowed types: {", ".join(ALLOWED_EXTENSIONS)}'
+            }), 400
+        
+        # Read file data
+        file_data = file.read()
+        image_id = str(uuid.uuid4())
+        
+        # Store metadata
+        return jsonify({
+            'success': True,
+            'image_id': image_id,
+            'filename': secure_filename(file.filename),
+            'size': len(file_data)
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/convert', methods=['POST'])
+def convert_to_latex():
+    """
+    Convert uploaded image to LaTeX
+    JSON: {file (as multipart), options?: {high_accuracy?: bool, preprocess?: 'auto'|'none'|'mild'|'binarize'}}
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({
+                'success': False,
+                'error': 'No image file provided'
+            }), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({
+                'success': False,
+                'error': 'No file selected'
+            }), 400
+        
+        if not allowed_file(file.filename):
+            return jsonify({
+                'success': False,
+                'error': f'Invalid file type. Allowed types: {", ".join(ALLOWED_EXTENSIONS)}'
+            }), 400
+        
+        # Read file data
+        original_bytes = file.read()
+        
+        # Get options from form or JSON
+        high_accuracy = request.form.get('high_accuracy') == 'true' or request.form.get('high_accuracy') == '1'
+        preprocess_mode = (request.form.get('preprocess') or 'auto').strip().lower()
+        
+        def pil_to_bytes(pil_img):
+            """Convert PIL image to bytes"""
+            buf = io.BytesIO()
+            pil_img.save(buf, format='PNG')
+            return buf.getvalue()
+        
+        # Prepare variants based on preprocessing mode
+        variants = []
+        if preprocess_mode == 'none':
+            variants = [('raw', original_bytes)]
+        elif preprocess_mode == 'mild':
+            variants = [('mild', pil_to_bytes(image_processor.preprocess_image(original_bytes, mode='mild')))]
+        elif preprocess_mode == 'binarize':
+            variants = [('binarize', pil_to_bytes(image_processor.preprocess_image(original_bytes, mode='binarize')))]
+        else:
+            # auto: try raw first (best for Pix2Tex), fall back to mild, and optionally binarize
+            variants = [('raw', original_bytes), ('mild', pil_to_bytes(image_processor.preprocess_image(original_bytes, mode='mild')))]
+            if high_accuracy:
+                variants.append(('binarize', pil_to_bytes(image_processor.preprocess_image(original_bytes, mode='binarize'))))
+        
+        best = None
+        attempts = []
+        
+        # Try each variant
+        for tag, img_bytes in variants:
+            attempt = latex_converter.convert_to_latex(img_bytes)
+            if not attempt.get('success'):
+                attempts.append({
+                    'variant': tag,
+                    'success': False,
+                    'error': attempt.get('error', 'Conversion failed')
+                })
+                continue
+            
+            score_info = latex_converter.score_latex(attempt.get('latex', ''))
+            attempts.append({
+                'variant': tag,
+                'success': True,
+                'latex': attempt.get('latex', ''),
+                'confidence': score_info.get('confidence', 0),
+                'score': score_info.get('score', 0)
+            })
+            
+            # Keep the best result
+            if best is None or score_info.get('score', 0) > best.get('score', 0):
+                best = {
+                    'variant': tag,
+                    'latex': attempt.get('latex', ''),
+                    'confidence': score_info.get('confidence', 0),
+                    'score': score_info.get('score', 0)
+                }
+        
+        if best is None:
+            return jsonify({
+                'success': False,
+                'error': 'Could not convert image to LaTeX',
+                'attempts': attempts
+            }), 400
+        
+        return jsonify({
+            'success': True,
+            'latex': best['latex'],
+            'variant': best['variant'],
+            'confidence': best['confidence'],
+            'score': best['score'],
+            'message': 'Equation converted to LaTeX successfully',
+            'attempts': attempts
+        }), 200
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 # Serve JS/CSS files
 @app.route("/<path:filename>")
