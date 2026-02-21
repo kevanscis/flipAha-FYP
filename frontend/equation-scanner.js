@@ -293,6 +293,20 @@ function handleShowCrop() {
         return;
     }
 
+    // Load Cropper.js if not already loaded
+    if (!window.Cropper) {
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js';
+        script.onload = () => {
+            initializeCrop();
+        };
+        document.body.appendChild(script);
+    } else {
+        initializeCrop();
+    }
+}
+
+function initializeCrop() {
     const cropModal = document.getElementById('cropModal');
     const cropImage = document.getElementById('cropImage');
     
@@ -471,15 +485,23 @@ function updateLatexPreview() {
 
     try {
         const sanitized = sanitizeLatex(latexValue);
-        const html = `<div style="font-size: 1.2em;">$$${sanitized}$$</div>`;
-        previewBox.innerHTML = html;
-
-        // Trigger MathJax to render
-        if (window.MathJax) {
-            window.MathJax.typesetPromise([previewBox]).catch(err => {
-                console.error('MathJax error:', err);
+        
+        // Render using KaTeX (which is already loaded)
+        if (window.katex) {
+            previewBox.innerHTML = '';
+            try {
+                katex.render(sanitized, previewBox, {
+                    throwOnError: false,
+                    displayMode: true
+                });
+            } catch (err) {
+                console.error('KaTeX error:', err);
                 previewBox.innerHTML = '<p style="color: red;">LaTeX rendering error</p>';
-            });
+            }
+        } else {
+            // Fallback: display as LaTeX code
+            const html = `<div style="font-size: 1.2em;">$$${sanitized}$$</div>`;
+            previewBox.innerHTML = html;
         }
     } catch (err) {
         previewBox.innerHTML = '<p style="color: red;">Error: ' + err.message + '</p>';

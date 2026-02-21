@@ -16,10 +16,6 @@
     <!-- Cropper.js for image cropping -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
     
-    <!-- MathJax for LaTeX rendering -->
-    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-    
     <!-- Custom styles -->
     <link rel="stylesheet" href="styles.css">
     <style>
@@ -708,10 +704,19 @@
     </div>
 
     <!-- Scripts -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/katex.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/contrib/auto-render.min.js"></script>
     <script src="nav.js"></script>
     <script src="equation-scanner.js"></script>
+    
+    <!-- Lazy load Cropper.js when needed -->
+    <script>
+        function loadCropperJS() {
+            if (window.Cropper) return;
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js';
+            document.body.appendChild(script);
+        }
+    </script>
 </body>
 </html>
