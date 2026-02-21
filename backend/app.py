@@ -28,9 +28,22 @@ latex_converter = LatexConverter()
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'}
 MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB
 
+# In-memory image storage (session_id -> {image_id -> image_data})
+image_store = {}
+
 def allowed_file(filename):
     """Check if file extension is allowed"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def store_image(session_id, image_id, image_data):
+    """Store image data in memory"""
+    if session_id not in image_store:
+        image_store[session_id] = {}
+    image_store[session_id][image_id] = image_data
+
+def get_stored_image(session_id, image_id):
+    """Retrieve stored image data"""
+    return image_store.get(session_id, {}).get(image_id)
 
 ########################################################################################################################
 # USE CASE 1
@@ -309,8 +322,9 @@ def input_method_trends():
 @app.route('/api/upload', methods=['POST'])
 def upload_image():
     """
-    Upload an equation image and convert to LaTeX
-    Form data: file (image file)
+    Upload an equation image
+    Form data: file (image file), session_id (optional)
+    Returns: image_id, session_id, filename, size
     """
     try:
         # Check if file is present
@@ -334,14 +348,22 @@ def upload_image():
                 'error': f'Invalid file type. Allowed types: {", ".join(ALLOWED_EXTENSIONS)}'
             }), 400
         
-        # Read file data
+        # Get or create session ID
+        session_id = request.form.get('session_id')
+        if not session_id:
+            session_id = 'session_' + str(uuid.uuid4())
+        
+        # Read and store file data
         file_data = file.read()
         image_id = str(uuid.uuid4())
         
-        # Store metadata
+        # Store the image data for later retrieval
+        store_image(session_id, image_id, file_data)
+        
         return jsonify({
             'success': True,
             'image_id': image_id,
+            'session_id': session_id,
             'filename': secure_filename(file.filename),
             'size': len(file_data)
         }), 200
@@ -355,62 +377,31 @@ def upload_image():
 def convert_to_latex():
     """
     Convert uploaded image to LaTeX
-    Accepts either:
-    1. JSON with 'image_data' (base64 encoded) OR 'file_path'
-    2. Multipart form data with 'file'
-    Options: high_accuracy (bool), preprocess ('auto'|'none'|'mild'|'binarize')
+    JSON: {session_id, image_id, options?: {high_accuracy?: bool, preprocess?: 'auto'|'none'|'mild'|'binarize'}}
     """
     try:
-        # Get image data - try multiple input methods
-        original_bytes = None
+        data = request.json or {}
+        session_id = data.get('session_id')
+        image_id = data.get('image_id')
+        options = data.get('options') or {}
         
-        # Method 1: Multipart file upload
-        if 'file' in request.files:
-            file = request.files['file']
-            if file.filename == '':
-                return jsonify({
-                    'success': False,
-                    'error': 'No file selected'
-                }), 400
-            if not allowed_file(file.filename):
-                return jsonify({
-                    'success': False,
-                    'error': f'Invalid file type. Allowed types: {", ".join(ALLOWED_EXTENSIONS)}'
-                }), 400
-            original_bytes = file.read()
-        
-        # Method 2: JSON with base64 image
-        elif request.is_json:
-            data = request.json or {}
-            if 'image_data' in data:
-                import base64
-                try:
-                    original_bytes = base64.b64decode(data['image_data'])
-                except Exception as e:
-                    return jsonify({
-                        'success': False,
-                        'error': f'Invalid base64 image data: {str(e)}'
-                    }), 400
-        
-        # If still no image, return error
-        if original_bytes is None:
+        if not all([session_id, image_id]):
             return jsonify({
                 'success': False,
-                'error': 'No image file provided (use multipart file or JSON image_data)'
+                'error': 'Missing required fields: session_id and image_id'
             }), 400
         
-        # Get options from form, JSON, or defaults
-        high_accuracy = False
-        preprocess_mode = 'auto'
+        # Get stored image data
+        original_bytes = get_stored_image(session_id, image_id)
+        if not original_bytes:
+            return jsonify({
+                'success': False,
+                'error': 'Image not found. Please upload an image first.'
+            }), 404
         
-        if request.is_json:
-            data = request.json or {}
-            options = data.get('options', {})
-            high_accuracy = bool(options.get('high_accuracy') or data.get('high_accuracy'))
-            preprocess_mode = (options.get('preprocess') or data.get('preprocess') or 'auto').strip().lower()
-        else:
-            high_accuracy = request.form.get('high_accuracy') in ('true', '1', 'True')
-            preprocess_mode = (request.form.get('preprocess') or 'auto').strip().lower()
+        # Get options
+        high_accuracy = bool(options.get('high_accuracy'))
+        preprocess_mode = (options.get('preprocess') or 'auto').strip().lower()
         
         def pil_to_bytes(pil_img):
             """Convert PIL image to bytes"""
@@ -478,7 +469,7 @@ def convert_to_latex():
         return jsonify({
             'success': True,
             'latex': best['latex'],
-            'variant': best['variant'],
+            'preprocess_variant': best['variant'],
             'confidence': best['confidence'],
             'score': best['score'],
             'message': 'Equation converted to LaTeX successfully',
