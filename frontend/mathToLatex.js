@@ -162,7 +162,27 @@ const RULES = [
   ["%^(1/3)", "\\sqrt[3]{$1}"],
   ["%^(%/%)", "{$1}^{\\frac{$2}{$3}}"],
 
+  // Single variables (suggest powers including cube root)
+  ["x", ["x", "x^{1/3}", "x^{2}", "x^{3}", "x^{n}"]],
+  ["y", ["y", "y^{1/3}", "y^{2}", "y^{3}", "y^{n}"]],
+  ["z", ["z", "z^{1/3}", "z^{2}", "z^{3}", "z^{n}"]],
+  ["a", ["a", "a^{1/3}", "a^{2}", "a^{3}", "a^{n}"]],
+  
   // Exponents
+  ["sin%2", ["\\sin^{2}($1)", "\\sin($1^2)"]],
+  ["cos%2", ["\\cos^{2}($1)", "\\cos($1^2)"]],
+  ["tan%2", ["\\tan^{2}($1)", "\\tan($1^2)"]],
+  ["csc%2", ["\\csc^{2}($1)", "\\csc($1^2)"]],
+  ["sec%2", ["\\sec^{2}($1)", "\\sec($1^2)"]],
+  ["cot%2", ["\\cot^{2}($1)", "\\cot($1^2)"]],
+
+  ["sin%3", ["\\sin^{3}($1)", "\\sin($1^3)"]],
+  ["cos%3", ["\\cos^{3}($1)", "\\cos($1^3)"]],
+  ["tan%3", ["\\tan^{3}($1)", "\\tan($1^3)"]],
+  ["csc%3", ["\\csc^{3}($1)", "\\csc($1^3)"]],
+  ["sec%3", ["\\sec^{3}($1)", "\\sec($1^3)"]],
+  ["cot%3", ["\\cot^{3}($1)", "\\cot($1^3)"]],
+
   ["x2", "x^{2}"],
   ["x3", "x^{3}"],
   ["e^(%)", "e^{$1}"],
@@ -178,11 +198,49 @@ const RULES = [
   ["!=", "\\neq"],
   ["+-", "\\pm"],
 
+  // Trig functions with degree symbol - must come before generic %o rule
+  ["sin(%o)", "\\sin($1^{\\circ})"],
+  ["cos(%o)", "\\cos($1^{\\circ})"],
+  ["tan(%o)", "\\tan($1^{\\circ})"],
+  ["csc(%o)", "\\csc($1^{\\circ})"],
+  ["cosec(%o)", "\\csc($1^{\\circ})"],
+  ["sec(%o)", "\\sec($1^{\\circ})"],
+  ["cot(%o)", "\\cot($1^{\\circ})"],
+  ["\\sin(%o)", "\\sin($1^{\\circ})"],
+  ["\\cos(%o)", "\\cos($1^{\\circ})"],
+  ["\\tan(%o)", "\\tan($1^{\\circ})"],
+  ["\\csc(%o)", "\\csc($1^{\\circ})"],
+  ["\\sec(%o)", "\\sec($1^{\\circ})"],
+  ["\\cot(%o)", "\\cot($1^{\\circ})"],
+  
+  ["sin%o", "\\sin($1^{\\circ})"],
+  ["cos%o", "\\cos($1^{\\circ})"],
+  ["tan%o", "\\tan($1^{\\circ})"],
+  ["csc%o", "\\csc($1^{\\circ})"],
+  ["cosec%o", "\\csc($1^{\\circ})"],
+  ["sec%o", "\\sec($1^{\\circ})"],
+  ["cot%o", "\\cot($1^{\\circ})"],
+  ["\\sin%o", "\\sin($1^{\\circ})"],
+  ["\\cos%o", "\\cos($1^{\\circ})"],
+  ["\\tan%o", "\\tan($1^{\\circ})"],
+  ["\\csc%o", "\\csc($1^{\\circ})"],
+  ["\\sec%o", "\\sec($1^{\\circ})"],
+  ["\\cot%o", "\\cot($1^{\\circ})"],
+  
+   // Degrees 
   ["deg", "^{\\circ}"],
+  ["%deg", "$1^{\\circ}"],
   ["degree", "^{\\circ}"],
+  ["%degree", "$1^{\\circ}"],
+  ["degrees", "^{\\circ}"],
+  ["%degrees", "$1^{\\circ}"],
+  ["°", "^{\\circ}"], 
+  ["o", "^{\\circ}"],
+  ["%o", "$1^{\\circ}"],
 
   // Constants
   ["pi", "\\pi"],
+  ["%pi", "\\pi"],
   ["inf", "\\infty"],
   ["infinity", "\\infty"],
   ["union", "\\cup"],
@@ -206,8 +264,6 @@ const RULES = [
   ["int_%^%", "\\int_{$1}^{$2}"],
   ["int% %", "\\int_{$1}^{$2}"],
 
-  // Multiplication
-  ["x", ["{x}", "x^{2}", "x^{3}", "x^{n}"]],
   ["times", "\\times"],
   ["time", "\\times"],
   ["mult", "\\times"],
@@ -237,12 +293,18 @@ const RULES = [
   ["\\sin (%)", "\\sin($1)"],
   ["\\sin", ["\\sin(x)", "\\sin(\\theta)", "\\sin^2(\\theta)", "\\sin^{-1}(\\theta)"]],
   ["\\sin %", "\\sin($1)"],
-  
+
   // Plain text versions
   ["Sin", ["\\sin(x)", "\\sin(\\theta)", "\\sin^2(\\theta)", "\\sin^{-1}(\\theta)"]],
   ["Sin^", ["\\sin^2(\\theta)", "\\sin^{-1}(\\theta)", "\\sin(\\theta)^2", "\\sin(\\theta)^{-1}"]],
   ["sin(%)", "\\sin($1)"],
   ["sin (%)", "\\sin($1)"],
+  ["sin^-1", "\\sin^{-1}(x)"],
+  ["sin-1", "\\sin^{-1}(x)"],
+  ["sin -1", "\\sin^{-1}(x)"],
+  ["sin^-1%", "\\sin^{-1}($1)"],
+  ["sin-1%", "\\sin^{-1}($1)"],
+  ["sin -1%", "\\sin^{-1}($1)"],
   ["sin^2(%)", "\\sin^{2}($1)"],
   ["sin^-1(%)", "\\sin^{-1}($1)"],
   ["sin %", "\\sin($1)"],
@@ -258,6 +320,12 @@ const RULES = [
   // Plain text versions
   ["Cos", ["\\cos(x)", "\\cos(\\theta)", "\\cos^2(\\theta)", "\\cos^{-1}(\\theta)"]],
   ["Cos^", ["\\cos^2(\\theta)", "\\cos^{-1}(\\theta)", "\\cos(\\theta)^2", "\\cos(\\theta)^{-1}"]],
+  ["cos^-1", "\\cos^{-1}(x)"],
+  ["cos-1", "\\cos^{-1}(x)"],
+  ["cos -1", "\\cos^{-1}(x)"],
+  ["cos^-1%", "\\cos^{-1}($1)"],
+  ["cos-1%", "\\cos^{-1}($1)"],
+  ["cos -1%", "\\cos^{-1}($1)"],
   ["cos(%)", "\\cos($1)"],
   ["cos (%)", "\\cos($1)"],
   ["cos^2(%)", "\\cos^{2}($1)"],
@@ -277,26 +345,75 @@ const RULES = [
   ["Tan^", ["\\tan^2(\\theta)", "\\tan^{-1}(\\theta)", "\\tan(\\theta)^2", "\\tan(\\theta)^{-1}"]],
   ["tan(%)", "\\tan($1)"],
   ["tan (%)", "\\tan($1)"],
+  ["tan^-1", "\\tan^{-1}(x)"],
+  ["tan-1", "\\tan^{-1}(x)"],
+  ["tan -1", "\\tan^{-1}(x)"],
+  ["tan^-1%", "\\tan^{-1}($1)"],
+  ["tan-1%", "\\tan^{-1}($1)"],
+  ["tan -1%", "\\tan^{-1}($1)"],
   ["tan^2(%)", "\\tan^{2}($1)"],
   ["tan^-1(%)", "\\tan^{-1}($1)"],
   ["tan %", "\\tan($1)"],
   ["atan(%)", "\\tan^{-1}($1)"],
   ["arctan(%)", "\\tan^{-1}($1)"],
 
+  // Cosecant (csc/cosec)
+  ["\\csc(%)", "\\csc($1)"],
+  ["\\csc (%)", "\\csc($1)"],
+  ["\\csc", ["\\csc(x)", "\\csc(\\theta)"]],
+  ["\\csc %", "\\csc($1)"],
+  ["csc(%)", "\\csc($1)"],
+  ["csc (%)", "\\csc($1)"],
+  ["csc %", "\\csc($1)"],
+  ["csc", ["\\csc(x)", "\\csc(\\theta)"]],
+  ["cosec(%)", "\\csc($1)"],
+  ["cosec (%)", "\\csc($1)"],
+  ["cosec %", "\\csc($1)"],
+  ["cosec", ["\\csc(x)", "\\csc(\\theta)"]],
+
+  // Secant (sec)
+  ["\\sec(%)", "\\sec($1)"],
+  ["\\sec (%)", "\\sec($1)"],
+  ["\\sec", ["\\sec(x)", "\\sec(\\theta)"]],
+  ["\\sec %", "\\sec($1)"],
+  ["sec(%)", "\\sec($1)"],
+  ["sec (%)", "\\sec($1)"],
+  ["sec %", "\\sec($1)"],
+  ["sec", ["\\sec(x)", "\\sec(\\theta)"]],
+
+  // Cotangent (cot)
+  ["\\cot(%)", "\\cot($1)"],
+  ["\\cot (%)", "\\cot($1)"],
+  ["\\cot", ["\\cot(x)", "\\cot(\\theta)"]],
+  ["\\cot %", "\\cot($1)"],
+  ["cot(%)", "\\cot($1)"],
+  ["cot (%)", "\\cot($1)"],
+  ["cot %", "\\cot($1)"],
+  ["cot", ["\\cot(x)", "\\cot(\\theta)"]],
+
   ["Sin(pi)", ["\\sin( \\frac{\\pi }{6})", "\\sin( \\frac{\\pi }{4})", "\\sin( \\frac{\\pi }{3})", "\\sin( \\frac{\\pi }{2})", "\\sin( \\pi)"]],
   ["Sin(2", ["\\sin( 2\\pi)", "\\sin( \\frac{2\\pi }{3})"]],
   ["Sin(3", ["\\sin( \\frac{3\\pi }{4})", "\\sin( \\frac{3\\pi }{2})"]],
   ["Sin(5", ["\\sin( \\frac{5\\pi }{3})", "\\sin( \\frac{5\\pi }{6})"]],
+  ["Sin2", ["\\sin( 2\\pi)", "\\sin( \\frac{2\\pi }{3})"]],
+  ["Sin3", ["\\sin( \\frac{3\\pi }{4})", "\\sin( \\frac{3\\pi }{2})"]],
+  ["Sin5", ["\\sin( \\frac{5\\pi }{3})", "\\sin( \\frac{5\\pi }{6})"]],
 
   ["Cos(pi)", ["\\cos( \\frac{\\pi }{6})", "\\cos( \\frac{\\pi }{4})", "\\cos( \\frac{\\pi }{3})", "\\cos( \\frac{\\pi }{2})", "\\cos( \\pi)"]],
   ["Cos(2", ["\\cos( 2\\pi)", "\\cos( \\frac{2\\pi }{3})"]],
   ["Cos(3", ["\\cos( \\frac{3\\pi }{4})", "\\cos( \\frac{3\\pi }{2})"]],
   ["Cos(5", ["\\cos( \\frac{5\\pi }{3})", "\\cos( \\frac{5\\pi }{6})"]],
+  ["Cos2", ["\\cos( 2\\pi)", "\\cos( \\frac{2\\pi }{3})"]],
+  ["Cos3", ["\\cos( \\frac{3\\pi }{4})", "\\cos( \\frac{3\\pi }{2})"]],
+  ["Cos5", ["\\cos( \\frac{5\\pi }{3})", "\\cos( \\frac{5\\pi }{6})"]],
 
   ["Tan(pi)", ["\\tan( \\frac{\\pi }{6})", "\\tan( \\frac{\\pi }{4})", "\\tan( \\frac{\\pi }{3})", "\\tan( \\frac{\\pi }{2})", "\\tan( \\pi)"]],
   ["Tan(2", ["\\tan( 2\\pi)", "\\tan( \\frac{2\\pi }{3})"]],
   ["Tan(3", ["\\tan( \\frac{3\\pi }{4})", "\\tan( \\frac{3\\pi }{2})"]],
   ["Tan(5", ["\\tan( \\frac{5\\pi }{3})", "\\tan( \\frac{5\\pi }{6})"]],
+  ["Tan2", ["\\tan( 2\\pi)", "\\tan( \\frac{2\\pi }{3})"]],
+  ["Tan3", ["\\tan( \\frac{3\\pi }{4})", "\\tan( \\frac{3\\pi }{2})"]],
+  ["Tan5", ["\\tan( \\frac{5\\pi }{3})", "\\tan( \\frac{5\\pi }{6})"]],
 
   ["hat", ["\\hat{a}", "\\hat{b}"]],
   ["bar", ["\\bar{a}", "\\bar{b}"]],
@@ -305,7 +422,287 @@ const RULES = [
   ["%over%", "\\frac{$1}{$2}"],
   ["%divide%", "\\frac{$1}{$2}"],
   ["mod", "\\left|x\\right|"]
+
+//   // Function-squared
+//   ["sin%2", "\\sin^{2}($1)"],
+//   ["cos%2", "\\cos^{2}($1)"],
+//   ["tan%2", "\\tan^{2}($1)"],
+//   ["csc%2", "\\csc^{2}($1)"],
+//   ["sec%2", "\\sec^{2}($1)"],
+//   ["cot%2", "\\cot^{2}($1)"],
+
+//   // Exponent inside parentheses: sin(x^2) → \sin(x^2)
+//   ["sin%2", ["\\sin^{2}($1)", "\\sin($1^2)"]],
+//   ["cos%2", ["\\cos^{2}($1)", "\\cos($1^2)"]],
+//   ["tan%2", ["\\tan^{2}($1)", "\\tan($1^2)"]],
+//   ["csc%2", ["\\csc^{2}($1)", "\\csc($1^2)"]],
+//   ["sec%2", ["\\sec^{2}($1)", "\\sec($1^2)"]],
+//   ["cot%2", ["\\cot^{2}($1)", "\\cot($1^2)"]]
+
 ];
+
+// ============================================================================
+// TRIGONOMETRY SYSTEM - Smart trig function detection and suggestion
+// ============================================================================
+const TRIG_CONFIG = {
+  // Core trigonometric functions (with cosec alias)
+  functions: ['sin', 'cos', 'tan', 'csc', 'cosec', 'sec', 'cot'],
+  
+  // Common argument suggestions (expanded with degree values)
+  arguments: [
+    'x',
+    '\\theta',
+    '\\alpha',
+    '45^{\\circ}',
+    '30^{\\circ}',
+    '60^{\\circ}',
+    '90^{\\circ}',
+    '0^{\\circ}',
+    '\\beta',
+    '\\gamma',
+    '\\pi',
+    '\\frac{\\pi}{6}',
+    '\\frac{\\pi}{4}',
+    '\\frac{\\pi}{3}',
+    '\\frac{\\pi}{2}',
+    '\\frac{2\\pi}{3}',
+    '\\frac{3\\pi}{4}',
+    '\\frac{5\\pi}{6}',
+    '\\frac{3\\pi}{2}'
+  ],
+  
+  // FIXED: Removed duplicate '^2' key (invalid JS object syntax)
+  modifiers: {
+    '^-1': { latex: '^{-1}', label: 'inverse' },
+    '^2': { latex: '^{2}', label: 'squared', common: true }, // ✅ ONLY ONE ENTRY
+    '^3': { latex: '^{3}', label: 'cubed', common: true },
+    '^n': { latex: '^{n}', label: 'nth power' }
+  }
+};
+
+/**
+ * Parse a trig expression to extract function, modifiers, and argument
+ * Examples: "sin", "sin(", "sin^-1", "cos(theta", "tan^2(pi/4)", "cosec45"
+ */
+function parseTrigExpression(input) {
+  const normalized = input.toLowerCase().trim();
+  
+  // Match patterns: func[modifiers](args)
+  const patterns = [
+    // With modifiers and arguments: sin^-1(theta
+    /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*\(\s*(.*)$/i,
+    // With modifiers and pi/fraction inline: sin^2pi/6, sinpi/4
+    /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*(\d*(?:\\pi|π|pi)(?:\/\d+)?|\d*(?:\\pi|π|pi)\s*\/\s*\d+)$/i,
+    // CRITICAL: Coefficient + variable (e.g., "sin2x", "cos3theta") → double angle or power
+    /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*(\d+[a-z\\πθ][a-z0-9\\πθ]*)$/i,
+    // CRITICAL: Plain number after trig (e.g., "sin45", "cosec30") → degrees
+    /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*(\d+(?:\.\d+)?)$/i,
+    // With modifiers and inline arguments: sin^2x, sinx, cos\theta
+    /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*([a-z\\πθ][a-z0-9\\πθ]*)$/i,
+    // With modifiers, no args: sin^-1, sin^2
+    /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*$/i,
+    // With arguments, no modifiers: sin(theta
+    /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)\s*\(\s*(.*)$/i,
+    // Just function: sin, cos
+    /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)\s*$/i
+  ];
+  
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+    if (match) {
+      const func = match[1].toLowerCase();
+      const modifier = match[2] || '';
+      let arg = match[3] || '';
+      
+      if (typeof arg === 'string') {
+        arg = arg.trim();
+        if (arg.endsWith(')')) arg = arg.slice(0, -1).trim();
+      }
+      
+      return {
+        function: func,
+        modifier: modifier,
+        argument: arg,
+        matched: true
+      };
+    }
+  }
+  
+  return { matched: false };
+}
+
+/**
+ * Generate trig suggestions based on parsed expression
+ */
+function generateTrigSuggestions(parsed, maxSuggestions = 5) {
+  if (!parsed.matched) return [];
+  
+  const { function: func, modifier, argument } = parsed;
+  const normalizedFunc = func === 'cosec' ? 'csc' : func;
+  const latexFunc = `\\${normalizedFunc}`;
+  
+  // Normalize modifier
+  let modifierLatex = '';
+  if (modifier) {
+    if (modifier.includes('-1') || modifier === '^-1') {
+      modifierLatex = '^{-1}';
+    } else if (modifier === '^2') {
+      modifierLatex = '^{2}';
+    } else if (modifier === '^3') {
+      modifierLatex = '^{3}';
+    }
+  }
+  
+  const suggestions = [];
+  
+  // If we have a partial argument, suggest completions
+  if (argument) {
+    const rawArg = String(argument).trim();
+
+    // Handle explicit degree symbols first (30o, 45°, etc.)
+    const degreeMatch = rawArg.match(/^(\d+(?:\.\d+)?)\s*(?:o|deg|degree|degrees|°)$/i);
+    if (degreeMatch) {
+      const num = degreeMatch[1];
+      return [`${latexFunc}${modifierLatex}(${num}^{\\circ})`];
+    }
+
+    // CRITICAL FIX: Handle plain numbers as degrees (sin45 → sin(45°))
+    // This is the #1 student shorthand pattern in SEAB exams
+    const plainNumberMatch = rawArg.match(/^(\d+)$/); // Integers only (sin2, not sin2.5)
+    if (plainNumberMatch) {
+      const num = plainNumberMatch[1];
+
+        
+      // 🎯 CRITICAL: For "2" with NO modifier, suggest ALL 3 interpretations students need
+      if (num === '2' && !modifierLatex) {
+        return [
+          `${latexFunc}(2^{\\circ})`,        // Degree: sin(2°)
+          `${latexFunc}^{2}(x)`,             // Squared function: sin²(x) ← KEY FOR IDENTITIES
+          `${latexFunc}^{2}(\\theta)`,       // Squared function variant
+          `${latexFunc}(2x)`,                // Double angle: sin(2x)
+          `${latexFunc}(2\\theta)`           // Double angle variant
+        ].slice(0, maxSuggestions);
+      }
+
+      // Special case: 90, 180, 270, 360 → suggest both degree and radian forms
+      if (['90', '180', '270', '360'].includes(num)) {
+        const radianMap = {
+          '90': '\\frac{\\pi}{2}',
+          '180': '\\pi',
+          '270': '\\frac{3\\pi}{2}',
+          '360': '2\\pi'
+        };
+        return [
+          `${latexFunc}${modifierLatex}(${num}^{\\circ})`,
+          `${latexFunc}${modifierLatex}(${radianMap[num]})`
+        ].slice(0, maxSuggestions);
+      }
+      return [`${latexFunc}${modifierLatex}(${num}^{\\circ})`];
+    }
+
+    // Handle coefficient + variable (2x, 3theta) - NOT degrees
+    const inlineCoeffMatch = rawArg.match(/^(\d+)(\\[a-zA-Z]+|[a-zA-Z]|π|θ)$/);
+    if (inlineCoeffMatch) {
+      const coeff = inlineCoeffMatch[1];
+      const varToken = inlineCoeffMatch[2];
+      const key = varToken.replace(/^\\/, '').toLowerCase();
+      const map = {
+        'theta': '\\theta',
+        'θ': '\\theta',
+        'x': 'x',
+        't': 't',
+        'alpha': '\\alpha',
+        'beta': '\\beta',
+        'gamma': '\\gamma',
+        'pi': '\\pi',
+        'π': '\\pi'
+      };
+      const mapped = map[key] || varToken;
+      const direct = `${latexFunc}${modifierLatex}(${coeff}${mapped})`;
+
+      if (!modifierLatex && Number.isFinite(Number(coeff)) && Number(coeff) >= 2) {
+        const power = `${latexFunc}^{${coeff}}(${mapped})`;
+        return [direct, power].slice(0, maxSuggestions);
+      }
+      return [direct];
+    }
+
+    // Pi fractions (pi/6, 2pi/3, etc.)
+    const piMatch = rawArg.match(/^(?:([0-9]+)\s*)?(?:\\pi|π|pi)(?:\s*\/\s*([0-9]+))?$/i);
+    if (piMatch) {
+      const num = piMatch[1] ? Number(piMatch[1]) : 1;
+      const den = piMatch[2] ? Number(piMatch[2]) : null;
+      const suggestions = [];
+      
+      if (den) {
+        if (num === 1) {
+          suggestions.push(`${latexFunc}${modifierLatex}(\\frac{\\pi}{${den}})`);
+        } else {
+          suggestions.push(`${latexFunc}${modifierLatex}(\\frac{${num}\\pi}{${den}})`);
+        }
+        if (num === 1) {
+          suggestions.push(`\\frac{${latexFunc}${modifierLatex}(\\pi)}{${den}}`);
+        } else {
+          suggestions.push(`\\frac{${latexFunc}${modifierLatex}(${num}\\pi)}{${den}}`);
+        }
+      } else {
+        if (num === 1) {
+          suggestions.push(`${latexFunc}${modifierLatex}(\\pi)`);
+        } else {
+          suggestions.push(`${latexFunc}${modifierLatex}(${num}\\pi)`);
+          suggestions.push(`${latexFunc}${modifierLatex}(${num} \\cdot \\pi)`);
+        }
+      }
+      
+      return suggestions.slice(0, maxSuggestions);
+    }
+
+    // Variable names (theta, alpha, x)
+    const thetaMatch = rawArg.match(/^(?:\\theta|θ|theta|x|t|alpha|beta|gamma)$/i);
+    if (thetaMatch) {
+      const map = {
+        'theta': '\\theta',
+        'θ': '\\theta',
+        'x': 'x',
+        't': 't',
+        'alpha': '\\alpha',
+        'beta': '\\beta',
+        'gamma': '\\gamma'
+      };
+      const key = rawArg.replace(/\\/g, '').toLowerCase();
+      const mapped = map[key] || rawArg;
+      return [`${latexFunc}${modifierLatex}(${mapped})`];
+    }
+
+    // Fallback: fuzzy match against configured arguments
+    const lowerArg = rawArg.toLowerCase().replace(/\\/g, '').replace(/[{}\\]/g, '').replace(/\s+/g, '');
+    const completedArgs = TRIG_CONFIG.arguments
+      .filter(a => {
+        const norm = a.toLowerCase().replace(/\\/g, '').replace(/[{}\\]/g, '').replace(/\s+/g, '');
+        return norm.includes(lowerArg) || lowerArg.includes(norm);
+      })
+      .slice(0, maxSuggestions);
+    
+    return completedArgs.map(arg => `${latexFunc}${modifierLatex}(${arg})`);
+  }
+  
+  // No argument: suggest common values including degrees
+  return TRIG_CONFIG.arguments
+    .slice(0, maxSuggestions)
+    .map(arg => `${latexFunc}${modifierLatex}(${arg})`);
+}
+
+/**
+ * Check if input looks like a trig function and return suggestions
+ */
+function getTrigSuggestions(input, maxSuggestions = 5) {
+  const parsed = parseTrigExpression(input);
+  if (!parsed.matched) return [];
+  
+  return generateTrigSuggestions(parsed, maxSuggestions);
+}
+
+// ============================================================================
 
 // Compile rules
 function compileRules(rules) {
@@ -316,18 +713,41 @@ function compileRules(rules) {
       let escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       escaped = escaped.replace(/%/g, '(.+)');
       const regex = new RegExp(`^${escaped}$`, 'i');
-      compiled.push({ regex, replacement, isWildcard: true });
+      compiled.push({ regex, replacement, isWildcard: true, pattern });
     } else {
       // For non-wildcards, escape all special regex chars including backslash
       const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const regex = new RegExp(`^${escaped}$`, 'i');
-      compiled.push({ regex, replacement, isWildcard: false });
+      compiled.push({ regex, replacement, isWildcard: false, pattern });
     }
   }
   return compiled;
 }
 
 const COMPILED_RULES = compileRules(RULES);
+
+const FUZZY_TRIG_RULES = [
+  { key: 'sin', suggestions: ['\\sin(x)', '\\sin(\\theta)'] },
+  { key: 'cos', suggestions: ['\\cos(x)', '\\cos(\\theta)'] },
+  { key: 'tan', suggestions: ['\\tan(x)', '\\tan(\\theta)'] },
+  { key: 'sec', suggestions: ['\\sec(x)', '\\sec(\\theta)'] },
+  { key: 'cosec', suggestions: ['\\csc(x)', '\\csc(\\theta)'] },
+  { key: 'cot', suggestions: ['\\cot(x)', '\\cot(\\theta)'] },
+  { key: 'csc', suggestions: ['\\csc(x)', '\\csc(\\theta)'] },
+
+  { key: 'asin', suggestions: ['\\sin^{-1}(x)'] },
+  { key: 'arcsin', suggestions: ['\\sin^{-1}(x)'] },
+  { key: 'acos', suggestions: ['\\cos^{-1}(x)'] },
+  { key: 'arccos', suggestions: ['\\cos^{-1}(x)'] },
+  { key: 'atan', suggestions: ['\\tan^{-1}(x)'] },
+  { key: 'arctan', suggestions: ['\\tan^{-1}(x)'] },
+  { key: 'sin-1', suggestions: ['\\sin^{-1}(x)'] },
+  { key: 'sin^-1', suggestions: ['\\sin^{-1}(x)'] },
+  { key: 'cos-1', suggestions: ['\\cos^{-1}(x)'] },
+  { key: 'cos^-1', suggestions: ['\\cos^{-1}(x)'] },
+  { key: 'tan-1', suggestions: ['\\tan^{-1}(x)'] },
+  { key: 'tan^-1', suggestions: ['\\tan^{-1}(x)'] }
+];
 
 function findTopLevelSplit(str) {
   let depth = 0;
@@ -368,18 +788,60 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
   let trimmed = input.trim();
   if (!trimmed) return [''];
 
-  // MathLive often emits multiplication as "·" or "\\cdot".
-  // Normalize these to '*' so our top-level split logic can detect multiplication.
-  // Avoid touching "\\cdots" (ellipsis).
+  // Don't suggest alternatives for basic math symbols - return as-is
+  const basicSymbols = ['+', '-', '=', 'x'];
+  if (basicSymbols.includes(trimmed)) {
+    return [trimmed];
+  }
+
+  // MathLive sometimes escapes ^ as \textasciicircum (text mode). Normalize back.
+  trimmed = trimmed.replace(/\\textasciicircum/g, '^');
+
+  // Some renderers output \textasteriskcentered or \ast for a centered asterisk — treat as multiplication
+  trimmed = trimmed.replace(/\\textasteriskcentered/g, '*').replace(/\\ast\b/g, '*');
+
+  // If user typed a leading multiplication symbol before a function (e.g. "\textasteriskcentered cos(...)"),
+  // strip it so trig detection sees the function at the start.
+  trimmed = trimmed.replace(/^\*\s*(?=\\|[a-zA-Zπθ])/i, '');
+
+  // Normalize \cdot, \times and centered dots early so trig detection sees '*' separators
   trimmed = trimmed
     .replace(/\\cdot(?!s)/g, '*')
     .replace(/\\times/g, '*')
     .replace(/[·⋅]/g, '*');
 
-  // If the user starts with a power/subscript (e.g. "^2*10"), MathLive typically implies
-  // a missing base. For suggestions, assume a base variable 'x'.
-  if (/^[\^_]/.test(trimmed)) {
-    trimmed = `x${trimmed}`;
+  // Remove \left and \right which commonly wrap parentheses in LaTeX output
+  trimmed = trimmed.replace(/\\left/g, '').replace(/\\right/g, '');
+
+  // Try smart trigonometry detection before inserting implicit multiplication.
+  // This preserves inline forms like "sin2x" -> "sin(2x)" or "sin^2(x)".
+  const earlyTrigSuggestions = getTrigSuggestions(trimmed, maxSuggestions);
+  if (earlyTrigSuggestions.length > 0) {
+    console.debug('[mathToLatex] input="%s" source=%s suggestions=%o', input, 'SMART_TRIG_INLINE', earlyTrigSuggestions);
+    return earlyTrigSuggestions;
+  }
+
+  // Try to find a top-level split BEFORE inserting implicit multiplication
+  // This preserves trig expressions like "sin2x + cos2x" so recursive calls can detect them
+  function insertImplicitMultiplication(s) {
+    if (!s || typeof s !== 'string') return s;
+    let out = s;
+
+    // 1) Digit or closing paren followed immediately by a backslash (\sin) or letter (cos) or π/pi/θ
+    //    BUT NOT degree markers (o, deg, degree, degrees, °)
+    out = out.replace(/([0-9\)\}\]])\s*(?=\\|(?!o|deg|degree|degrees|°)[a-zA-Zπθ])/g, '$1*');
+
+    // 2) Digit immediately followed by 'pi' or 'π' without operator:  "2pi" -> "2*pi"
+    out = out.replace(/([0-9])\s*(?=(?:\\pi|π|pi))/gi, '$1*');
+
+    // 3) Treat lowercase 'x' as multiplication when it follows a number or closing paren
+    //    e.g. "8xcos" -> "8*xcos" then rule (1) will insert between x and cos if needed
+    out = out.replace(/([0-9\)\}\]])\s*x(?=\\|[a-zA-Zπθ\(]|$)/g, '$1*');
+
+    // 4) If 'x' is used between two numeric/paren/function tokens like "2x3" or ")x("
+    out = out.replace(/([0-9\)\}\]])\s*x\s*([0-9\\(\{\[])/g, '$1*$2');
+
+    return out;
   }
 
   const atomicPatterns = [
@@ -395,6 +857,7 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     splitIdx = findTopLevelSplit(trimmed);
   }
 
+  // If we found a split, process each side separately (preserves trig detection)
   if (splitIdx !== -1) {
     const left = trimmed.slice(0, splitIdx);
     const op = trimmed[splitIdx];
@@ -427,38 +890,77 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
       }
     }
 
-    return results.slice(0, maxSuggestions);
+    const out = results.slice(0, maxSuggestions);
+    console.debug('[mathToLatex] input="%s" source=%s suggestions=%o', input, 'COMPOSED', out);
+    return out;
+  }
+
+  // No split found, now insert implicit multiplication for cases like "8cos(...)", "2x", "3\pi"
+  trimmed = insertImplicitMultiplication(trimmed);
+
+  // Try smart trigonometry detection after normalization
+  const trigSuggestions = getTrigSuggestions(trimmed, maxSuggestions);
+  if (trigSuggestions.length > 0) {
+    console.debug('[mathToLatex] input="%s" source=%s suggestions=%o', input, 'SMART_TRIG', trigSuggestions);
+    return trigSuggestions;
+  }
+
+  const normalized = normalizeForMatching(trimmed);
+  const inverseSuggestions = getInverseTrigSuggestions(normalized);
+  if (inverseSuggestions.length > 0) {
+    const out = inverseSuggestions.slice(0, maxSuggestions);
+    console.debug('[mathToLatex] input="%s" source=%s suggestions=%o', input, 'INVERSE_TRIG', out);
+    return out;
+  }
+
+  const trigNumberMatch = normalized.match(/^(sin|cos|tan)(-?\d+(?:\.\d+)?)(deg)?$/i);
+  if (trigNumberMatch) {
+    const [, func, num, degSuffix] = trigNumberMatch;
+    const latexFunc = `\\${func.toLowerCase()}`;
+    const base = `${latexFunc}(${num})`;
+    const degree = `${latexFunc}(${num}^{\\circ})`;
+    const suggestions = degSuffix ? [degree, base] : [base, degree];
+    const out = suggestions.slice(0, maxSuggestions);
+    console.debug('[mathToLatex] input="%s" source=%s suggestions=%o', input, 'TRIG_NUMBER', out);
+    return out;
+  }
+
+  // MathLive often emits multiplication as "·" or "\\cdot".
+  // Normalize these to '*' so our top-level split logic can detect multiplication.
+  // Avoid touching "\\cdots" (ellipsis).
+  trimmed = trimmed
+    .replace(/\\cdot(?!s)/g, '*')
+    .replace(/\\times/g, '*')
+    .replace(/[·⋅]/g, '*');
+
+  // If the user starts with a power/subscript (e.g. "^2*10"), MathLive typically implies
+  // a missing base. For suggestions, assume a base variable 'x'.
+  if (/^[\^_]/.test(trimmed)) {
+    trimmed = `x${trimmed}`;
   }
 
   let baseSuggestions = [];
   let foundRule = false;
+  let fuzzy = [];
 
-  for (const rule of COMPILED_RULES) {
-    const match = trimmed.match(rule.regex);
-    if (match) {
+  const variants = buildInputVariants(trimmed);
+  for (const variant of variants) {
+    const matchResult = matchRules(variant);
+    if (matchResult.found) {
       foundRule = true;
-      let suggestions = Array.isArray(rule.replacement)
-        ? rule.replacement
-        : [rule.replacement];
-
-      if (rule.isWildcard) {
-        suggestions = suggestions.map(template => {
-          let result = template;
-          for (let i = 1; i < match.length; i++) {
-            const subInput = match[i];
-            const subLatex = mathToLatex(subInput);
-            result = result.split(`$${i}`).join(subLatex);
-          }
-          return result;
-        });
-      }
-      baseSuggestions = suggestions;
+      baseSuggestions = matchResult.suggestions;
+      var matchedRulePattern = matchResult.rulePattern || null;
       break;
     }
   }
 
   if (!foundRule) {
-    baseSuggestions = [trimmed];
+    fuzzy = getFuzzySuggestions(trimmed);
+    if (fuzzy.length > 0) {
+      baseSuggestions = fuzzy;
+    } else {
+      baseSuggestions = [trimmed];
+    }
   }
 
   const unique = new Set();
@@ -471,7 +973,10 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     }
   }
 
-  return finalResults.slice(0, maxSuggestions);
+  const out = finalResults.slice(0, maxSuggestions);
+  const sourceTag = foundRule ? `RULES(${matchedRulePattern})` : (fuzzy.length > 0 ? 'FUZZY' : 'FALLBACK');
+  console.debug('[mathToLatex] input="%s" source=%s suggestions=%o', input, sourceTag, out);
+  return out;
 }
 
 function mathToLatex(input) {
@@ -479,6 +984,138 @@ function mathToLatex(input) {
   return suggestions[0];
 }
 
-// Export for use in app
-window.getLatexSuggestions = getLatexSuggestions;
-window.mathToLatex = mathToLatex;
+function normalizeForMatching(value) {
+  return String(value)
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[·⋅×]/g, '*')
+    .replace(/[−–—]/g, '-')
+    .replace(/\^\{-?1\}/g, '^-1')
+    .replace(/\^\(-?1\)/g, '^-1')
+    .replace(/\^\-1/g, '^-1')
+    .replace(/\^\{-?\s*1\}/g, '^-1')
+    .replace(/°/g, 'deg')
+    .trim();
+}
+
+function buildInputVariants(value) {
+  const variants = new Set();
+  const trimmed = String(value).trim();
+  if (!trimmed) return [];
+
+  variants.add(trimmed);
+  variants.add(trimmed.replace(/\s+/g, ''));
+  variants.add(trimmed.replace(/\s+/g, ' '));
+
+  const typoFixed = applyTrigTypoFixes(trimmed);
+  variants.add(typoFixed);
+  variants.add(typoFixed.replace(/\s+/g, ''));
+
+  return Array.from(variants);
+}
+
+function applyTrigTypoFixes(value) {
+  let fixed = String(value);
+  fixed = fixed.replace(/\bsni\b/gi, 'sin');
+  fixed = fixed.replace(/\bsln\b/gi, 'sin');
+  fixed = fixed.replace(/\bcso\b/gi, 'cos');
+  fixed = fixed.replace(/\bcoz\b/gi, 'cos');
+  fixed = fixed.replace(/\btna\b/gi, 'tan');
+  fixed = fixed.replace(/\bta n\b/gi, 'tan');
+  fixed = fixed.replace(/\bacs\b/gi, 'acos');
+  fixed = fixed.replace(/\barsin\b/gi, 'arcsin');
+  fixed = fixed.replace(/\barccos\b/gi, 'arccos');
+  fixed = fixed.replace(/\barctan\b/gi, 'arctan');
+  return fixed;
+}
+
+function getInverseTrigSuggestions(normalized) {
+  const match = normalized.match(/^(arc)?(sin|cos|tan)(\^-?1|-?1)?([a-z]+)?$/i);
+  if (!match) return [];
+
+  const [, arcPrefix, func, invRaw, argRaw] = match;
+  const isInverse = Boolean(arcPrefix) || Boolean(invRaw);
+  if (!isInverse) return [];
+
+  const arg = argRaw || 'x';
+  return [`\\${func.toLowerCase()}^{-1}(${arg})`];
+}
+
+function matchRules(value) {
+  for (const rule of COMPILED_RULES) {
+    const match = value.match(rule.regex);
+    if (!match) continue;
+
+    let suggestions = Array.isArray(rule.replacement)
+      ? rule.replacement
+      : [rule.replacement];
+
+    if (rule.isWildcard) {
+      suggestions = suggestions.map(template => {
+        let result = template;
+        for (let i = 1; i < match.length; i++) {
+          const subInput = match[i];
+          const subLatex = mathToLatex(subInput);
+          result = result.split(`$${i}`).join(subLatex);
+        }
+        return result;
+      });
+    }
+
+    return { found: true, suggestions };
+  }
+
+  return { found: false, suggestions: [] };
+}
+
+function getFuzzySuggestions(value) {
+  const normalized = normalizeForMatching(value);
+  if (!normalized) return [];
+
+  const candidates = FUZZY_TRIG_RULES.map(rule => {
+    const distance = levenshteinDistance(normalized, rule.key);
+    return { ...rule, distance };
+  });
+
+  candidates.sort((a, b) => a.distance - b.distance);
+  const best = candidates[0];
+  if (!best) return [];
+
+  const threshold = normalized.length <= 4 ? 1 : 2;
+  if (best.distance > threshold) return [];
+
+  return best.suggestions;
+}
+
+function levenshteinDistance(a, b) {
+  if (a === b) return 0;
+  const matrix = Array.from({ length: a.length + 1 }, () =>
+    Array(b.length + 1).fill(0)
+  );
+
+  for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+  for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return matrix[a.length][b.length];
+}
+
+// Export for use in app and Node
+if (typeof globalThis !== 'undefined') {
+  globalThis.getLatexSuggestions = getLatexSuggestions;
+  globalThis.mathToLatex = mathToLatex;
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { getLatexSuggestions, mathToLatex };
+}
