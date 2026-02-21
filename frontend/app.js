@@ -7,6 +7,7 @@ let suggestionContext = { start: 0, end: 0 };
 // let currentUserID = null;
 let inputMethod = 'typing';
 let usedSuggestion = false;
+let suppressSuggestionForValue = '';
 
 // Configuration
 const API_BASE_URL = 'http://localhost:5000'; // Update with your backend URL
@@ -23,6 +24,8 @@ function lockChat() {
   const questionInput = document.getElementById('questionInput');
   const sendBtn = document.getElementById('submitBtn');
 
+  if (!questionInput || !sendBtn) return;
+
   questionInput.disabled = true;
   sendBtn.disabled = true;
 
@@ -35,6 +38,9 @@ function lockChat() {
 function unlockChat() {
   const questionInput = document.getElementById('questionInput');
   const sendBtn = document.getElementById('submitBtn');
+
+  if (!questionInput || !sendBtn) return;
+
   questionInput.disabled = false;
   sendBtn.disabled = false;
   questionInput.setAttribute(
@@ -44,31 +50,38 @@ function unlockChat() {
 }
 
 async function checkAuthStatus() {
-  const res = await fetch(`${API_BASE_URL}/api/me`, {
-    credentials: 'include'
-  });
-  const data = await res.json();
-  console.log('API /api/me response:', data);
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/me`, {
+      credentials: 'include'
+    });
+    const data = await res.json();
+    console.log('API /api/me response:', data);
 
-  if (!data.logged_in) {
-    document.getElementById('logoutButton').style.display = 'none';
-    document.getElementById('dashboardButton').style.display = 'none';
-    lockChat()
-    // unlockChat(); // Added this for development without login, but show login button
-  } else {
-    document.getElementById('authButtons').style.display = 'none';
-    document.getElementById('logoutButton').style.display = 'block';
-    unlockChat();
-
-    // Show dashboard only for admin
-    if (data.role === 'admin') {
-      document.getElementById('dashboardButton').style.display = 'block';
-    } else {
+    if (!data.logged_in) {
+      document.getElementById('logoutButton').style.display = 'none';
       document.getElementById('dashboardButton').style.display = 'none';
-    }
+      // lockChat()
+      unlockChat(); // Added this for development without login, but show login button
+    } else {
+      document.getElementById('authButtons').style.display = 'none';
+      document.getElementById('logoutButton').style.display = 'block';
+      unlockChat();
 
-    console.log("Logged in as user ID:", data.user_id);
-    // currentUserID = data.user_id;
+      // Show dashboard only for admin
+      if (data.role === 'admin') {
+        document.getElementById('dashboardButton').style.display = 'block';
+      } else {
+        document.getElementById('dashboardButton').style.display = 'none';
+      }
+
+      console.log("Logged in as user ID:", data.user_id);
+      // currentUserID = data.user_id;
+    }
+  } catch (error) {
+    console.warn('Auth check failed, enabling input fallback:', error);
+  } finally {
+    // Never leave input disabled due to auth/network race on load.
+    unlockChat();
   }
 }
 
@@ -127,7 +140,7 @@ function applySuperscriptForInsert(text) {
 }
 
 function latexToSmartText(latex) {
-  let text = latex;
+  let text = normalizeMathLiveArtifacts(latex);
 
   text = text.replace(/\\left\|/g, '|').replace(/\\right\|/g, '|');
   text = text.replace(/\\text\{([^}]*)\}/g, '$1');
@@ -212,8 +225,19 @@ function normalizeLatexForOverlay(latex) {
     .replace(/\\ln/g, '\\mathrm{ln}');
 }
 
+function normalizeMathLiveArtifacts(value) {
+  return String(value ?? '')
+    .replace(/\\textasciicircum/g, '^')
+    .replace(/\\textasteriskcentered/g, '*')
+    .replace(/\\ast\b/g, '*')
+    .replace(/\\cdot(?!s)/g, '*')
+    .replace(/\\times/g, '*')
+    .replace(/\\left/g, '')
+    .replace(/\\right/g, '');
+}
+
 function normalizeToLatex(input) {
-  let s = input;
+  let s = normalizeMathLiveArtifacts(input);
 
   // Logs
   s = s.replace(/\blog\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/g, '\\log_{$1}($2)');
@@ -230,6 +254,53 @@ function normalizeToLatex(input) {
   );
 
   return s;
+}
+
+function normalizeSuggestionLatex(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('\\')) return raw;
+
+  if (typeof window.mathToLatex === 'function') {
+    try {
+      const normalized = String(window.mathToLatex(raw) ?? '').trim();
+      if (normalized) return normalized;
+    } catch {
+      // Fall back to local normalizer
+    }
+  }
+
+  return normalizeToLatex(raw);
+}
+
+function renderMixedTextMath(rawText, bubbleDiv) {
+  const raw = normalizeMathLiveArtifacts(rawText);
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    bubbleDiv.textContent = raw;
+    return;
+  }
+
+  const cleaned = trimmed
+    .replace(/\\\$/g, ' ')
+    .replace(/\$/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const normalized = normalizeToLatex(preservePlainTextSegments(cleaned));
+
+  try {
+    katex.render(normalized, bubbleDiv, {
+      throwOnError: false,
+      displayMode: false
+    });
+
+    if (bubbleDiv.querySelector('.katex-error')) {
+      bubbleDiv.textContent = cleaned || raw;
+    }
+  } catch {
+    bubbleDiv.textContent = cleaned || raw;
+  }
 }
 
 function getInputTextValue() {
@@ -257,18 +328,7 @@ function createMessageElement(message) {
   bubbleDiv.className = 'message-bubble';
 
   if (message.role === 'user') {
-    const raw = String(message?.text ?? '');
-    const mathText = raw.trim().replace(/^\$+/, '').replace(/\$+$/, '');
-    const normalized = normalizeToLatex(mathText);
-    
-    try {
-      katex.render(normalized, bubbleDiv, {
-        throwOnError: false,
-        displayMode: false
-      });
-    } catch (e) {
-      bubbleDiv.textContent = raw;
-    }
+    renderMixedTextMath(message?.text, bubbleDiv);
   } else if (message.role === 'loading') {
     bubbleDiv.textContent = message.text;
   } else {
@@ -331,6 +391,9 @@ function initializeMathField() {
   }
   
   mathFieldReady = true;
+
+  // Always enable typing once the field exists. Auth UI state can still update separately.
+  unlockChat();
   
   // Configure MathLive - smart mode is set via HTML attribute
   questionInput.mathVirtualKeyboardPolicy = 'manual';
@@ -372,7 +435,8 @@ async function handleSubmitQuestion(e) {
     return;
   }
 
-  const question = questionInput.getValue('latex-expanded').trim();
+  const rawQuestion = questionInput.getValue('latex-expanded').trim();
+  const question = normalizeMathLiveArtifacts(rawQuestion).trim();
   
   if (!question) {
     showResponseStatus('error', 'Please enter a math question');
@@ -507,6 +571,15 @@ function handleInputChange() {
   const latexValue = questionInput.getValue();
   const textValue = getInputTextValue();
   const searchValue = textValue;
+  const normalizedSearchValue = String(searchValue || '').replace(/\s+/g, '');
+
+  if (suppressSuggestionForValue && normalizedSearchValue === suppressSuggestionForValue) {
+    hideSuggestions();
+    return;
+  }
+  if (suppressSuggestionForValue && normalizedSearchValue !== suppressSuggestionForValue) {
+    suppressSuggestionForValue = '';
+  }
   
   console.log('LaTeX value:', latexValue); // Debug
   console.log('Search value:', searchValue); // Debug
@@ -553,12 +626,130 @@ function handleInputChange() {
   console.log('Query for suggestions:', query); // Debug
 
   if (query.length > 0) {
-    // Match rules directly with LaTeX input
-    let suggestions = getLatexSuggestions(query).filter(s => {
-      if (s === query) return false;
+    // Extract the actual term used for suggestions (after operators)
+    // Split on operators ONLY if they're at the top level (not inside parentheses)
+    let queryTerm = query;
+    let termStartOffset = 0;
+    let queryTermText = latexToSmartText(queryTerm);
+
+    const findLastTopLevelOperatorIndex = (expr) => {
+      let depth = 0;
+      let lastOperatorIndex = -1;
+      for (let i = 0; i < expr.length; i++) {
+        const char = expr[i];
+        if (char === '(') {
+          depth += 1;
+          continue;
+        }
+        if (char === ')') {
+          depth = Math.max(0, depth - 1);
+          continue;
+        }
+        if (depth === 0) {
+          if (char === '+' || char === '-') {
+            const beforeOp = expr.substring(Math.max(0, i - 3), i).toLowerCase();
+            const isInverseTrig = /(sin|cos|tan)$/.test(beforeOp) && char === '-' && expr[i + 1] === '1';
+            if (!isInverseTrig) {
+              lastOperatorIndex = i;
+            }
+            continue;
+          }
+
+          if (char === '*' || char === '/' || char === ',' || char === '=' || /\s/.test(char)) {
+            if (char === '/') {
+              const beforeSlash = expr.slice(0, i);
+              const looksLikeTrigPiFraction = /(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)\s*\d*(?:\\pi|π|pi)$/i.test(beforeSlash);
+              if (looksLikeTrigPiFraction) {
+                continue;
+              }
+            }
+            lastOperatorIndex = i;
+            continue;
+          }
+
+          const prevChar = i > 0 ? expr[i - 1] : '';
+          const startsAlphaToken = /[A-Za-z\\]/.test(char);
+          if (startsAlphaToken && prevChar === ')') {
+            lastOperatorIndex = i - 1;
+          }
+        }
+      }
+      return lastOperatorIndex;
+    };
+
+    const findLastTopLevelTrigStart = (expr) => {
+      const trigNames = ['cosec', 'sin', 'cos', 'tan', 'sec', 'csc', 'cot'];
+      let depth = 0;
+      let lastTrigStart = -1;
+
+      for (let i = 0; i < expr.length; i++) {
+        const char = expr[i];
+        if (char === '(') {
+          depth += 1;
+          continue;
+        }
+        if (char === ')') {
+          depth = Math.max(0, depth - 1);
+          continue;
+        }
+        if (depth !== 0) continue;
+
+        const before = i > 0 ? expr[i - 1] : '';
+        const atBoundary = i === 0 || /[\s+\-*/=,(]/.test(before) || before === ')';
+        if (!atBoundary) continue;
+
+        const remaining = expr.slice(i).toLowerCase();
+        for (const name of trigNames) {
+          if (remaining.startsWith(`\\${name}`) || remaining.startsWith(name)) {
+            lastTrigStart = i;
+            break;
+          }
+        }
+      }
+
+      return lastTrigStart;
+    };
+    
+    const compactTrigExpression = /^(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)(?!\s*\().+/i.test(query);
+    const lastTopLevelOperatorIndex = findLastTopLevelOperatorIndex(query);
+    const hasTopLevelPlusMinus = lastTopLevelOperatorIndex !== -1;
+
+    if (!compactTrigExpression || hasTopLevelPlusMinus) {
+      if (lastTopLevelOperatorIndex !== -1) {
+        queryTerm = query.substring(lastTopLevelOperatorIndex + 1).trim();
+        termStartOffset = lastTopLevelOperatorIndex + 1;
+        queryTermText = latexToSmartText(queryTerm);
+      }
+    }
+
+    const trailingTrigStart = findLastTopLevelTrigStart(query);
+    if (trailingTrigStart !== -1) {
+      const trailingTrigTerm = query.substring(trailingTrigStart).trim();
+      const isCompactTrigAmbiguity = /^(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)\s*\d*[a-zα-ω\\()]+\s*[+\-].+/i.test(trailingTrigTerm);
+      const shouldPreferTrailingTrig = trailingTrigStart > termStartOffset || isCompactTrigAmbiguity;
+
+      if (shouldPreferTrailingTrig) {
+        queryTerm = trailingTrigTerm;
+        termStartOffset = trailingTrigStart;
+        queryTermText = latexToSmartText(queryTerm);
+      }
+    }
+    
+    // Match rules directly with LaTeX input (use extracted term, not full query)
+    let suggestions = getLatexSuggestions(queryTerm).filter(s => {
+      if (s === queryTerm) return false;
       if (searchValue.includes(s)) return false;
       return true;
     });
+
+    const trigNames = ['sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'cosec'];
+    const alphaTail = (queryTermText || queryTerm || '').match(/[A-Za-z]+$/);
+    const trigPrefix = alphaTail ? alphaTail[0].toLowerCase() : '';
+    const typingTrigPrefix = trigPrefix && trigNames.some(name => name.startsWith(trigPrefix));
+
+    if (typingTrigPrefix) {
+      suggestions = suggestions.filter(s => /(?:^|\\)(sin|cos|tan|sec|csc|cot|cosec)\b/i.test(String(s)));
+    }
 
     if (suggestions.length === 0 && typeof window.getLayer2Suggestions === 'function') {
       const layer2Input = queryText || textValue || query;
@@ -580,7 +771,33 @@ function handleInputChange() {
     console.log('Suggestions found:', suggestions); // Debug
 
     if (suggestions.length > 0) {
-      suggestionContext = { start, end, query, queryText };
+      const rawStart = start + termStartOffset;
+      const rawEnd = rawStart + queryTerm.length;
+      const replaceableCharRegex = /[A-Za-z0-9_\\√∛∜α-ωΑ-Ωπθδλμσωβγ]/;
+      let replaceStart = rawStart;
+      let replaceEnd = rawEnd;
+
+      while (replaceStart < replaceEnd && !replaceableCharRegex.test(searchValue[replaceStart] || '')) {
+        replaceStart += 1;
+      }
+      while (replaceEnd > replaceStart && !replaceableCharRegex.test(searchValue[replaceEnd - 1] || '')) {
+        replaceEnd -= 1;
+      }
+
+      if (replaceStart >= replaceEnd) {
+        replaceStart = rawStart;
+        replaceEnd = rawEnd;
+      }
+
+      // Update context to point to just the extracted term, not the full query
+      suggestionContext = { 
+        start: replaceStart,
+        end: replaceEnd,
+        query, 
+        queryText,
+        queryTerm,
+        queryTermText
+      };
       showSuggestions(suggestions);
     } else {
       hideSuggestions();
@@ -596,8 +813,17 @@ function renderOverlay() {
 
 function showSuggestions(suggestions) {
   suggestionList.innerHTML = '';
+
+  const seen = new Set();
+  const normalizedSuggestions = suggestions
+    .map(normalizeSuggestionLatex)
+    .filter((s) => {
+      if (!s || seen.has(s)) return false;
+      seen.add(s);
+      return true;
+    });
   
-  suggestions.forEach(latex => {
+  normalizedSuggestions.forEach(latex => {
     const li = document.createElement('li');
     li.className = 'suggestion-item';
     
@@ -621,9 +847,57 @@ function hideSuggestions() {
   suggestionList.style.display = 'none';
 }
 
+function preservePlainTextSegments(value) {
+  const source = String(value || '');
+  if (!source) return source;
+
+  const knownMathWords = new Set([
+    'sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'cosec',
+    'asin', 'acos', 'atan', 'arcsin', 'arccos', 'arctan',
+    'log', 'ln', 'sqrt', 'root', 'pi', 'theta',
+    'alpha', 'beta', 'gamma', 'delta', 'lambda', 'mu', 'sigma', 'omega',
+    'x', 'y', 'z'
+  ]);
+
+  let i = 0;
+  let output = '';
+
+  while (i < source.length) {
+    const char = source[i];
+    if (!/[A-Za-z]/.test(char)) {
+      output += char;
+      i += 1;
+      continue;
+    }
+
+    const prevChar = i > 0 ? source[i - 1] : '';
+    let j = i;
+    while (j < source.length && /[A-Za-z]/.test(source[j])) j += 1;
+    const token = source.slice(i, j);
+    const lower = token.toLowerCase();
+
+    let k = j;
+    while (k < source.length && /\s/.test(source[k])) k += 1;
+    const trailingWhitespace = source.slice(j, k);
+
+    const isLatexCommandToken = prevChar === '\\';
+    const shouldPreserveAsText = token.length > 2 && !knownMathWords.has(lower) && !isLatexCommandToken;
+    if (shouldPreserveAsText) {
+      output += `\\text{${token}${trailingWhitespace}}`;
+    } else {
+      output += token + trailingWhitespace;
+    }
+
+    i = k;
+  }
+
+  return output;
+}
+
 function selectSuggestion(latex) {
 
   if (!questionInput || !mathFieldReady) return;
+  const suggestionLatex = normalizeSuggestionLatex(latex);
   
   inputMethod = 'suggestion';
   usedSuggestion = true;
@@ -631,8 +905,8 @@ function selectSuggestion(latex) {
   console.log(inputMethod, usedSuggestion);
   // Set the LaTeX value in MathLive
 
-  const { replaceStart, replaceEnd } = computeSuggestionReplacementRange(latex);
-  const deleteCount = Math.max(0, (replaceEnd || 0) - (replaceStart || 0));
+  const currentValue = getInputTextValue();
+  const { replaceStart, replaceEnd } = computeSuggestionReplacementRange(suggestionLatex, currentValue);
 
   try {
     questionInput.defaultMode = 'text';
@@ -641,27 +915,28 @@ function selectSuggestion(latex) {
     // Ignore if mode APIs are not supported
   }
 
-  try {
-    if (typeof questionInput.executeCommand === 'function' && deleteCount > 0) {
-      for (let i = 0; i < deleteCount; i += 1) {
-        questionInput.executeCommand('deleteBackward');
-      }
-    }
+  const prefix = currentValue.slice(0, replaceStart || 0);
+  let suffix = currentValue.slice(replaceEnd || 0);
 
-    if (typeof questionInput.insert === 'function') {
-      questionInput.insert(latex);
-    } else {
-      const currentValue = getInputTextValue();
-      const prefix = currentValue.slice(0, replaceStart || 0);
-      const suffix = currentValue.slice(replaceEnd || 0);
-      questionInput.setValue(`${prefix}${latex}${suffix}`);
+  if (suggestionLatex.endsWith(')') && suffix.startsWith(')')) {
+    const countParenBalance = (text) => {
+      let balance = 0;
+      for (const ch of String(text || '')) {
+        if (ch === '(') balance += 1;
+        if (ch === ')') balance -= 1;
+      }
+      return balance;
+    };
+
+    const balanceAfterInsert = countParenBalance(`${prefix}${suggestionLatex}`);
+    if (balanceAfterInsert <= 0) {
+      suffix = suffix.slice(1);
     }
-  } catch {
-    const currentValue = getInputTextValue();
-    const prefix = currentValue.slice(0, replaceStart || 0);
-    const suffix = currentValue.slice(replaceEnd || 0);
-    questionInput.setValue(`${prefix}${latex}${suffix}`);
   }
+
+  const safePrefix = preservePlainTextSegments(prefix);
+  const safeSuffix = preservePlainTextSegments(suffix);
+  questionInput.setValue(`${safePrefix}${suggestionLatex}${safeSuffix}`);
 
   try {
     questionInput.defaultMode = 'text';
@@ -675,8 +950,17 @@ function selectSuggestion(latex) {
   // Show feedback UI so user can thumbs-up or thumbs-down the suggestion
   showSuggestionFeedbackUI(latex);
 
+  // Reset suggestion-tracking state after programmatic insertion.
+  // Some MathLive builds don't emit consistent input events for insert(),
+  // which can leave suggestion extraction stale until another full edit cycle.
+  prevInputValue = getInputTextValue();
+  suppressSuggestionForValue = String(prevInputValue || '').replace(/\s+/g, '');
+  smartRanges = [];
+  usedSuggestion = false;
+
   requestAnimationFrame(() => {
     questionInput.focus();
+    handleInputChange();
   });
 }
 
@@ -748,11 +1032,34 @@ async function sendSuggestionFeedback(latex, rating) {
   }
 }
 
-function computeSuggestionReplacementRange(latex) {
+function computeSuggestionReplacementRange(latex, currentValue = '') {
   const start = suggestionContext.start || 0;
   const end = suggestionContext.end || 0;
-  const queryText = suggestionContext.queryText || '';
+  const queryText = suggestionContext.queryTermText || suggestionContext.queryText || '';
   const suggestionText = latexToSmartText(latex || '');
+
+  const isTrigSuggestion = /^(sin|cos|tan|sec|csc|cot)\b/i.test(suggestionText);
+
+  if (isTrigSuggestion && currentValue) {
+    const trigNames = ['sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'cosec'];
+    const caret = currentValue.length;
+    let tokenStart = caret;
+    while (tokenStart > 0 && /[A-Za-z\\]/.test(currentValue[tokenStart - 1])) {
+      tokenStart -= 1;
+    }
+    const rawToken = currentValue.slice(tokenStart, caret);
+    const token = rawToken.replace(/^\\/, '').toLowerCase();
+    if (token && trigNames.some(name => name.startsWith(token))) {
+      return { replaceStart: tokenStart, replaceEnd: caret };
+    }
+  }
+
+  // Preserve multiplicative prefixes like "3x" in "3xcos" by replacing only the trailing trig token.
+  const trigSuffixMatch = queryText.match(/^(.*?)(sin|cos|tan|sec|csc|cot|cosec)$/i);
+  if (isTrigSuggestion && trigSuffixMatch && trigSuffixMatch[1]) {
+    const prefix = trigSuffixMatch[1];
+    return { replaceStart: start + prefix.length, replaceEnd: end };
+  }
 
   // Specific handling for trig functions with coefficients
   const coeffMatch = queryText.match(/^(\d+(?:\.\d+)?)(sin|cos|tan|sec|csc|cot)/i);
