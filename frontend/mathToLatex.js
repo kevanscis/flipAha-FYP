@@ -89,7 +89,11 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     .replace(/\\cdot(?!s)/g, '*')
     .replace(/\\times/g, '*')
     .replace(/[·⋅]/g, '*')
-    .replace(/\\left/g, '').replace(/\\right/g, '');
+    .replace(/\\left/g, '').replace(/\\right/g, '')
+    .replace(/⁻¹/g, '^-1')
+    .replace(/²/g, '^2')
+    .replace(/³/g, '^3')
+    .replace(/ⁿ/g, '^n');
 
   if (typeof globalThis !== 'undefined' && typeof globalThis.normalizeCommonMathTypos === 'function') {
     trimmed = globalThis.normalizeCommonMathTypos(trimmed);
@@ -100,6 +104,15 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
   const queryTerm = trimmed;
 
   const allSuggestions = [];
+
+  // 0. Bracketed power fallback: (... )2, (... )^2, (... )^{2} -> (... )^{2}
+  const compactQueryTerm = queryTerm.replace(/\s+/g, '');
+  const bracketPowerMatch = compactQueryTerm.match(/^(.*\))(?:\^?\{?([0-9n]+)\}?)$/i);
+  if (bracketPowerMatch) {
+    const base = bracketPowerMatch[1];
+    const exponent = bracketPowerMatch[2];
+    allSuggestions.push(`${base}^{${exponent}}`);
+  }
 
   // 1. Try trig system via trig module (most comprehensive for trig)
   if (typeof globalThis !== 'undefined' && globalThis.subjects && globalThis.subjects.trig) {

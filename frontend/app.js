@@ -742,6 +742,24 @@ function handleInputChange() {
       return true;
     });
 
+    const compactSquareSource = String(queryTermText || queryTerm || '')
+      .replace(/\s+/g, '')
+      .replace(/⁻¹/g, '^-1')
+      .replace(/²/g, '^2')
+      .replace(/³/g, '^3')
+      .replace(/ⁿ/g, '^n');
+    const directSquareMatch = compactSquareSource.match(/^(.*\))(?:\^?\{?([0-9n]+)\}?)$/i);
+    if (directSquareMatch) {
+      const directSquareSuggestion = `${directSquareMatch[1]}^{${directSquareMatch[2]}}`;
+      if (
+        directSquareSuggestion !== queryTerm &&
+        !searchValue.includes(directSquareSuggestion) &&
+        !suggestions.includes(directSquareSuggestion)
+      ) {
+        suggestions.unshift(directSquareSuggestion);
+      }
+    }
+
     const trigNames = ['sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'cosec'];
     const alphaTail = (queryTermText || queryTerm || '').match(/[A-Za-z]+$/);
     const trigPrefix = alphaTail ? alphaTail[0].toLowerCase() : '';
@@ -773,7 +791,7 @@ function handleInputChange() {
     if (suggestions.length > 0) {
       const rawStart = start + termStartOffset;
       const rawEnd = rawStart + queryTerm.length;
-      const replaceableCharRegex = /[A-Za-z0-9_\\√∛∜α-ωΑ-Ωπθδλμσωβγ]/;
+      const replaceableCharRegex = /[A-Za-z0-9_\\^{}()√∛∜α-ωΑ-Ωπθδλμσωβγ⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ]/;
       let replaceStart = rawStart;
       let replaceEnd = rawEnd;
 
