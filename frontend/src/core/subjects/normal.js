@@ -22,23 +22,6 @@
     return output;
   }
 
-  function buildFractionAmbiguityCandidates(input){
-    const raw = String(input ?? '').trim().replace(/\s+/g, '');
-    if (!raw || !raw.includes('/')) return [];
-
-    const match = raw.match(/^([+\-]?\d+(?:\.\d+)?)\/([+\-]?\d+(?:\.\d+)?)([A-Za-z\\α-ωΑ-Ωπθδλμσωβγ][A-Za-z0-9_\\^{}α-ωΑ-Ωπθδλμσωβγ]*)$/i);
-    if (!match) return [];
-
-    const numerator = match[1];
-    const denominator = match[2];
-    const tail = match[3];
-
-    return [
-      `\\frac{${numerator}}{${denominator}}${tail}`,
-      `\\frac{${numerator}}{${denominator}${tail}}`
-    ];
-  }
-
   // Export normal/general rules for centralized compilation in mathToLatex.js
   const NORMAL_RULES = [
     ["%over%", "\\frac{$1}{$2}"],
@@ -128,9 +111,14 @@
     if (typeof globalThis !== 'undefined'){
     globalThis.NORMAL_RULES = NORMAL_RULES;
     globalThis.normalizeCommonMathTypos = normalizeCommonMathTypos;
-    globalThis.buildFractionAmbiguityCandidates = buildFractionAmbiguityCandidates;
   }
+
+  const exportedFractionBuilder =
+    typeof globalThis !== 'undefined' && typeof globalThis.buildFractionAmbiguityCandidates === 'function'
+      ? globalThis.buildFractionAmbiguityCandidates
+      : () => [];
+
   if (typeof module !== 'undefined' && module.exports){
-    module.exports = { NORMAL_RULES, normalizeCommonMathTypos, buildFractionAmbiguityCandidates };
+    module.exports = { NORMAL_RULES, normalizeCommonMathTypos, buildFractionAmbiguityCandidates: exportedFractionBuilder };
   }
 })();

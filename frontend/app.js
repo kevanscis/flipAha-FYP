@@ -662,6 +662,19 @@ function handleInputChange() {
               if (looksLikeTrigPiFraction) {
                 continue;
               }
+
+              const leftFragment = expr.slice(0, i);
+              const rightFragment = expr.slice(i + 1);
+              const leftTrimmed = leftFragment.trimEnd();
+              const rightTrimmed = rightFragment.trimStart();
+              const leftChar = leftTrimmed[leftTrimmed.length - 1] || '';
+              const rightChar = rightTrimmed[0] || '';
+              const slashLooksLikeFraction = /[A-Za-z0-9)\]}'\\πθα-ω]/i.test(leftChar)
+                && /[A-Za-z0-9(\[{'\\πθα-ω]/i.test(rightChar);
+
+              if (slashLooksLikeFraction) {
+                continue;
+              }
             }
             lastOperatorIndex = i;
             continue;
@@ -726,7 +739,9 @@ function handleInputChange() {
     if (trailingTrigStart !== -1) {
       const trailingTrigTerm = query.substring(trailingTrigStart).trim();
       const isCompactTrigAmbiguity = /^(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)\s*\d*[a-zα-ω\\()]+\s*[+\-].+/i.test(trailingTrigTerm);
-      const shouldPreferTrailingTrig = trailingTrigStart > termStartOffset || isCompactTrigAmbiguity;
+      const leadingSegment = query.substring(termStartOffset, trailingTrigStart).trim();
+      const hasLeadingNumericFactor = /^[-+]?\d+(?:\.\d+)?(?:\s*\/\s*[-+]?\d+(?:\.\d+)?)?$/.test(leadingSegment);
+      const shouldPreferTrailingTrig = (trailingTrigStart > termStartOffset && !hasLeadingNumericFactor) || isCompactTrigAmbiguity;
 
       if (shouldPreferTrailingTrig) {
         queryTerm = trailingTrigTerm;
