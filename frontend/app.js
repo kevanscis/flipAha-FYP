@@ -239,6 +239,24 @@ function normalizeMathLiveArtifacts(value) {
 function normalizeToLatex(input) {
   let s = normalizeMathLiveArtifacts(input);
 
+  const normalizeInverseAlias = (value, aliasPattern, canonicalFunc) => {
+    const regex = new RegExp(
+      `(^|[^A-Za-z\\\\])(?:\\\\)?(?:${aliasPattern})(?:\\s*(?:\\^\\s*\\{?\\s*-?1\\s*\\}?|[−-]\\s*1|⁻¹))?\\s*(\\([^)]*\\)|[A-Za-z0-9_\\\\α-ωΑ-Ωπθ]+)?`,
+      'gi'
+    );
+
+    return value.replace(regex, (match, prefix, rawArg) => {
+      const arg = String(rawArg || '').trim();
+      if (!arg) return `${prefix}${canonicalFunc}^{-1}`;
+      if (arg.startsWith('(')) return `${prefix}${canonicalFunc}^{-1}${arg}`;
+      return `${prefix}${canonicalFunc}^{-1}(${arg})`;
+    });
+  };
+
+  s = normalizeInverseAlias(s, 'arcsin|asin', '\\sin');
+  s = normalizeInverseAlias(s, 'arccos|acos', '\\cos');
+  s = normalizeInverseAlias(s, 'arctan|atan', '\\tan');
+
   // Logs
   s = s.replace(/\blog\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/g, '\\log_{$1}($2)');
   s = s.replace(/\blog_([A-Za-z0-9]+)\s*\(\s*([^)]+)\s*\)/g, '\\log_{$1}($2)');
@@ -1020,6 +1038,11 @@ function computeSuggestionReplacementRange(latex, currentValue = '') {
   const trigSuffixMatch = queryText.match(/^(.*?)(sin|cos|tan|sec|csc|cot|cosec)$/i);
   if (isTrigSuggestion && trigSuffixMatch && trigSuffixMatch[1]) {
     const prefix = trigSuffixMatch[1];
+    const normalizedPrefix = prefix.toLowerCase();
+    const isInverseAliasPrefix = normalizedPrefix === 'arc' || normalizedPrefix === 'a';
+    if (isInverseAliasPrefix) {
+      return { replaceStart: start, replaceEnd: end };
+    }
     return { replaceStart: start + prefix.length, replaceEnd: end };
   }
 

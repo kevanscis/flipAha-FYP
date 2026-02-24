@@ -122,10 +122,20 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     }
   }
 
+  const shouldSkipCentralRuleMatching =
+    typeof globalThis !== 'undefined' &&
+    globalThis.subjects &&
+    globalThis.subjects.trig &&
+    typeof globalThis.subjects.trig.shouldSkipCentralRuleMatching === 'function'
+      ? globalThis.subjects.trig.shouldSkipCentralRuleMatching(queryTerm, allSuggestions)
+      : false;
+
   // 2. Try centralized rule matching (all subject rules)
-  const matchResult = matchRules(queryTerm);
-  if (matchResult.found) {
-    allSuggestions.push(...matchResult.suggestions);
+  if (!shouldSkipCentralRuleMatching) {
+    const matchResult = matchRules(queryTerm);
+    if (matchResult.found) {
+      allSuggestions.push(...matchResult.suggestions);
+    }
   }
 
   // 2.5 Fraction ambiguity (algebra): a/bx can mean (a/b)x or a/(bx)

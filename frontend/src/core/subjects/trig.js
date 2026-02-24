@@ -63,8 +63,17 @@
       .replace(/omgea|omeag|oemga|omeega/gi, 'omega');
   }
 
+  function shouldSkipCentralRuleMatching(input, existingSuggestions = []) {
+    const text = String(input ?? '').trim();
+    if (!text) return false;
+    if (!Array.isArray(existingSuggestions) || existingSuggestions.length === 0) return false;
+
+    const looksLikeInverseTrig = /^(?:\\)?(?:(?:arc|a)(?:sin|cos|tan)|(?:sin|cos|tan|sec|csc|cot|cosec)\s*(?:\^\s*\{?\s*-?1\s*\}?|[−-]\s*1))(?:\s*(?:\(|[a-z\\θπα-ω]))?/i.test(text);
+    return looksLikeInverseTrig;
+  }
+
   function getFuzzySuggestions(value, maxSuggestions = 5){
-    const normalized = String(value).toLowerCase().replace(/\\/g,'');
+    const normalized = String(value).toLowerCase().replace(/\\/g,'').replace(/[^a-z]/g, '');
     const candidates = FUZZY_TRIG_RULES.map(r=>({...r, distance:levenshteinDistance(normalized,r.key)}));
     candidates.sort((a,b)=>a.distance-b.distance);
     const best = candidates[0];
@@ -96,6 +105,23 @@
 
       return result;
     };
+
+    const inverseAliasMatch = normalized.match(/^(?:\\)?(arc|a)(sin|cos|tan)(?:\s*(?:\^\s*\{?\s*-?1\s*\}?|[−-]\s*1|⁻¹))?\s*(?:\(\s*([^)]*)\s*\)|([a-z0-9\\πθα-ω]+))?\s*$/i);
+    if (inverseAliasMatch) {
+      const func = String(inverseAliasMatch[2] || '').toLowerCase();
+      const parenArg = inverseAliasMatch[3];
+      const inlineArg = inverseAliasMatch[4];
+      const rawArg = typeof parenArg === 'string' && parenArg.length > 0
+        ? parenArg
+        : (inlineArg || '');
+
+      return {
+        function: func,
+        modifier: '^-1',
+        argument: stripUnmatchedTrailingParens(rawArg),
+        matched: true
+      };
+    }
 
     const patterns = [
       /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*\(\s*(.*)$/i,
@@ -372,7 +398,8 @@
       generateTrigSuggestions,
       getFuzzySuggestions,
       normalizeTrigArgument,
-      sanitizeIncompleteTrigOperand
+      sanitizeIncompleteTrigOperand,
+      shouldSkipCentralRuleMatching
     };
   }
   if (typeof module !== 'undefined' && module.exports){
@@ -382,7 +409,8 @@
       generateTrigSuggestions,
       getFuzzySuggestions,
       normalizeTrigArgument,
-      sanitizeIncompleteTrigOperand
+      sanitizeIncompleteTrigOperand,
+      shouldSkipCentralRuleMatching
     };
   }
 })();
