@@ -136,27 +136,112 @@ function renderActiveTrendLine(data, granularity) {
             .tickFormat(d3.format('d')) // remove decimals
         );
 
-    // Line generator
+    // Add gradient definition
+    svg.append('defs').append('linearGradient')
+        .attr('id', 'gradientActiveTrend')
+        .attr('x1', '0%')
+        .attr('y1', '0%')
+        .attr('x2', '0%')
+        .attr('y2', '100%')
+        .selectAll('stop')
+        .data([{ offset: '0%', color: '#0d6efd' }, { offset: '100%', color: '#0d6efd00' }])
+        .enter()
+        .append('stop')
+        .attr('offset', d => d.offset)
+        .attr('stop-color', d => d.color);
+
+    // Line generator with smooth curve
     const line = d3.line()
+        .curve(d3.curveMonotoneX)
         .x(d => granularity === "daily" ? x(d.date) : x(d.label))
         .y(d => y(d.count));
+
+    // Area for gradient fill
+    const area = d3.area()
+        .curve(d3.curveMonotoneX)
+        .x(d => granularity === "daily" ? x(d.date) : x(d.label))
+        .y0(height - margin.bottom)
+        .y1(d => y(d.count));
+
+    svg.append('path')
+        .datum(data)
+        .attr('fill', 'url(#gradientActiveTrend)')
+        .attr('d', area);
 
     svg.append('path')
         .datum(data)
         .attr('fill', 'none')
         .attr('stroke', '#0d6efd')
-        .attr('stroke-width', 2)
+        .attr('stroke-width', 2.5)
         .attr('d', line);
 
-    // Points
-    svg.selectAll('circle')
-        .data(data)
-        .enter()
-        .append('circle')
-        .attr('cx', d => granularity === "daily" ? x(d.date) : x(d.label))
-        .attr('cy', d => y(d.count))
-        .attr('r', 4)
+    // Hover tooltip
+    const tooltip = svg.append('g')
+        .attr('class', 'tooltip')
+        .style('display', 'none');
+
+    tooltip.append('line')
+        .attr('class', 'tooltip-line')
+        .attr('stroke', '#999')
+        .attr('stroke-width', 1)
+        .attr('stroke-dasharray', '4');
+
+    tooltip.append('circle')
+        .attr('class', 'tooltip-dot')
+        .attr('r', 5)
         .attr('fill', '#0d6efd');
+
+    tooltip.append('text')
+        .attr('class', 'tooltip-text')
+        .attr('text-anchor', 'middle')
+        .attr('dy', '-10')
+        .style('font-size', '12px')
+        .style('font-weight', 'bold')
+        .style('fill', '#0d6efd')
+        .style('background', 'white')
+        .style('padding', '4px 8px');
+
+    // Mousemove handler
+    const handleMouseMove = function(event) {
+        const [mouseX] = d3.pointer(event);
+        let closestData = null;
+        let closestDistance = Infinity;
+
+        data.forEach(d => {
+            const pointX = granularity === "daily" ? x(d.date) : x(d.label);
+            const distance = Math.abs(pointX - mouseX);
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestData = d;
+            }
+        });
+
+        if (closestDistance < 30) {
+            const pointX = granularity === "daily" ? x(closestData.date) : x(closestData.label);
+            const pointY = y(closestData.count);
+
+            tooltip.style('display', null);
+            tooltip.select('.tooltip-line')
+                .attr('x1', pointX)
+                .attr('y1', margin.top)
+                .attr('x2', pointX)
+                .attr('y2', height - margin.bottom);
+
+            tooltip.select('.tooltip-dot')
+                .attr('cx', pointX)
+                .attr('cy', pointY);
+
+            tooltip.select('.tooltip-text')
+                .attr('x', pointX)
+                .attr('y', pointY)
+                .text(closestData.count);
+        } else {
+            tooltip.style('display', 'none');
+        }
+    };
+
+    svg.on('mousemove', handleMouseMove)
+        .on('mouseleave', () => tooltip.style('display', 'none'));
 }
 
 // default load
@@ -182,7 +267,7 @@ async function loadNewReturningUsers() {
 function renderNewReturningChart(values) {
     const width = 500;
     const height = 350;
-    const margin = { top: 30, right: 30, bottom: 50, left: 50 };
+    const radius = Math.min(width, height) / 2 - 50;
 
     const svg = d3.select('#newReturningChart')
         .attr('width', width)
@@ -190,38 +275,73 @@ function renderNewReturningChart(values) {
 
     svg.selectAll('*').remove();
 
-    const x = d3.scaleBand()
-        .domain(values.map(d => d.label))
-        .range([margin.left, width - margin.right])
-        .padding(0.3);
+    const colors = {
+        'New': '#0d6efd',
+        'Returning': '#198754'
+    };
 
-    const y = d3.scaleLinear()
-        .domain([0, d3.max(values, d => d.value) || 1])
-        .nice()
-        .range([height - margin.bottom, margin.top]);
+    const g = svg.append('g')
+        .attr('transform', `translate(${width / 2},${height / 2})`);
 
-    svg.append('g')
-        .attr('transform', `translate(0,${height - margin.bottom})`)
-        .call(d3.axisBottom(x));
+    const pie = d3.pie().value(d => d.value);
+    const arc = d3.arc().innerRadius(radius * 0.5).outerRadius(radius);
+    const arcHover = d3.arc().innerRadius(radius * 0.5).outerRadius(radius + 10);
 
-    const yMax = Math.ceil(d3.max(values, d => d.value) || 1);
-
-    svg.append('g')
-        .attr('transform', `translate(${margin.left},0)`)
-        .call(
-            d3.axisLeft(y)
-            .tickValues(d3.range(0, yMax + 1, 1))  // 0,1,2,3...
-            .tickFormat(d3.format('d'))
-        );
-
-    svg.selectAll('rect')
-        .data(values)
+    const slices = g.selectAll('.slice')
+        .data(pie(values))
         .enter()
-        .append('rect')
-        .attr('x', d => x(d.label))
-        .attr('y', d => y(d.value))
-        .attr('height', d => y(0) - y(d.value))
-        .attr('width', x.bandwidth());
+        .append('g')
+        .attr('class', 'slice');
+
+    slices.append('path')
+        .attr('d', arc)
+        .attr('fill', d => colors[d.data.label])
+        .attr('opacity', 0.85)
+        .attr('stroke', 'white')
+        .attr('stroke-width', 2)
+        .style('cursor', 'pointer')
+        .on('mouseover', function() {
+            d3.select(this).attr('opacity', 1).attr('d', arcHover);
+        })
+        .on('mouseout', function() {
+            d3.select(this).attr('opacity', 0.85).attr('d', arc);
+        });
+
+    // Labels on the donut
+    slices.append('text')
+        .attr('transform', d => `translate(${arc.centroid(d)})`)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'middle')
+        .attr('font-size', '16px')
+        .attr('font-weight', 'bold')
+        .attr('fill', 'white')
+        .text(d => {
+            const total = d3.sum(values, p => p.value);
+            const percent = ((d.data.value / total) * 100).toFixed(0);
+            return percent + '%';
+        });
+
+    // Legend - Bottom center
+    const legend = svg.append('g')
+        .attr('class', 'legend')
+        .attr('transform', `translate(${width / 2 - 100}, ${height - 40})`);
+
+    values.forEach((d, i) => {
+        const legendRow = legend.append('g')
+            .attr('transform', `translate(${i * 200}, 0)`);
+
+        legendRow.append('rect')
+            .attr('width', 12)
+            .attr('height', 12)
+            .attr('fill', colors[d.label]);
+
+        legendRow.append('text')
+            .attr('x', 18)
+            .attr('y', 10)
+            .style('font-size', '13px')
+            .style('font-weight', 'bold')
+            .text(`${d.label} (${d.value})`);
+    });
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Question Volume Over Time
@@ -261,9 +381,31 @@ function renderQuestionVolumeChart(data) {
         .nice()
         .range([height - margin.bottom, margin.top]);
 
+    // Add gradient definition
+    svg.append('defs').append('linearGradient')
+        .attr('id', 'gradientQuestionVolume')
+        .attr('x1', '0%')
+        .attr('y1', '0%')
+        .attr('x2', '0%')
+        .attr('y2', '100%')
+        .selectAll('stop')
+        .data([{ offset: '0%', color: '#0d6efd' }, { offset: '100%', color: '#0d6efd00' }])
+        .enter()
+        .append('stop')
+        .attr('offset', d => d.offset)
+        .attr('stop-color', d => d.color);
+
     const line = d3.line()
+        .curve(d3.curveMonotoneX)
         .x(d => x(d.date))
         .y(d => y(d.count));
+
+    // Area for gradient fill
+    const area = d3.area()
+        .curve(d3.curveMonotoneX)
+        .x(d => x(d.date))
+        .y0(height - margin.bottom)
+        .y1(d => y(d.count));
 
     svg.append('g')
         .attr('transform', `translate(0,${height - margin.bottom})`)
@@ -279,23 +421,83 @@ function renderQuestionVolumeChart(data) {
             .tickFormat(d3.format('d'))
         );
 
+    svg.append('path')
+        .datum(data)
+        .attr('fill', 'url(#gradientQuestionVolume)')
+        .attr('d', area);
 
     svg.append('path')
         .datum(data)
         .attr('fill', 'none')
         .attr('stroke', '#0d6efd')
-        .attr('stroke-width', 2)
+        .attr('stroke-width', 2.5)
         .attr('d', line);
 
-    // Points
-    svg.selectAll('circle')
-        .data(data)
-        .enter()
-        .append('circle')
-        .attr('cx', d => x(d.date))
-        .attr('cy', d => y(d.count))
-        .attr('r', 4)
+    // Hover tooltip
+    const tooltip = svg.append('g')
+        .attr('class', 'tooltip')
+        .style('display', 'none');
+
+    tooltip.append('line')
+        .attr('class', 'tooltip-line')
+        .attr('stroke', '#999')
+        .attr('stroke-width', 1)
+        .attr('stroke-dasharray', '4');
+
+    tooltip.append('circle')
+        .attr('class', 'tooltip-dot')
+        .attr('r', 5)
         .attr('fill', '#0d6efd');
+
+    tooltip.append('text')
+        .attr('class', 'tooltip-text')
+        .attr('text-anchor', 'middle')
+        .attr('dy', '-10')
+        .style('font-size', '12px')
+        .style('font-weight', 'bold')
+        .style('fill', '#0d6efd');
+
+    // Mousemove handler
+    const handleMouseMove = function(event) {
+        const [mouseX] = d3.pointer(event);
+        let closestData = null;
+        let closestDistance = Infinity;
+
+        data.forEach(d => {
+            const pointX = x(d.date);
+            const distance = Math.abs(pointX - mouseX);
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestData = d;
+            }
+        });
+
+        if (closestDistance < 30) {
+            const pointX = x(closestData.date);
+            const pointY = y(closestData.count);
+
+            tooltip.style('display', null);
+            tooltip.select('.tooltip-line')
+                .attr('x1', pointX)
+                .attr('y1', margin.top)
+                .attr('x2', pointX)
+                .attr('y2', height - margin.bottom);
+
+            tooltip.select('.tooltip-dot')
+                .attr('cx', pointX)
+                .attr('cy', pointY);
+
+            tooltip.select('.tooltip-text')
+                .attr('x', pointX)
+                .attr('y', pointY)
+                .text(closestData.count);
+        } else {
+            tooltip.style('display', 'none');
+        }
+    };
+
+    svg.on('mousemove', handleMouseMove)
+        .on('mouseleave', () => tooltip.style('display', 'none'));
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

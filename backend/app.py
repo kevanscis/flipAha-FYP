@@ -413,7 +413,7 @@ def log_input_method():
                     input_method, topic
                 )
                 VALUES (?, ?, ?, ?, ?)
-            """, (question_id, user_id, ts, input_method, 'others'))
+            """, (question_id, user_id, ts, input_method, 'Other'))
         conn.close()
         
         return jsonify({
