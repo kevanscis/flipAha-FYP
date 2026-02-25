@@ -106,7 +106,7 @@
       return result;
     };
 
-    const inverseAliasMatch = normalized.match(/^(?:\\)?(arc|a)(sin|cos|tan)(?:\s*(?:\^\s*\{?\s*-?1\s*\}?|[−-]\s*1|⁻¹))?\s*(?:\(\s*([^)]*)\s*\)|([a-z0-9\\πθα-ω]+))?\s*$/i);
+    const inverseAliasMatch = normalized.match(/^(?:\\)?(arc|a)(sin|cos|tan)(?:\s*(?:\^\s*\{?\s*-?1\s*\}?|[−-]\s*1|⁻¹))?\s*(?:\(\s*([^)]*)\s*\)|([a-z0-9\\πθα-ω+\-*/.^{}]+))?\s*$/i);
     if (inverseAliasMatch) {
       const func = String(inverseAliasMatch[2] || '').toLowerCase();
       const parenArg = inverseAliasMatch[3];
@@ -114,6 +114,19 @@
       const rawArg = typeof parenArg === 'string' && parenArg.length > 0
         ? parenArg
         : (inlineArg || '');
+
+      return {
+        function: func,
+        modifier: '^-1',
+        argument: stripUnmatchedTrailingParens(rawArg),
+        matched: true
+      };
+    }
+
+    const inverseAliasOpenParenMatch = normalized.match(/^(?:\\)?(arc|a)(sin|cos|tan)(?:\s*(?:\^\s*\{?\s*-?1\s*\}?|[−-]\s*1|⁻¹))?\s*\(\s*(.*)$/i);
+    if (inverseAliasOpenParenMatch) {
+      const func = String(inverseAliasOpenParenMatch[2] || '').toLowerCase();
+      const rawArg = String(inverseAliasOpenParenMatch[3] || '');
 
       return {
         function: func,
@@ -224,10 +237,26 @@
     let output = String(rawOperand || '').trim();
     if (!output) return output;
 
+    const isWrappedByOuterParens = (text) => {
+      if (!text.startsWith('(') || !text.endsWith(')')) return false;
+      let depth = 0;
+      for (let i = 0; i < text.length; i += 1) {
+        const ch = text[i];
+        if (ch === '(') depth += 1;
+        if (ch === ')') depth -= 1;
+        if (depth === 0 && i < text.length - 1) return false;
+      }
+      return depth === 0;
+    };
+
     const openCount = (output.match(/\(/g) || []).length;
     const closeCount = (output.match(/\)/g) || []).length;
     if (openCount > closeCount && output.startsWith('(')) {
       output = output.slice(1).trim();
+    }
+
+    while (isWrappedByOuterParens(output)) {
+      output = output.slice(1, -1).trim();
     }
 
     return output;
@@ -235,10 +264,11 @@
 
   function generateTrigExpressionSuggestions(rawArg, latexFunc, modifierLatex){
     const suggestions = new Set();
-    const normalizedArg = normalizeTrigArgument(rawArg);
+    const cleanRawArg = sanitizeIncompleteTrigOperand(rawArg);
+    const normalizedArg = normalizeTrigArgument(cleanRawArg);
     suggestions.add(`${latexFunc}${modifierLatex}(${normalizedArg})`);
 
-    const compactRawArg = String(rawArg).trim().replace(/\s+/g, '');
+    const compactRawArg = String(cleanRawArg).trim().replace(/\s+/g, '');
     const fractionAmbiguities = (typeof globalThis !== 'undefined' && typeof globalThis.buildFractionAmbiguityCandidates === 'function')
       ? globalThis.buildFractionAmbiguityCandidates(compactRawArg)
       : [];
@@ -252,7 +282,7 @@
     }
 
     if (!modifierLatex) {
-      const compactRaw = String(rawArg).trim().replace(/\s+/g, '');
+      const compactRaw = String(cleanRawArg).trim().replace(/\s+/g, '');
       const powerAmbigMatch = compactRaw.match(/^(\d+)([a-zα-ω\\]+)([+\-].+)$/i);
       if (powerAmbigMatch) {
         const coeff = powerAmbigMatch[1];
@@ -274,7 +304,7 @@
       }
     }
 
-    const compact = String(rawArg).trim().replace(/\s+/g, '');
+    const compact = String(cleanRawArg).trim().replace(/\s+/g, '');
     const ambigMatch = compact.match(/^(.+)\+((\d*)?(?:\\pi|π|pi))\/(\d+)$/i);
     if (ambigMatch) {
       const lhsRaw = ambigMatch[1];
@@ -303,7 +333,7 @@
     if (modifier){ if (modifier.includes('-1')||modifier==='^-1') modifierLatex='^{-1}'; else if (modifier==='^2') modifierLatex='^{2}'; else if (modifier==='^3') modifierLatex='^{3}'; }
     if (argument){
       const rawArg = String(argument).trim();
-      const canonicalArg = normalizeCommonTypos(rawArg);
+      const canonicalArg = normalizeCommonTypos(sanitizeIncompleteTrigOperand(rawArg));
 
       if (/[+\-*/]/.test(canonicalArg) || /(?:pi|π)/i.test(canonicalArg)) {
         return generateTrigExpressionSuggestions(canonicalArg, latexFunc, modifierLatex).slice(0, maxSuggestions);

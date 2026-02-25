@@ -1039,7 +1039,7 @@ function computeSuggestionReplacementRange(latex, currentValue = '') {
   if (isTrigSuggestion && trigSuffixMatch && trigSuffixMatch[1]) {
     const prefix = trigSuffixMatch[1];
     const normalizedPrefix = prefix.toLowerCase();
-    const isInverseAliasPrefix = normalizedPrefix === 'arc' || normalizedPrefix === 'a';
+    const isInverseAliasPrefix = /^(a|ar|arc)$/.test(normalizedPrefix);
     if (isInverseAliasPrefix) {
       return { replaceStart: start, replaceEnd: end };
     }
