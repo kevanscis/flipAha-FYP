@@ -312,8 +312,8 @@ async function loadInputMethodTrends() {
 
 function renderInputMethodTrendChart(data) {
     const width = 500;
-    const height = 250;
-    const margin = { top: 30, right: 30, bottom: 50, left: 50 };
+    const height = 350;
+    const radius = Math.min(width, height) / 2 - 50;
 
     const svg = d3.select('#inputMethodTrendChart')
         .attr('width', width)
@@ -321,88 +321,89 @@ function renderInputMethodTrendChart(data) {
 
     svg.selectAll('*').remove();
 
+    // Calculate totals for each input method
+    let typingTotal = 0;
+    let suggestionTotal = 0;
+    let imageTotal = 0;
+
     data.forEach(d => {
-        d.typing = +d.typing;
-        d.suggestion = +d.suggestion;
-        d.image = +d.image;
+        typingTotal += +d.typing;
+        suggestionTotal += +d.suggestion;
+        imageTotal += +d.image;
     });
 
-    const x = d3.scaleBand()
-        .domain(data.map(d => d.day))
-        .range([margin.left, width - margin.right])
-        .padding(0.3);
-
-    // Stack the data
-    const stackKeys = ['typing', 'suggestion', 'image'];
-    const stack = d3.stack().keys(stackKeys);
-    const stackedData = stack(data);
-
-    const yMax = d3.max(stackedData, series => 
-        d3.max(series, d => d[1])
-    ) || 1;
-
-    const y = d3.scaleLinear()
-        .domain([0, yMax])
-        .nice()
-        .range([height - margin.bottom, margin.top]);
+    const pieData = [
+        { label: 'Typing', value: typingTotal },
+        { label: 'Suggestion', value: suggestionTotal },
+        { label: 'Image', value: imageTotal }
+    ];
 
     const colors = {
-        typing: '#0d6efd',
-        suggestion: '#198754',
-        image: '#fd7e14'
+        'Typing': '#0d6efd',
+        'Suggestion': '#198754',
+        'Image': '#fd7e14'
     };
 
-    // X axis
-    svg.append('g')
-        .attr('transform', `translate(0,${height - margin.bottom})`)
-        .call(d3.axisBottom(x))
-        .selectAll('text')
-        .style('font-size', '11px')
-        .attr('transform', 'rotate(45)')
-        .attr('text-anchor', 'start');
+    const g = svg.append('g')
+        .attr('transform', `translate(${width / 2},${height / 2})`);
 
-    const yMaxInt = Math.ceil(yMax || 1);
+    const pie = d3.pie().value(d => d.value);
+    const arc = d3.arc().innerRadius(0).outerRadius(radius);
+    const arcHover = d3.arc().innerRadius(0).outerRadius(radius + 10);
 
-    // Y axis
-    svg.append('g')
-        .attr('transform', `translate(${margin.left},0)`)
-        .call(
-            d3.axisLeft(y)
-            .tickValues(d3.range(0, yMaxInt + 1, 1))
-            .tickFormat(d3.format('d'))
-        );
-
-    // Create stacked bars
-    svg.selectAll('.series')
-        .data(stackedData)
+    const slices = g.selectAll('.slice')
+        .data(pie(pieData))
         .enter()
         .append('g')
-        .attr('class', 'series')
-        .attr('fill', d => colors[d.key])
-        .selectAll('rect')
-        .data(d => d)
-        .enter()
-        .append('rect')
-        .attr('x', d => x(d.data.day))
-        .attr('y', d => y(d[1]))
-        .attr('height', d => y(d[0]) - y(d[1]))
-        .attr('width', x.bandwidth())
+        .attr('class', 'slice');
+
+    slices.append('path')
+        .attr('d', arc)
+        .attr('fill', d => colors[d.data.label])
         .attr('opacity', 0.85)
-        .on('mouseover', function() { d3.select(this).attr('opacity', 1); })
-        .on('mouseout', function() { d3.select(this).attr('opacity', 0.85); });
+        .attr('stroke', 'white')
+        .attr('stroke-width', 2)
+        .on('mouseover', function() {
+            d3.select(this).attr('opacity', 1).attr('d', arcHover);
+        })
+        .on('mouseout', function() {
+            d3.select(this).attr('opacity', 0.85).attr('d', arc);
+        });
 
-    // Legend
-    const legendX = width - 130;
-    const legendY = margin.top;
+    // Labels on the pie
+    slices.append('text')
+        .attr('transform', d => `translate(${arc.centroid(d)})`)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'middle')
+        .attr('font-size', '14px')
+        .attr('font-weight', 'bold')
+        .attr('fill', 'white')
+        .text(d => {
+            const total = d3.sum(pieData, p => p.value);
+            const percent = ((d.data.value / total) * 100).toFixed(0);
+            return percent + '%';
+        });
 
-    svg.append('rect').attr('x', legendX).attr('y', legendY).attr('width', 12).attr('height', 12).attr('fill', colors.typing);
-    svg.append('text').attr('x', legendX + 18).attr('y', legendY + 10).text('Typing').style('font-size', '12px');
+    // Legend - Top right
+    const legend = svg.append('g')
+        .attr('class', 'legend')
+        .attr('transform', `translate(${width - 140}, 20)`);
 
-    svg.append('rect').attr('x', legendX).attr('y', legendY + 20).attr('width', 12).attr('height', 12).attr('fill', colors.suggestion);
-    svg.append('text').attr('x', legendX + 18).attr('y', legendY + 30).text('Suggestion').style('font-size', '12px');
+    pieData.forEach((d, i) => {
+        const legendRow = legend.append('g')
+            .attr('transform', `translate(0, ${i * 25})`);
 
-    svg.append('rect').attr('x', legendX).attr('y', legendY + 40).attr('width', 12).attr('height', 12).attr('fill', colors.image);
-    svg.append('text').attr('x', legendX + 18).attr('y', legendY + 50).text('Image').style('font-size', '12px');
+        legendRow.append('rect')
+            .attr('width', 12)
+            .attr('height', 12)
+            .attr('fill', colors[d.label]);
+
+        legendRow.append('text')
+            .attr('x', 18)
+            .attr('y', 10)
+            .style('font-size', '12px')
+            .text(`${d.label} (${d.value})`);
+    });
 }
 
 loadNewReturningUsers();
@@ -553,10 +554,68 @@ function renderSuggestionFeedback(data) {
     const notUseful = data.not_useful || (total - useful);
     const rate = total > 0 ? Math.round((useful / total) * 100) : 0;
 
+    // Determine emoji and color based on rate
+    let emoji, sentiment, color;
+    
+    if (rate < 20) {
+        emoji = '😠';
+        sentiment = 'Poor';
+        color = '#dc3545';
+    } else if (rate < 40) {
+        emoji = '😕';
+        sentiment = 'Fair';
+        color = '#fd7e14';
+    } else if (rate < 60) {
+        emoji = '😐';
+        sentiment = 'Neutral';
+        color = '#ffc107';
+    } else if (rate < 80) {
+        emoji = '🙂';
+        sentiment = 'Good';
+        color = '#17a2b8';
+    } else {
+        emoji = '😄';
+        sentiment = 'Excellent';
+        color = '#198754';
+    }
+
+    // Update the emoji display
+    const feedbackEmoji = document.getElementById('sfEmoji');
+    if (feedbackEmoji) {
+        feedbackEmoji.textContent = emoji;
+        feedbackEmoji.style.fontSize = '72px';
+        feedbackEmoji.style.margin = '20px 0';
+    }
+
+    // Update sentiment text
+    const feedbackSentiment = document.getElementById('sfSentiment');
+    if (feedbackSentiment) {
+        feedbackSentiment.textContent = sentiment;
+        feedbackSentiment.style.fontSize = '18px';
+        feedbackSentiment.style.fontWeight = 'bold';
+        feedbackSentiment.style.color = color;
+        feedbackSentiment.style.margin = '10px 0';
+    }
+
+    // Update rate with color
+    const feedbackRate = document.getElementById('sfRate');
+    if (feedbackRate) {
+        feedbackRate.textContent = rate + '%';
+        feedbackRate.style.fontSize = '28px';
+        feedbackRate.style.fontWeight = 'bold';
+        feedbackRate.style.color = color;
+    }
+
+    // Update numbers
     document.getElementById('sfTotal').textContent = total;
     document.getElementById('sfUseful').textContent = useful;
     document.getElementById('sfNotUseful').textContent = notUseful;
-    document.getElementById('sfRate').textContent = rate + '%';
+
+    // Optional: add a progress bar background
+    const feedbackContainer = document.querySelector('[id*="sfContainer"], .suggestion-feedback');
+    if (feedbackContainer) {
+        feedbackContainer.style.background = `linear-gradient(90deg, ${color}15 0%, ${color}15 ${rate}%, transparent ${rate}%, transparent 100%)`;
+    }
 }
 
 // load suggestion feedback after other data
