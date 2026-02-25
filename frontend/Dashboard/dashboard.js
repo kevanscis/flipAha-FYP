@@ -1,5 +1,13 @@
 const API_BASE_URL = 'http://localhost:5000';
 
+function goHome(){
+  window.location.href = `${API_BASE_URL}/`;
+}
+
+function goLogout() {
+  window.location.href = `${API_BASE_URL}/login`;
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Active Users (Basic)
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -24,47 +32,6 @@ async function loadActiveUsers() {
   ];
 }
 
-// Basic bar chart version (replaced by line chart with granularity buttons)
-// function renderActiveUsersChart(values) {
-//     const width = 500;
-//     const height = 250;
-//     const margin = { top: 30, right: 20, bottom: 50, left: 50 };
-
-//     const svg = d3.select('#activeUsersChart')
-//         .attr('width', width)
-//         .attr('height', height);
-
-//     svg.selectAll('*').remove(); // clear redraw
-
-//     const x = d3.scaleBand()
-//         .domain(values.map(d => d.label))
-//         .range([margin.left, width - margin.right])
-//         .padding(0.3);
-
-//     const y = d3.scaleLinear()
-//         .domain([0, d3.max(values, d => d.value) || 1])
-//         .nice()
-//         .range([height - margin.bottom, margin.top]);
-
-//     svg.append('g')
-//         .attr('transform', `translate(0,${height - margin.bottom})`)
-//         .call(d3.axisBottom(x));
-
-//     svg.append('g')
-//         .attr('transform', `translate(${margin.left},0)`)
-//         .call(d3.axisLeft(y));
-
-//     svg.selectAll('rect')
-//         .data(values)
-//         .enter()
-//         .append('rect')
-//         .attr('x', d => x(d.label))
-//         .attr('y', d => y(d.value))
-//         .attr('height', d => y(0) - y(d.value))
-//         .attr('width', x.bandwidth())
-//         .attr('fill', '#0d6efd');
-// }
-
 loadActiveUsers();
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -78,10 +45,29 @@ async function loadActiveTrend(granularity) {
   renderActiveTrendLine(data, granularity);
 }
 
-document.getElementById("btnDaily").addEventListener("click", () => loadActiveTrend("daily"));
-document.getElementById("btnWeekly").addEventListener("click", () => loadActiveTrend("weekly"));
-document.getElementById("btnMonthly").addEventListener("click", () => loadActiveTrend("monthly"));
-document.getElementById("btnInactive").addEventListener("click", () => loadActiveTrend("inactive"));
+// Helper function to update active button state
+function setActiveButton(buttonId) {
+  const allButtons = document.querySelectorAll('.chart-controls .btn-control');
+  allButtons.forEach(btn => btn.classList.remove('active-btn'));
+  document.getElementById(buttonId).classList.add('active-btn');
+}
+
+document.getElementById("btnDaily").addEventListener("click", () => {
+  setActiveButton("btnDaily");
+  loadActiveTrend("daily");
+});
+document.getElementById("btnWeekly").addEventListener("click", () => {
+  setActiveButton("btnWeekly");
+  loadActiveTrend("weekly");
+});
+document.getElementById("btnMonthly").addEventListener("click", () => {
+  setActiveButton("btnMonthly");
+  loadActiveTrend("monthly");
+});
+document.getElementById("btnInactive").addEventListener("click", () => {
+  setActiveButton("btnInactive");
+  loadActiveTrend("inactive");
+});
 
 function renderActiveTrendLine(data, granularity) {
     const width = 500;
@@ -327,7 +313,7 @@ async function loadInputMethodTrends() {
 function renderInputMethodTrendChart(data) {
     const width = 500;
     const height = 250;
-    const margin = { top: 30, right: 80, bottom: 50, left: 50 };
+    const margin = { top: 30, right: 30, bottom: 50, left: 50 };
 
     const svg = d3.select('#inputMethodTrendChart')
         .attr('width', width)
@@ -335,31 +321,49 @@ function renderInputMethodTrendChart(data) {
 
     svg.selectAll('*').remove();
 
-    const parseDate = d3.timeParse('%Y-%m-%d');
-
     data.forEach(d => {
-        d.date = parseDate(d.day);
         d.typing = +d.typing;
         d.suggestion = +d.suggestion;
+        d.image = +d.image;
     });
 
-    const x = d3.scaleTime()
-        .domain(d3.extent(data, d => d.date))
-        .range([margin.left, width - margin.right]);
+    const x = d3.scaleBand()
+        .domain(data.map(d => d.day))
+        .range([margin.left, width - margin.right])
+        .padding(0.3);
 
-    const yMax = d3.max(data, d => Math.max(d.typing, d.suggestion)) || 1;
+    // Stack the data
+    const stackKeys = ['typing', 'suggestion', 'image'];
+    const stack = d3.stack().keys(stackKeys);
+    const stackedData = stack(data);
+
+    const yMax = d3.max(stackedData, series => 
+        d3.max(series, d => d[1])
+    ) || 1;
+
     const y = d3.scaleLinear()
         .domain([0, yMax])
         .nice()
         .range([height - margin.bottom, margin.top]);
 
-    // Axes
+    const colors = {
+        typing: '#0d6efd',
+        suggestion: '#198754',
+        image: '#fd7e14'
+    };
+
+    // X axis
     svg.append('g')
         .attr('transform', `translate(0,${height - margin.bottom})`)
-        .call(d3.axisBottom(x).ticks(7).tickFormat(d3.timeFormat('%a')));
+        .call(d3.axisBottom(x))
+        .selectAll('text')
+        .style('font-size', '11px')
+        .attr('transform', 'rotate(45)')
+        .attr('text-anchor', 'start');
 
     const yMaxInt = Math.ceil(yMax || 1);
 
+    // Y axis
     svg.append('g')
         .attr('transform', `translate(${margin.left},0)`)
         .call(
@@ -368,70 +372,37 @@ function renderInputMethodTrendChart(data) {
             .tickFormat(d3.format('d'))
         );
 
-
-    // Line generators
-    const lineTyping = d3.line()
-        .x(d => x(d.date))
-        .y(d => y(d.typing));
-
-    const lineSuggestion = d3.line()
-        .x(d => x(d.date))
-        .y(d => y(d.suggestion));
-
-    // Draw lines (use different strokes)
-    svg.append('path')
-        .datum(data)
-        .attr('fill', 'none')
-        .attr('stroke', '#0d6efd')  // typing
-        .attr('stroke-width', 2)
-        .attr('d', lineTyping);
-
-    svg.append('path')
-        .datum(data)
-        .attr('fill', 'none')
-        .attr('stroke', '#198754')  // suggestion
-        .attr('stroke-width', 2)
-        .attr('d', lineSuggestion);
-
-    // Optional: points
-    svg.selectAll('.pt-typing')
-        .data(data)
+    // Create stacked bars
+    svg.selectAll('.series')
+        .data(stackedData)
         .enter()
-        .append('circle')
-        .attr('class', 'pt-typing')
-        .attr('cx', d => x(d.date))
-        .attr('cy', d => y(d.typing))
-        .attr('r', 3)
-        .attr('fill', '#0d6efd');
-
-    svg.selectAll('.pt-suggestion')
-        .data(data)
+        .append('g')
+        .attr('class', 'series')
+        .attr('fill', d => colors[d.key])
+        .selectAll('rect')
+        .data(d => d)
         .enter()
-        .append('circle')
-        .attr('class', 'pt-suggestion')
-        .attr('cx', d => x(d.date))
-        .attr('cy', d => y(d.suggestion))
-        .attr('r', 3)
-        .attr('fill', '#198754');
+        .append('rect')
+        .attr('x', d => x(d.data.day))
+        .attr('y', d => y(d[1]))
+        .attr('height', d => y(d[0]) - y(d[1]))
+        .attr('width', x.bandwidth())
+        .attr('opacity', 0.85)
+        .on('mouseover', function() { d3.select(this).attr('opacity', 1); })
+        .on('mouseout', function() { d3.select(this).attr('opacity', 0.85); });
 
-    // Legend (simple)
-    const legendX = width - margin.right + 10;
+    // Legend
+    const legendX = width - 130;
     const legendY = margin.top;
 
-    svg.append('circle').attr('cx', legendX).attr('cy', legendY).attr('r', 5).attr('fill', '#0d6efd');
-    svg.append('text').attr('x', legendX + 10).attr('y', legendY + 4).text('Typing').style('font-size', '12px');
+    svg.append('rect').attr('x', legendX).attr('y', legendY).attr('width', 12).attr('height', 12).attr('fill', colors.typing);
+    svg.append('text').attr('x', legendX + 18).attr('y', legendY + 10).text('Typing').style('font-size', '12px');
 
-    svg.append('circle').attr('cx', legendX).attr('cy', legendY + 20).attr('r', 5).attr('fill', '#198754');
-    svg.append('text').attr('x', legendX + 10).attr('y', legendY + 24).text('Suggestion').style('font-size', '12px');
-}
+    svg.append('rect').attr('x', legendX).attr('y', legendY + 20).attr('width', 12).attr('height', 12).attr('fill', colors.suggestion);
+    svg.append('text').attr('x', legendX + 18).attr('y', legendY + 30).text('Suggestion').style('font-size', '12px');
 
-// Navigation functions
-function goHome() {
-  window.location.href = '../index.html';
-}
-
-function goLogout() {
-  window.location.href = '../Login and Register/login.html';
+    svg.append('rect').attr('x', legendX).attr('y', legendY + 40).attr('width', 12).attr('height', 12).attr('fill', colors.image);
+    svg.append('text').attr('x', legendX + 18).attr('y', legendY + 50).text('Image').style('font-size', '12px');
 }
 
 loadNewReturningUsers();

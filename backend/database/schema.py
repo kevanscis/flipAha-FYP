@@ -25,8 +25,6 @@ def create_tables():
         question_timestamp DATETIME NOT NULL,
         input_method TEXT NOT NULL,
         topic TEXT NOT NULL,
-        use_suggestion INTEGER NOT NULL,
-        accept_suggestion INTEGER NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users(user_id)                 
     );
                         

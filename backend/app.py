@@ -58,7 +58,6 @@ FALLBACK_RESPONSE = (
     "and I will provide a clear step-by-step explanation."
 )
 
-
 def _normalize_response_text(text):
     if text is None:
         return ""
@@ -304,10 +303,6 @@ def ask_question():
         data = request.get_json(silent=True) or {}
         question = (data.get('question') or '').strip()
         input_method = (data.get('input_method') or 'typing').strip()
-        use_suggestion = 1 if data.get('use_suggestion') else 0
-        accept_suggestion = 1 if data.get('accept_suggestion') else 0
-
-        # print(question)
 
         if not question:
             return jsonify({
@@ -319,7 +314,7 @@ def ask_question():
         answer, llm_meta = generate_llm_answer(question)
         # Classify question into a topic
         topic = classify_question_topic(question)
-        print(topic)
+        
         # Ensure quality before returning to client
         quality = evaluate_response_quality(question, answer)
         if not quality["is_proper"]:
@@ -346,10 +341,10 @@ def ask_question():
             conn.execute("""
                 INSERT INTO questions (
                     question_id, user_id, question_timestamp,
-                    input_method, topic, use_suggestion, accept_suggestion
+                    input_method, topic
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (question_id, user_id, ts, input_method, topic, use_suggestion, accept_suggestion))
+                VALUES (?, ?, ?, ?, ?)
+            """, (question_id, user_id, ts, input_method, topic))
         conn.close()
 
         # 5) Return response
@@ -367,6 +362,66 @@ def ask_question():
             }
         }), 200
 
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/log-input-method', methods=['POST'])
+def log_input_method():
+    """Log input method usage (e.g., image uploads) to questions table"""
+    try:
+        user_id = session.get("user_id")
+        
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'Not logged in'
+            }), 401
+        
+        data = request.get_json(silent=True) or {}
+        input_method = (data.get('input_method') or '').strip()
+        
+        if not input_method:
+            return jsonify({
+                'success': False,
+                'error': 'Input method is required'
+            }), 400
+        
+        # Generate a question ID and timestamp
+        question_id = str(uuid.uuid4())
+        ts = datetime.now(SINGAPORE_TZ).isoformat()
+        
+        # Log to questions table with empty question text and generic topic
+        conn = get_db()
+        cursor = conn.cursor()
+        with conn:
+            cursor.execute("SELECT 1 FROM users WHERE user_id = ?", (user_id,))
+            user_exists = cursor.fetchone() is not None
+            
+            if not user_exists:
+                conn.close()
+                return jsonify({
+                    'success': False,
+                    'error': 'Invalid user session. Please log in again.'
+                }), 403
+            
+            conn.execute("""
+                INSERT INTO questions (
+                    question_id, user_id, question_timestamp,
+                    input_method, topic
+                )
+                VALUES (?, ?, ?, ?, ?)
+            """, (question_id, user_id, ts, input_method, 'others'))
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'question_id': question_id,
+            'message': f'Input method "{input_method}" logged successfully'
+        }), 200
+    
     except Exception as e:
         return jsonify({
             'success': False,
@@ -606,6 +661,10 @@ def dashboard_page():
         abort(403)  # Forbidden
 
     return send_from_directory(os.path.join(FRONTEND_ROOT, "Dashboard"), "dashboard.html")
+
+@app.route("/image")
+def image_page():
+    return send_from_directory(os.path.join(FRONTEND_ROOT, "equation_scanner"), "equation-scanner.html")
 
 # API CALLS
 @app.route("/api/me")

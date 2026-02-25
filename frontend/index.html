@@ -45,11 +45,16 @@
             gap: 8px;
         }
 
-        .nav-button:hover,
-        .nav-button.active {
+        .nav-button:hover {
             background: rgba(255, 255, 255, 0.3);
-            border-color: rgba(255, 255, 255, 0.6);
-            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .nav-button.active {
+            background: rgba(255, 255, 255, 0.4);
+            border-color: rgba(255, 255, 255, 0.8);
+            color: #fff;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
         }
     </style>
 </head>
@@ -64,8 +69,8 @@
                 </h1>
                 <p>Your Personal Online Math Tutor</p>
                 <div class="header-nav">
-                    <a href="index.html" class="nav-button active">💬 Chat Tutor</a>
-                    <a href="equation-scanner.html" class="nav-button">📸 Equation Scanner</a>
+                    <button class="nav-button active" onclick="goChat()">💬 Chat Tutor</button>
+                    <button class="nav-button" onclick="goImage()">📸 Equation Scanner</button>
                 </div>
             </div>
             <div class="col align-self-center d-flex justify-content-end">

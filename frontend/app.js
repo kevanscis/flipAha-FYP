@@ -12,12 +12,27 @@ let suppressSuggestionForValue = '';
 // Configuration
 const API_BASE_URL = 'http://localhost:5000'; // Update with your backend URL
 
+function goHome(){
+  window.location.href = `${API_BASE_URL}/`;
+}
+
 function goLogin() {
+  window.location.href = `${API_BASE_URL}/login`;
+}
+
+function goLogout() {
   window.location.href = `${API_BASE_URL}/login`;
 }
 
 function goDashboard() {
   window.location.href = `${API_BASE_URL}/dashboard`;
+}
+
+function goChat() {
+  window.location.href = `${API_BASE_URL}/`;
+}
+function goImage() {
+  window.location.href = `${API_BASE_URL}/image`;
 }
 
 function lockChat() {
@@ -481,8 +496,6 @@ async function handleSubmitQuestion(e) {
       body: JSON.stringify({ 
         question: question,
         input_method: inputMethod,
-        // use_suggestion: usedSuggestion ? 1 : 0,
-        // accept_suggestion: 0
       })
     });
 
@@ -966,7 +979,6 @@ function selectSuggestion(latex) {
   prevInputValue = getInputTextValue();
   suppressSuggestionForValue = String(prevInputValue || '').replace(/\s+/g, '');
   smartRanges = [];
-  usedSuggestion = false;
 
   requestAnimationFrame(() => {
     questionInput.focus();

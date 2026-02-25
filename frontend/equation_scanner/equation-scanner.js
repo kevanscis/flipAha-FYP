@@ -2,6 +2,13 @@
 // Configuration
 const API_BASE_URL = 'http://localhost:5000';
 
+function goChat() {
+  window.location.href = `${API_BASE_URL}/`;
+}
+function goImage() {
+  window.location.href = `${API_BASE_URL}/image`;
+}
+
 // State management
 const state = {
     sessionId: null,
@@ -234,6 +241,22 @@ async function handleConvert() {
             setActiveTab('editor');
         }, 800);
 
+        // Log image input method usage to analytics (only on successful conversion)
+        try {
+            await fetch(`${API_BASE_URL}/api/log-input-method`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    input_method: 'image'
+                })
+            });
+        } catch (logError) {
+            console.warn('Failed to log image input method:', logError);
+        }
+
     } catch (err) {
         showError('Conversion error: ' + err.message);
     } finally {
@@ -242,6 +265,7 @@ async function handleConvert() {
         if (convertBtn) convertBtn.disabled = false;
     }
 }
+
 
 async function uploadImage() {
     if (!state.selectedFile) return false;

@@ -249,7 +249,7 @@ def get_weekly_input_method_trends():
             COUNT(*) AS count
         FROM questions
         WHERE DATE(question_timestamp) >= ?
-          AND input_method IN ('typing', 'suggestion')
+          AND input_method IN ('typing', 'suggestion', 'image')
         GROUP BY day, input_method
         ORDER BY day ASC
     """, (start_date.isoformat(),))
@@ -260,14 +260,15 @@ def get_weekly_input_method_trends():
     # Build lookup: {(day, method): count}
     lookup = {(r["day"], r["input_method"]): r["count"] for r in rows}
 
-    # Fill missing days with 0s for both series
+    # Fill missing days with 0s for all three series
     result = []
     for i in range(7):
         day = (start_date + timedelta(days=i)).isoformat()
         result.append({
             "day": day,
             "typing": int(lookup.get((day, "typing"), 0)),
-            "suggestion": int(lookup.get((day, "suggestion"), 0))
+            "suggestion": int(lookup.get((day, "suggestion"), 0)),
+            "image": int(lookup.get((day, "image"), 0))
         })
 
     return result
