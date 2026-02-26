@@ -26,6 +26,8 @@
   const NORMAL_RULES = [
     ["%over%", "\\frac{$1}{$2}"],
     ["%divide%", "\\frac{$1}{$2}"],
+    ["pi", "\\pi"],
+    ["-pi", "-\\pi"],
     ["1/root(2)", ["\\frac{1}{\\sqrt{2}}", "\\frac{\\sqrt{2}}{2}"]],
     ["1/root2", ["\\frac{1}{\\sqrt{2}}", "\\frac{\\sqrt{2}}{2}"]],
     ["1/sqrt(2)", ["\\frac{1}{\\sqrt{2}}", "\\frac{\\sqrt{2}}{2}"]],

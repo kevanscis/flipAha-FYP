@@ -96,6 +96,11 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     .replace(/³/g, '^3')
     .replace(/ⁿ/g, '^n');
 
+  trimmed = trimmed.replace(/^([+\-]+)\s*(?:\\pi|pi)$/i, (match, signs) => {
+    const hasMinus = String(signs || '').includes('-');
+    return hasMinus ? '-pi' : 'pi';
+  });
+
   if (typeof globalThis !== 'undefined' && typeof globalThis.normalizeCommonMathTypos === 'function') {
     trimmed = globalThis.normalizeCommonMathTypos(trimmed);
   }

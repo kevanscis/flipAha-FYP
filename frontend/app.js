@@ -257,6 +257,11 @@ function normalizeToLatex(input) {
   s = normalizeInverseAlias(s, 'arccos|acos', '\\cos');
   s = normalizeInverseAlias(s, 'arctan|atan', '\\tan');
 
+  // Common constants
+  s = s
+    .replace(/π/g, '\\pi')
+    .replace(/(^|[^A-Za-z\\])pi(?=[^A-Za-z]|$)/gi, '$1\\pi');
+
   // Logs
   s = s.replace(/\blog\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/g, '\\log_{$1}($2)');
   s = s.replace(/\blog_([A-Za-z0-9]+)\s*\(\s*([^)]+)\s*\)/g, '\\log_{$1}($2)');
@@ -665,6 +670,16 @@ function handleInputChange() {
         }
         if (depth === 0) {
           if (char === '+' || char === '-') {
+            let prevIndex = i - 1;
+            while (prevIndex >= 0 && /\s/.test(expr[prevIndex])) {
+              prevIndex -= 1;
+            }
+            const prevNonSpace = prevIndex >= 0 ? expr[prevIndex] : '';
+            const isUnarySign = prevIndex < 0 || /[+\-*/=,(]/.test(prevNonSpace);
+            if (isUnarySign) {
+              continue;
+            }
+
             const compactPrefix = expr.slice(0, i).replace(/\s+/g, '');
             const inversePrefixPattern = /(?:(?:\\)?(?:sin|cos|tan|sec|csc|cot|cosec)(?:\^\{?)?|(?:\\)?(?:arc|a)(?:sin|cos|tan))$/i;
             const isInverseTrig = char === '-' && expr[i + 1] === '1' && inversePrefixPattern.test(compactPrefix);
@@ -857,15 +872,22 @@ function handleInputChange() {
     if (suggestions.length > 0) {
       const rawStart = start + termStartOffset;
       const rawEnd = rawStart + queryTerm.length;
-      const replaceableCharRegex = /[A-Za-z0-9_\\^{}()√∛∜α-ωΑ-Ωπθδλμσωβγ⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ]/;
+      const replaceableCharRegex = /[A-Za-z0-9_\\^{}()√∛∜α-ωΑ-Ωπθδλμσωβγ+\-−⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ]/;
       let replaceStart = rawStart;
       let replaceEnd = rawEnd;
+
+      const rawToken = searchValue.slice(rawStart, rawEnd);
+      const hasUnarySignPrefix = /^\s*[+\-−](?:\s*[+\-−])*/.test(rawToken);
 
       while (replaceStart < replaceEnd && !replaceableCharRegex.test(searchValue[replaceStart] || '')) {
         replaceStart += 1;
       }
       while (replaceEnd > replaceStart && !replaceableCharRegex.test(searchValue[replaceEnd - 1] || '')) {
         replaceEnd -= 1;
+      }
+
+      if (hasUnarySignPrefix) {
+        replaceStart = rawStart;
       }
 
       if (replaceStart >= replaceEnd) {
