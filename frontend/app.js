@@ -665,8 +665,9 @@ function handleInputChange() {
         }
         if (depth === 0) {
           if (char === '+' || char === '-') {
-            const beforeOp = expr.substring(Math.max(0, i - 3), i).toLowerCase();
-            const isInverseTrig = /(sin|cos|tan)$/.test(beforeOp) && char === '-' && expr[i + 1] === '1';
+            const compactPrefix = expr.slice(0, i).replace(/\s+/g, '');
+            const inversePrefixPattern = /(?:(?:\\)?(?:sin|cos|tan|sec|csc|cot|cosec)(?:\^\{?)?|(?:\\)?(?:arc|a)(?:sin|cos|tan))$/i;
+            const isInverseTrig = char === '-' && expr[i + 1] === '1' && inversePrefixPattern.test(compactPrefix);
             if (!isInverseTrig) {
               lastOperatorIndex = i;
             }
@@ -774,6 +775,38 @@ function handleInputChange() {
       if (searchValue.includes(s)) return false;
       return true;
     });
+
+    const normalizeInverseIntentSource = (value) => String(value || '')
+      .toLowerCase()
+      .replace(/\s+/g, '')
+      .replace(/−/g, '-')
+      .replace(/⁻/g, '-')
+      .replace(/¹/g, '1')
+      .replace(/²/g, '2')
+      .replace(/³/g, '3')
+      .replace(/\^\{?(-?1)\}?/g, '^-1');
+
+    const inverseIntentSource = normalizeInverseIntentSource(queryTermText || queryTerm || '');
+    const inverseIntentMatch = inverseIntentSource.match(/^(?:arc|a)?(sin|cos|tan|sec|csc|cot|cosec)(?:\^-1|-1)(?:\((.*)\)|([a-z0-9_\\πθα-ω.+\-*/^{}]+))?$/i);
+    if (inverseIntentMatch) {
+      const rawFunc = String(inverseIntentMatch[1] || '').toLowerCase();
+      const normalizedFunc = rawFunc === 'cosec' ? 'csc' : rawFunc;
+      const rawArg = String(inverseIntentMatch[2] || inverseIntentMatch[3] || '').trim();
+      const hasTypedArg = rawArg && rawArg !== '-1' && rawArg !== '−1';
+
+      suggestions = suggestions.filter(item => {
+        const text = String(item || '');
+        return /\^\{\s*[−-]?1\s*\}|\^[−-]?1|⁻¹/.test(text);
+      });
+
+      const fallbackInverse = hasTypedArg
+        ? `\\${normalizedFunc}^{-1}(${rawArg})`
+        : `\\${normalizedFunc}^{-1}(x)`;
+
+      if (!suggestions.includes(fallbackInverse)) {
+        suggestions.unshift(fallbackInverse);
+      }
+    }
 
     const compactSquareSource = String(queryTermText || queryTerm || '')
       .replace(/\s+/g, '')

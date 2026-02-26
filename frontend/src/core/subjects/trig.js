@@ -73,7 +73,22 @@
   }
 
   function getFuzzySuggestions(value, maxSuggestions = 5){
-    const normalized = String(value).toLowerCase().replace(/\\/g,'').replace(/[^a-z]/g, '');
+    const normalizedRaw = String(value)
+      .toLowerCase()
+      .replace(/−/g, '-')
+      .replace(/⁻/g, '-')
+      .replace(/¹/g, '1')
+      .replace(/\s+/g, '')
+      .replace(/\\/g, '');
+
+    const inverseNoArgMatch = normalizedRaw.match(/^(arc|a)?(sin|cos|tan|sec|csc|cot|cosec)(?:\^\{?-?1\}?|[\-]1)$/i);
+    if (inverseNoArgMatch) {
+      const rawFunc = String(inverseNoArgMatch[2] || '').toLowerCase();
+      const normalizedFunc = rawFunc === 'cosec' ? 'csc' : rawFunc;
+      return [`\\${normalizedFunc}^{-1}(x)`].slice(0, maxSuggestions);
+    }
+
+    const normalized = normalizedRaw.replace(/[^a-z]/g, '');
     const candidates = FUZZY_TRIG_RULES.map(r=>({...r, distance:levenshteinDistance(normalized,r.key)}));
     candidates.sort((a,b)=>a.distance-b.distance);
     const best = candidates[0];
@@ -84,7 +99,13 @@
   }
 
   function parseTrigExpression(input){
-    const normalized = String(input).toLowerCase().trim();
+    const normalized = String(input)
+      .toLowerCase()
+      .trim()
+      .replace(/−/g, '-')
+      .replace(/⁻/g, '-')
+      .replace(/¹/g, '1')
+      .replace(/\s+/g, '');
     const stripUnmatchedTrailingParens = (value) => {
       let result = String(value ?? '').trim();
       const countParens = (text) => {
@@ -127,6 +148,23 @@
     if (inverseAliasOpenParenMatch) {
       const func = String(inverseAliasOpenParenMatch[2] || '').toLowerCase();
       const rawArg = String(inverseAliasOpenParenMatch[3] || '');
+
+      return {
+        function: func,
+        modifier: '^-1',
+        argument: stripUnmatchedTrailingParens(rawArg),
+        matched: true
+      };
+    }
+
+    const inversePlainMatch = normalized.match(/^(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)\s*[−-]\s*1\s*(?:\(\s*([^)]*)\s*\)|([a-z0-9\\πθα-ω+\-*/.^{}()]+))?\s*$/i);
+    if (inversePlainMatch) {
+      const func = String(inversePlainMatch[1] || '').toLowerCase();
+      const parenArg = inversePlainMatch[2];
+      const inlineArg = inversePlainMatch[3];
+      const rawArg = typeof parenArg === 'string' && parenArg.length > 0
+        ? parenArg
+        : (inlineArg || '');
 
       return {
         function: func,
@@ -393,7 +431,16 @@
       if (thetaMatch){ const map = { 'theta':'\\theta','θ':'\\theta','x':'x','t':'t','alpha':'\\alpha','beta':'\\beta','gamma':'\\gamma','delta':'\\delta','lambda':'\\lambda','mu':'\\mu','sigma':'\\sigma','omega':'\\omega' }; const key = canonicalArg.replace(/\\/g,'').toLowerCase(); const mapped = map[key] || canonicalArg; return [`${latexFunc}${modifierLatex}(${mapped})`]; }
       const lowerArg = canonicalArg.toLowerCase().replace(/\\/g,'').replace(/[{}\\]/g,'').replace(/\s+/g,'');
       const completedArgs = TRIG_CONFIG.arguments.filter(a=>{ const norm = a.toLowerCase().replace(/\\/g,'').replace(/[{}\\]/g,'').replace(/\s+/g,''); return norm.includes(lowerArg) || lowerArg.includes(norm); }).slice(0,maxSuggestions);
-      return completedArgs.map(arg=>`${latexFunc}${modifierLatex}(${arg})`);
+      if (completedArgs.length > 0) {
+        return completedArgs.map(arg=>`${latexFunc}${modifierLatex}(${arg})`);
+      }
+
+      const normalizedFreeArg = normalizeTrigArgument(canonicalArg);
+      if (normalizedFreeArg) {
+        return [`${latexFunc}${modifierLatex}(${normalizedFreeArg})`];
+      }
+
+      return [`${latexFunc}${modifierLatex}(x)`];
     }
     return TRIG_CONFIG.arguments.slice(0,maxSuggestions).map(arg=>`${'\\'+parsed.function}${(parsed.modifier||'').replace('^-1','^{-1}') }(${arg})`);
   }

@@ -89,6 +89,7 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     .replace(/\\cdot(?!s)/g, '*')
     .replace(/\\times/g, '*')
     .replace(/[·⋅]/g, '*')
+    .replace(/−/g, '-')
     .replace(/\\left/g, '').replace(/\\right/g, '')
     .replace(/⁻¹/g, '^-1')
     .replace(/²/g, '^2')
