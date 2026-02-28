@@ -359,20 +359,6 @@ function createMessageElement(message) {
     bubbleDiv.textContent = message.text;
   } else {
     bubbleDiv.textContent = message.text;
-    
-    // Add copy button for assistant responses
-    if (message.role === 'assistant' && message.text) {
-      const copyBtn = document.createElement('button');
-      copyBtn.className = 'edit-latex-btn';
-      copyBtn.textContent = '📋 Copy to Input';
-      copyBtn.onclick = () => {
-        if (questionInput && mathFieldReady) {
-          questionInput.setValue(message.text);
-          questionInput.focus();
-        }
-      };
-      bubbleDiv.appendChild(copyBtn);
-    }
   }
 
   messageDiv.appendChild(bubbleDiv);
