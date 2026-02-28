@@ -22,6 +22,9 @@
     <!-- Cropper.js for image cropping -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
 
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
     <!-- Custom styles -->
     <link rel="stylesheet" href="styles.css">
     <style>
@@ -103,6 +106,10 @@
             <div class="input-section">
                 <form class="question-form" id="questionForm">
                     <div class="input-wrapper">
+                        <button type="button" class="btn btn-camera" id="cameraBtn" title="Scan equation from image">
+                            <i class="fas fa-camera"></i>
+                        </button>
+
                         <div class="input-dropdown-wrapper">
                             <math-field
                                 id="questionInput"
@@ -115,10 +122,7 @@
                             <!-- Suggestions dropdown -->
                             <ul class="suggestion-list" id="suggestionList" style="display: none;"></ul>
                         </div>
-                        
-                        <button type="button" class="btn btn-camera" id="cameraBtn" title="Scan equation from image">
-                            <span class="icon">📸</span>
-                        </button>
+            
                         <button type="submit" class="btn btn-submit" id="submitBtn">
                             <span class="icon">→</span>
                         </button>
@@ -140,7 +144,7 @@
     <div id="scannerModal" class="scanner-modal">
         <div class="scanner-modal-content">
             <div class="scanner-modal-header">
-                <h3>📸 Scan Equation</h3>
+                <h3>Scan your Equation</h3>
                 <button class="scanner-modal-close" id="scannerClose">&times;</button>
             </div>
             <div class="scanner-modal-body">
@@ -161,22 +165,22 @@
                 <div id="scannerPreview" style="display:none">
                     <img id="scannerPreviewImage" class="scanner-preview-img" alt="Preview">
                     <div class="scanner-actions">
-                        <button id="scannerCropBtn" class="btn btn-secondary">✂️ Crop</button>
-                        <button id="scannerConvertBtn" class="btn btn-primary">⚡ Convert</button>
+                        <button id="scannerCropBtn" class="btn btn-secondary">Crop</button>
+                        <button id="scannerConvertBtn" class="btn btn-primary">Convert</button>
                     </div>
                     <div id="scannerLoading" class="scanner-loading" style="display:none">
                         <div class="scanner-spinner"></div>
-                        <p>Converting image to LaTeX...</p>
+                        <p>Converting image...</p>
                     </div>
                 </div>
 
                 <!-- Result (LaTeX preview + edit before inserting) -->
                 <div id="scannerResult" style="display:none">
-                    <label class="scanner-label">Extracted LaTeX:</label>
-                    <textarea id="scannerLatexInput" class="scanner-latex-input" rows="3"></textarea>
                     <label class="scanner-label">Preview:</label>
                     <div id="scannerLatexPreview" class="scanner-latex-preview">Preview will appear here</div>
-
+                    <label class="scanner-label">Extracted LaTeX:</label>
+                    <textarea id="scannerLatexInput" class="scanner-latex-input" rows="3"></textarea>
+                    
                     <!-- Rating -->
                     <div class="scanner-rating" id="scannerRating">
                         <span class="scanner-rating-label">Was this conversion accurate?</span>
@@ -188,8 +192,8 @@
                     </div>
 
                     <div class="scanner-actions">
-                        <button id="scannerInsertBtn" class="btn btn-primary">📥 Insert into Chat</button>
-                        <button id="scannerRetryBtn" class="btn btn-secondary">🔄 Try Another</button>
+                        <button id="scannerInsertBtn" class="btn btn-primary">Insert into Chat</button>
+                        <button id="scannerRetryBtn" class="btn btn-secondary">Try Another</button>
                     </div>
                 </div>
             </div>
@@ -202,7 +206,7 @@
             <img id="scannerCropImage" src="" alt="Crop">
         </div>
         <div class="scanner-crop-controls">
-            <button id="scannerCropConfirm" class="btn btn-primary">✂️ Crop & Apply</button>
+            <button id="scannerCropConfirm" class="btn btn-primary">Crop & Apply</button>
             <button id="scannerCropCancel" class="btn btn-secondary">Cancel</button>
         </div>
     </div>
