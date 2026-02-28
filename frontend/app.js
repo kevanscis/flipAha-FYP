@@ -1103,5 +1103,349 @@ document.addEventListener('click', (e) => {
   }
 });
 
+// ==================== Equation Scanner (inline modal) ====================
+(function initScanner() {
+  // Scanner state
+  const scanner = {
+    file: null,
+    previewUrl: null,
+    imageId: null,
+    cropper: null,
+    converting: false
+  };
+
+  // DOM refs (deferred until DOMContentLoaded)
+  let modal, closeBtn, dropZone, fileInput, previewSection, previewImg;
+  let convertBtn, cropBtn, loadingDiv, errorDiv, successDiv, warningsDiv;
+  let resultSection, latexInput, latexPreview, insertBtn, retryBtn;
+  let cropModal, cropImage, cropConfirm, cropCancel, cameraBtn;
+  let rateUpBtn, rateDownBtn, ratingStatus;
+  let originalLatex = ''; // store the raw conversion result for feedback
+
+  function bindElements() {
+    modal          = document.getElementById('scannerModal');
+    closeBtn       = document.getElementById('scannerClose');
+    dropZone       = document.getElementById('scannerDropZone');
+    fileInput      = document.getElementById('scannerFileInput');
+    previewSection = document.getElementById('scannerPreview');
+    previewImg     = document.getElementById('scannerPreviewImage');
+    convertBtn     = document.getElementById('scannerConvertBtn');
+    cropBtn        = document.getElementById('scannerCropBtn');
+    loadingDiv     = document.getElementById('scannerLoading');
+    errorDiv       = document.getElementById('scannerError');
+    successDiv     = document.getElementById('scannerSuccess');
+    warningsDiv    = document.getElementById('scannerWarnings');
+    resultSection  = document.getElementById('scannerResult');
+    latexInput     = document.getElementById('scannerLatexInput');
+    latexPreview   = document.getElementById('scannerLatexPreview');
+    insertBtn      = document.getElementById('scannerInsertBtn');
+    retryBtn       = document.getElementById('scannerRetryBtn');
+    cropModal      = document.getElementById('scannerCropModal');
+    cropImage      = document.getElementById('scannerCropImage');
+    cropConfirm    = document.getElementById('scannerCropConfirm');
+    cropCancel     = document.getElementById('scannerCropCancel');
+    cameraBtn      = document.getElementById('cameraBtn');
+    rateUpBtn      = document.getElementById('scannerRateUp');
+    rateDownBtn    = document.getElementById('scannerRateDown');
+    ratingStatus   = document.getElementById('scannerRatingStatus');
+  }
+
+  function wireEvents() {
+    if (!modal) return;
+
+    // Open / close
+    cameraBtn.addEventListener('click', openScanner);
+    closeBtn.addEventListener('click', closeScanner);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeScanner(); });
+
+    // Upload
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', handleFile);
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) { fileInput.files = e.dataTransfer.files; handleFile(); }
+    });
+
+    // Actions
+    convertBtn.addEventListener('click', handleConvert);
+    cropBtn.addEventListener('click', handleCrop);
+    insertBtn.addEventListener('click', handleInsert);
+    retryBtn.addEventListener('click', resetScanner);
+
+    // Live LaTeX preview while editing
+    latexInput.addEventListener('input', updateScannerPreview);
+
+    // Rating
+    rateUpBtn.addEventListener('click', () => handleScanRating(1));
+    rateDownBtn.addEventListener('click', () => handleScanRating(0));
+
+    // Crop modal
+    cropConfirm.addEventListener('click', applyCrop);
+    cropCancel.addEventListener('click', closeCropModal);
+    cropModal.addEventListener('click', (e) => { if (e.target === cropModal) closeCropModal(); });
+  }
+
+  // ---------- Open / Close ----------
+  function openScanner() {
+    resetScanner();
+    modal.classList.add('active');
+  }
+
+  function closeScanner() {
+    modal.classList.remove('active');
+    closeCropModal();
+  }
+
+  function resetScanner() {
+    scanner.file = null;
+    scanner.imageId = null;
+    if (scanner.previewUrl) URL.revokeObjectURL(scanner.previewUrl);
+    scanner.previewUrl = null;
+    scanner.converting = false;
+    originalLatex = '';
+
+    previewSection.style.display = 'none';
+    resultSection.style.display = 'none';
+    loadingDiv.style.display = 'none';
+    hideMsg(errorDiv); hideMsg(successDiv); hideMsg(warningsDiv);
+    dropZone.style.display = 'flex';
+    fileInput.value = '';
+
+    // Reset rating UI
+    rateUpBtn.disabled = false;
+    rateDownBtn.disabled = false;
+    rateUpBtn.classList.remove('selected');
+    rateDownBtn.classList.remove('selected');
+    ratingStatus.textContent = '';
+  }
+
+  // ---------- File handling ----------
+  function handleFile() {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+
+    const allowed = ['image/png','image/jpeg','image/jpg','image/gif','image/bmp'];
+    if (!allowed.includes(file.type)) { showMsg(errorDiv, 'Invalid file type. Please upload an image.'); return; }
+    if (file.size > 10 * 1024 * 1024) { showMsg(errorDiv, 'File too large. Max 10 MB.'); return; }
+
+    scanner.file = file;
+    scanner.previewUrl = URL.createObjectURL(file);
+    scanner.imageId = null;
+
+    previewImg.src = scanner.previewUrl;
+    previewSection.style.display = 'block';
+    resultSection.style.display = 'none';
+    dropZone.style.display = 'none';
+    hideMsg(errorDiv); hideMsg(successDiv); hideMsg(warningsDiv);
+  }
+
+  // ---------- Upload ----------
+  async function uploadImage() {
+    if (!scanner.file) return false;
+
+    const sessionId = localStorage.getItem('flipaha_session_id') || ('session_' + Date.now());
+    localStorage.setItem('flipaha_session_id', sessionId);
+
+    const fd = new FormData();
+    fd.append('file', scanner.file);
+    fd.append('session_id', sessionId);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/upload`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+
+      if (data.session_id) localStorage.setItem('flipaha_session_id', data.session_id);
+      scanner.imageId = data.image_id;
+
+      if (data.quality?.warnings?.length) {
+        showMsg(warningsDiv, '⚠️ ' + data.quality.warnings.join(', '));
+      }
+      return true;
+    } catch (err) {
+      showMsg(errorDiv, err.message);
+      return false;
+    }
+  }
+
+  // ---------- Convert ----------
+  async function handleConvert() {
+    if (scanner.converting) return;
+
+    const sessionId = localStorage.getItem('flipaha_session_id') || ('session_' + Date.now());
+    localStorage.setItem('flipaha_session_id', sessionId);
+
+    if (!scanner.imageId && scanner.file) {
+      if (!(await uploadImage())) return;
+    }
+    if (!scanner.imageId) { showMsg(errorDiv, 'Please select an image first.'); return; }
+
+    scanner.converting = true;
+    loadingDiv.style.display = 'block';
+    convertBtn.disabled = true;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/convert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          image_id: scanner.imageId,
+          options: { high_accuracy: false, preprocess: 'auto' }
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Conversion failed');
+
+      // Show result editor
+      originalLatex = data.latex || '';
+      latexInput.value = originalLatex;
+      updateScannerPreview();
+      previewSection.style.display = 'none';
+      resultSection.style.display = 'block';
+      showMsg(successDiv, '✅ Equation extracted! Edit below then insert into chat.');
+
+      // Log analytics
+      try {
+        await fetch(`${API_BASE_URL}/api/log-input-method`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input_method: 'image' })
+        });
+      } catch (_) { /* ignore */ }
+
+    } catch (err) {
+      showMsg(errorDiv, 'Error: ' + err.message);
+    } finally {
+      scanner.converting = false;
+      loadingDiv.style.display = 'none';
+      convertBtn.disabled = false;
+    }
+  }
+
+  // ---------- Insert into chatbox ----------
+  function handleInsert() {
+    const latex = (latexInput.value || '').trim();
+    if (!latex) { showMsg(errorDiv, 'Nothing to insert.'); return; }
+
+    // Insert as rendered math (not raw text) at cursor position
+    if (questionInput && mathFieldReady) {
+      questionInput.focus();
+      questionInput.insert(latex, {
+        insertionMode: 'insertAfter',
+        selectionMode: 'after',
+        mode: 'math'
+      });
+      // Switch back to text mode so the user can keep typing
+      questionInput.mode = 'text';
+      inputMethod = 'image';
+    }
+
+    closeScanner();
+  }
+
+  // ---------- Scan rating feedback (frontend-only for now) ----------
+  function handleScanRating(rating) {
+    rateUpBtn.disabled = true;
+    rateDownBtn.disabled = true;
+    if (rating === 1) rateUpBtn.classList.add('selected');
+    else rateDownBtn.classList.add('selected');
+
+    // TODO: send to POST /api/scan-feedback when backend is ready
+    console.log('Scan feedback:', {
+      original_latex: originalLatex,
+      edited_latex: (latexInput.value || '').trim(),
+      rating: rating
+    });
+
+    ratingStatus.textContent = 'Thanks for your feedback!';
+  }
+
+  // ---------- LaTeX preview ----------
+  function updateScannerPreview() {
+    const raw = (latexInput.value || '').trim();
+    if (!raw) { latexPreview.innerHTML = '<span style="color:#999">Preview will appear here</span>'; return; }
+
+    try {
+      let expr = raw;
+      // Strip delimiters
+      if (expr.startsWith('$$') && expr.endsWith('$$')) expr = expr.slice(2, -2).trim();
+      else if (expr.startsWith('$') && expr.endsWith('$')) expr = expr.slice(1, -1).trim();
+
+      if (window.katex) {
+        latexPreview.innerHTML = '';
+        katex.render(expr, latexPreview, { throwOnError: false, displayMode: true });
+      } else {
+        latexPreview.textContent = expr;
+      }
+    } catch { latexPreview.textContent = raw; }
+  }
+
+  // ---------- Crop ----------
+  function handleCrop() {
+    if (!scanner.previewUrl) return;
+
+    // Lazy-load Cropper.js
+    if (!window.Cropper) {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js';
+      s.onload = initCropper;
+      document.body.appendChild(s);
+    } else {
+      initCropper();
+    }
+  }
+
+  function initCropper() {
+    cropImage.src = scanner.previewUrl;
+    cropModal.classList.add('active');
+    cropImage.onload = () => {
+      if (scanner.cropper) scanner.cropper.destroy();
+      scanner.cropper = new Cropper(cropImage, {
+        aspectRatio: NaN,
+        viewMode: 1,
+        autoCropArea: 0.8,
+        responsive: true,
+        guides: true,
+        background: false
+      });
+    };
+  }
+
+  function applyCrop() {
+    if (!scanner.cropper) return;
+    const canvas = scanner.cropper.getCroppedCanvas({ maxWidth: 4096, maxHeight: 4096, imageSmoothingQuality: 'high' });
+    if (!canvas) return;
+    canvas.toBlob((blob) => {
+      if (scanner.previewUrl) URL.revokeObjectURL(scanner.previewUrl);
+      scanner.previewUrl = URL.createObjectURL(blob);
+      scanner.file = new File([blob], scanner.file?.name || 'cropped.png', { type: 'image/png' });
+      scanner.imageId = null; // re-upload needed
+      previewImg.src = scanner.previewUrl;
+      closeCropModal();
+      showMsg(successDiv, 'Image cropped!');
+    }, 'image/png');
+  }
+
+  function closeCropModal() {
+    cropModal.classList.remove('active');
+    if (scanner.cropper) { scanner.cropper.destroy(); scanner.cropper = null; }
+  }
+
+  // ---------- Helpers ----------
+  function showMsg(el, text) { if (!el) return; el.textContent = text; el.style.display = 'block'; }
+  function hideMsg(el)       { if (!el) return; el.style.display = 'none'; }
+
+  // Boot
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => { bindElements(); wireEvents(); });
+  } else {
+    bindElements(); wireEvents();
+  }
+})();
+
 // Initialize
 console.log('FlipAha! app initialized')

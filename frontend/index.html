@@ -19,6 +19,9 @@
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
     
+    <!-- Cropper.js for image cropping -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+
     <!-- Custom styles -->
     <link rel="stylesheet" href="styles.css">
     <style>
@@ -68,10 +71,7 @@
                     <span class="flip">Flip</span><span class="aha">Aha</span>!
                 </h1>
                 <p>Your Personal Online Math Tutor</p>
-                <div class="header-nav">
-                    <button class="nav-button active" onclick="goChat()">💬 Chat Tutor</button>
-                    <button class="nav-button" onclick="goImage()">📸 Equation Scanner</button>
-                </div>
+
             </div>
             <div class="col align-self-center d-flex justify-content-end">
                 <div id="dashboardButton" class="dashboardButton" style="display: none;">
@@ -116,6 +116,9 @@
                             <ul class="suggestion-list" id="suggestionList" style="display: none;"></ul>
                         </div>
                         
+                        <button type="button" class="btn btn-camera" id="cameraBtn" title="Scan equation from image">
+                            <span class="icon">📸</span>
+                        </button>
                         <button type="submit" class="btn btn-submit" id="submitBtn">
                             <span class="icon">→</span>
                         </button>
@@ -131,6 +134,77 @@
             <p>&copy; 2026 FlipAha - Math Tutoring Made Easy</p>
         </footer>
 
+    </div>
+
+    <!-- Equation Scanner Modal -->
+    <div id="scannerModal" class="scanner-modal">
+        <div class="scanner-modal-content">
+            <div class="scanner-modal-header">
+                <h3>📸 Scan Equation</h3>
+                <button class="scanner-modal-close" id="scannerClose">&times;</button>
+            </div>
+            <div class="scanner-modal-body">
+                <!-- Upload area -->
+                <div class="scanner-upload-area" id="scannerDropZone">
+                    <span class="scanner-upload-icon">📷</span>
+                    <p><strong>Click to upload or drag & drop</strong></p>
+                    <p class="scanner-upload-hint">PNG, JPG, GIF, BMP up to 10MB</p>
+                    <input type="file" id="scannerFileInput" accept="image/*" style="display:none">
+                </div>
+
+                <!-- Messages -->
+                <div id="scannerError" class="scanner-msg scanner-msg-error" style="display:none"></div>
+                <div id="scannerSuccess" class="scanner-msg scanner-msg-success" style="display:none"></div>
+                <div id="scannerWarnings" class="scanner-msg scanner-msg-warning" style="display:none"></div>
+
+                <!-- Preview -->
+                <div id="scannerPreview" style="display:none">
+                    <img id="scannerPreviewImage" class="scanner-preview-img" alt="Preview">
+                    <div class="scanner-actions">
+                        <button id="scannerCropBtn" class="btn btn-secondary">✂️ Crop</button>
+                        <button id="scannerConvertBtn" class="btn btn-primary">⚡ Convert</button>
+                    </div>
+                    <div id="scannerLoading" class="scanner-loading" style="display:none">
+                        <div class="scanner-spinner"></div>
+                        <p>Converting image to LaTeX...</p>
+                    </div>
+                </div>
+
+                <!-- Result (LaTeX preview + edit before inserting) -->
+                <div id="scannerResult" style="display:none">
+                    <label class="scanner-label">Extracted LaTeX:</label>
+                    <textarea id="scannerLatexInput" class="scanner-latex-input" rows="3"></textarea>
+                    <label class="scanner-label">Preview:</label>
+                    <div id="scannerLatexPreview" class="scanner-latex-preview">Preview will appear here</div>
+
+                    <!-- Rating -->
+                    <div class="scanner-rating" id="scannerRating">
+                        <span class="scanner-rating-label">Was this conversion accurate?</span>
+                        <div class="scanner-rating-buttons">
+                            <button class="scanner-rate-btn" id="scannerRateUp" title="Yes">👍</button>
+                            <button class="scanner-rate-btn" id="scannerRateDown" title="No">👎</button>
+                        </div>
+                        <span class="scanner-rating-status" id="scannerRatingStatus"></span>
+                    </div>
+
+                    <div class="scanner-actions">
+                        <button id="scannerInsertBtn" class="btn btn-primary">📥 Insert into Chat</button>
+                        <button id="scannerRetryBtn" class="btn btn-secondary">🔄 Try Another</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Crop Modal -->
+    <div id="scannerCropModal" class="scanner-crop-modal">
+        <div class="scanner-crop-container">
+            <img id="scannerCropImage" src="" alt="Crop">
+        </div>
+        <div class="scanner-crop-controls">
+            <button id="scannerCropConfirm" class="btn btn-primary">✂️ Crop & Apply</button>
+            <button id="scannerCropCancel" class="btn btn-secondary">Cancel</button>
+        </div>
     </div>
 
     <!-- Scripts -->
