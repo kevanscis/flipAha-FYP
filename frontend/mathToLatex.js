@@ -138,6 +138,27 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     }
   }
 
+  // 0.6. Fractional power shorthand: x1/2 → x^{1/2}, x2/3 → x^{2/3}
+  // Students often omit ^ and brackets when writing fractional exponents
+  const fracPowerMatch = compactQueryTerm.match(/^([a-zA-Zα-ωΑ-Ωπθ][a-zA-Z0-9α-ωΑ-Ωπθ]*)(\d+)\/(\d+)$/);
+  if (fracPowerMatch) {
+    const base = fracPowerMatch[1];
+    const num = fracPowerMatch[2];
+    const den = fracPowerMatch[3];
+    // Fractional power interpretation: x^(1/2), x^(2/3), etc.
+    allSuggestions.push(`{${base}}^{\\frac{${num}}{${den}}}`);
+    // Special roots
+    if (num === '1' && den === '2') {
+      allSuggestions.push(`\\sqrt{${base}}`);
+    } else if (num === '1' && den === '3') {
+      allSuggestions.push(`\\sqrt[3]{${base}}`);
+    } else if (num === '1') {
+      allSuggestions.push(`\\sqrt[${den}]{${base}}`);
+    }
+    // Multiplication interpretation: x * 1/2
+    allSuggestions.push(`${base} \\cdot \\frac{${num}}{${den}}`);
+  }
+
   // 1. Try trig system via trig module (most comprehensive for trig)
   if (typeof globalThis !== 'undefined' && globalThis.subjects && globalThis.subjects.trig) {
     const trigSuggestions = globalThis.subjects.trig.getTrigSuggestions(queryTerm, maxSuggestions);
