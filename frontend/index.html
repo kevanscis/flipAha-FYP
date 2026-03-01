@@ -74,20 +74,20 @@
                     <span class="flip">Flip</span><span class="aha">Aha</span>!
                 </h1>
                 <p>Your Personal Online Math Tutor</p>
-
+                <div class="header-nav">
+                    <button class="nav-button active"><i class="fas fa-comments"></i> Chat Tutor</button>
+                    <div id="dashboardButton" style="display: none;">
+                        <a class="nav-button" href="/dashboard"><i class="fas fa-chart-bar"></i> Dashboard</a>
+                    </div>
+                    <div id="authButtons">
+                        <a class="nav-button" href="/login"><i class="fas fa-sign-in-alt"></i> Login</a>
+                    </div>
+                    <div id="logoutButton" style="display: none;">
+                        <button class="nav-button" onclick="goLogout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+                    </div>
+                </div>
             </div>
-            <div class="col align-self-center d-flex justify-content-end">
-                <div id="dashboardButton" class="dashboardButton" style="display: none;">
-                    <button class="btn" onclick="goDashboard()">Dashboard</button>
-                </div>
-
-                <div id="authButtons">
-                    <button class="btn btn-primary" onclick="goLogin()">Login</button>
-                </div>
-                <div id="logoutButton" style="display: none;">
-                    <button class="btn btn-secondary" onclick="goLogout()">Logout</button>
-                </div>
-            </div>
+            <div class="col"></div>
         </header>
 
         <!-- Main Content -->
