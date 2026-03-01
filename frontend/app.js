@@ -1021,6 +1021,53 @@ function preservePlainTextSegments(value) {
   return output;
 }
 
+/**
+ * Convert "smart text" (the output of latexToSmartText) back to valid LaTeX.
+ * This reverses Unicode superscripts, bare trig names, Greek letters, etc.
+ * so MathLive can interpret the result correctly in setValue().
+ */
+function smartTextToLatex(text) {
+  let s = String(text || '');
+  if (!s) return s;
+
+  // 1. Convert Unicode superscript sequences back to ^{...}
+  const superMap = {
+    '\u2070':'0','\u00b9':'1','\u00b2':'2','\u00b3':'3','\u2074':'4',
+    '\u2075':'5','\u2076':'6','\u2077':'7','\u2078':'8','\u2079':'9',
+    '\u207a':'+','\u207b':'-','\u207c':'=','\u207d':'(','\u207e':')',
+    '\u207f':'n','\u2071':'i'
+  };
+  s = s.replace(/[\u2070\u00b9\u00b2\u00b3\u2074-\u207e\u207f\u2071]+/g, (match) => {
+    const normal = match.split('').map(ch => superMap[ch] || ch).join('');
+    return `^{${normal}}`;
+  });
+
+  // 2. Convert bare trig/math function names to LaTeX commands
+  //    (only when not already preceded by backslash)
+  s = s.replace(/(^|[^a-zA-Z\\])(sin|cos|tan|sec|csc|cot|cosec|log|ln)(?=[^a-zA-Z]|$)/gi,
+    (match, pre, fn) => `${pre}\\${fn.toLowerCase()}`
+  );
+
+  // 3. Convert Unicode Greek letters back to LaTeX
+  s = s
+    .replace(/\u03b1/g, '\\alpha').replace(/\u03b2/g, '\\beta')
+    .replace(/\u03b3/g, '\\gamma').replace(/\u03b4/g, '\\delta')
+    .replace(/\u0394/g, '\\Delta').replace(/\u03b8/g, '\\theta')
+    .replace(/\u03bb/g, '\\lambda').replace(/\u03bc/g, '\\mu')
+    .replace(/\u03c9/g, '\\omega').replace(/\u03a9/g, '\\Omega')
+    .replace(/\u03c0/g, '\\pi');
+
+  // 4. Convert degree symbol and operators
+  s = s.replace(/\u00b0/g, '^{\\circ}');
+  s = s.replace(/\u00d7/g, '\\times');
+  s = s.replace(/\u2264/g, '\\leq').replace(/\u2265/g, '\\geq');
+  s = s.replace(/\u2260/g, '\\neq').replace(/\u00b1/g, '\\pm');
+  s = s.replace(/\u221e/g, '\\infty');
+  s = s.replace(/\u222b/g, '\\int').replace(/\u2211/g, '\\sum');
+
+  return s;
+}
+
 function selectSuggestion(latex) {
 
   if (!questionInput || !mathFieldReady) return;
@@ -1061,8 +1108,8 @@ function selectSuggestion(latex) {
     }
   }
 
-  const safePrefix = preservePlainTextSegments(prefix).replace(/°/g, '^{\\circ}');
-  const safeSuffix = preservePlainTextSegments(suffix).replace(/°/g, '^{\\circ}');
+  const safePrefix = preservePlainTextSegments(smartTextToLatex(prefix));
+  const safeSuffix = preservePlainTextSegments(smartTextToLatex(suffix));
   questionInput.setValue(`${safePrefix}${suggestionLatex}${safeSuffix}`);
 
   try {
