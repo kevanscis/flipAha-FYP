@@ -943,6 +943,40 @@ def get_images():
             'error': str(e)
         }), 500
 
+@app.route('/api/image/<image_id>', methods=['DELETE'])
+def delete_image(image_id):
+    """
+    Delete an uploaded image
+    JSON: {session_id}
+    Returns: {success: bool}
+    """
+    try:
+        data = request.json or {}
+        session_id = data.get('session_id')
+        
+        if not session_id:
+            return jsonify({
+                'success': False,
+                'error': 'Missing session_id parameter'
+            }), 400
+        
+        if session_id in image_store and image_id in image_store[session_id]:
+            del image_store[session_id][image_id]
+            return jsonify({
+                'success': True,
+                'message': 'Image deleted successfully'
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Image not found'
+            }), 404
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route("/api/dashboard/topic-frequency")
 def topic_frequency():
     """Get the frequency distribution of question topics"""

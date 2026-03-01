@@ -181,8 +181,11 @@ function createImageCard(image) {
                 </div>
             ` : ''}
             <div class="image-card-actions">
-                <button class="image-action-btn btn-view" onclick="viewImageDetails('${image.id}')" style="flex: 1;">
+                <button class="image-action-btn btn-view" onclick="viewImageDetails('${image.id}')">
                     <i class="fas fa-eye"></i> View
+                </button>
+                <button class="image-action-btn btn-delete" onclick="deleteImage('${image.id}')">
+                    <i class="fas fa-trash"></i> Delete
                 </button>
             </div>
         </div>
@@ -240,4 +243,49 @@ function closeImageModal() {
     const latexSection = document.getElementById('modalLatexSection');
     const previews = latexSection.querySelectorAll('div:not(#modalLatexCode):not(.modal-latex-label)');
     previews.forEach(p => p.remove());
+}
+
+async function deleteImage(imageId) {
+    if (!confirm('Are you sure you want to delete this image?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/image/${imageId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ session_id: currentSessionId })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.success) {
+            // Remove from local array
+            images = images.filter(img => img.id !== imageId);
+            
+            // Close modal if open
+            closeImageModal();
+            
+            // Update display
+            if (images.length === 0) {
+                showEmptyState();
+            } else {
+                renderImageGallery();
+                updateStats({ total_images: images.length });
+            }
+            
+            showErrorMessage('Image deleted successfully');
+        } else {
+            showErrorMessage(data.error || 'Failed to delete image');
+        }
+    } catch (error) {
+        console.error('Error deleting image:', error);
+        showErrorMessage(`Failed to delete image: ${error.message}`);
+    }
 }
