@@ -134,6 +134,13 @@ const suggestionList = document.getElementById('suggestionList');
 const submitBtn = document.getElementById('submitBtn');
 const responseMessage = document.getElementById('responseMessage');
 
+// feedback elements will be queried when needed (in case DOM wasn't ready at script execution)
+// helpers to retrieve them lazily
+function getFeedbackContainer() { return document.getElementById('suggestionFeedbackUI'); }
+function getFeedbackUpBtn() { return document.getElementById('suggestionUpBtn'); }
+function getFeedbackDownBtn() { return document.getElementById('suggestionDownBtn'); }
+
+
 // MathLive element
 let questionInput = null;
 let mathFieldReady = false;
@@ -973,48 +980,36 @@ function selectSuggestion(latex) {
 }
 
 function showSuggestionFeedbackUI(latex) {
-  removeSuggestionFeedbackUI();
+  const container = getFeedbackContainer();
+  const upBtn = getFeedbackUpBtn();
+  const downBtn = getFeedbackDownBtn();
+  console.log('showSuggestionFeedbackUI called – container:', container, 'upBtn:', upBtn, 'downBtn:', downBtn);
+  if (!container || !upBtn || !downBtn) return;
 
-  const container = document.createElement('div');
-  container.id = 'suggestionFeedbackUI';
-  container.style.marginTop = '6px';
-  container.style.display = 'flex';
-  container.style.gap = '8px';
+  // reset buttons
+  upBtn.disabled = downBtn.disabled = false;
 
-  const prompt = document.createElement('div');
-  prompt.textContent = 'Was this suggestion useful?';
-  prompt.style.alignSelf = 'center';
-  container.appendChild(prompt);
-
-  const up = document.createElement('button');
-  up.textContent = '👍';
-  up.title = 'Yes';
-  up.onclick = async () => {
-    up.disabled = true; down.disabled = true;
+  upBtn.onclick = async () => {
+    removeSuggestionFeedbackUI();
     await sendSuggestionFeedback(latex, 1);
     showResponseStatus('success', 'Thanks for your feedback!');
   };
 
-  const down = document.createElement('button');
-  down.textContent = '👎';
-  down.title = 'No';
-  down.onclick = async () => {
-    up.disabled = true; down.disabled = true;
+  downBtn.onclick = async () => {
+    removeSuggestionFeedbackUI();
     await sendSuggestionFeedback(latex, 0);
     showResponseStatus('success', 'Thanks for your feedback!');
   };
 
-  container.appendChild(up);
-  container.appendChild(down);
-
-  // Insert after the input field
-  const parent = questionInput.parentNode || document.body;
-  parent.insertBefore(container, questionInput.nextSibling);
+  container.style.display = 'block';
 }
 
+
 function removeSuggestionFeedbackUI() {
-  const existing = document.getElementById('suggestionFeedbackUI');
-  if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+  const container = getFeedbackContainer();
+  if (container) {
+    container.style.display = 'none';
+  }
 }
 
 async function sendSuggestionFeedback(latex, rating) {
@@ -1035,8 +1030,7 @@ async function sendSuggestionFeedback(latex, rating) {
     console.error('Error sending suggestion feedback', e);
     showResponseStatus('error', 'Could not record feedback');
   } finally {
-    // remove UI after sending
-    setTimeout(removeSuggestionFeedbackUI, 800);
+    // UI already hidden on click; no additional removal needed
   }
 }
 
