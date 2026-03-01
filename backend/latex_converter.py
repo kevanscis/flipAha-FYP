@@ -9,8 +9,13 @@ import os
 import threading
 
 try:
+    print("[INFO] Attempting to import Pix2Text...")
     from pix2text import Pix2Text
-except Exception:  # pragma: no cover
+    print("[INFO] Pix2Text imported successfully")
+except Exception as e:  # pragma: no cover
+    print(f"[ERROR] Failed to import Pix2Text: {type(e).__name__}: {e}")
+    import traceback
+    traceback.print_exc()
     Pix2Text = None
 
 class LatexConverter:
@@ -96,6 +101,7 @@ class LatexConverter:
         Returns dict with 'latex' string and 'confidence' score
         """
         self._ensure_initialized()
+        print(f"[OCR] Processing image with model: {self.model_type}")
         if self.model is None:
             return {
                 'success': False,

@@ -666,6 +666,10 @@ def dashboard_page():
 def image_page():
     return send_from_directory(os.path.join(FRONTEND_ROOT, "equation_scanner"), "equation-scanner.html")
 
+@app.route("/imageHistory")
+def image_history_page():
+    return send_from_directory(os.path.join(FRONTEND_ROOT, "imageHistory"), "image-history.html")
+
 # API CALLS
 @app.route("/api/me")
 def get_current_user():
