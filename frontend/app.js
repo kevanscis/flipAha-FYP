@@ -38,11 +38,19 @@ function goImage() {
 function lockChat() {
   const questionInput = document.getElementById('questionInput');
   const sendBtn = document.getElementById('submitBtn');
+  const cameraBtn = document.getElementById('cameraBtn');
 
   if (!questionInput || !sendBtn) return;
 
   questionInput.disabled = true;
   sendBtn.disabled = true;
+
+  // Lock camera button when not logged in
+  if (cameraBtn) {
+    cameraBtn.disabled = true;
+    cameraBtn.classList.add('btn-locked');
+    cameraBtn.title = 'Please log in to use the equation scanner';
+  }
 
   questionInput.setAttribute(
     'placeholder',
@@ -53,11 +61,20 @@ function lockChat() {
 function unlockChat() {
   const questionInput = document.getElementById('questionInput');
   const sendBtn = document.getElementById('submitBtn');
+  const cameraBtn = document.getElementById('cameraBtn');
 
   if (!questionInput || !sendBtn) return;
 
   questionInput.disabled = false;
   sendBtn.disabled = false;
+
+  // Unlock camera button when logged in
+  if (cameraBtn) {
+    cameraBtn.disabled = false;
+    cameraBtn.classList.remove('btn-locked');
+    cameraBtn.title = 'Scan equation from image';
+  }
+
   questionInput.setAttribute(
     'placeholder',
     '\\text{Ask your math question... (e.g. 1/2, sin x, x^2)}'
@@ -77,10 +94,15 @@ async function checkAuthStatus() {
       const logoutEl = document.getElementById('logoutButton');
       const dashEl = document.getElementById('dashboardButton');
       const authEl = document.getElementById('authButtons');
+      const histEl = document.getElementById('imageHistoryButton');
 
       if (logoutEl) logoutEl.style.display = 'none';
       if (dashEl) dashEl.style.display = 'none';
       if (authEl) authEl.style.display = 'block';
+      if (histEl) histEl.style.display = 'none';
+
+      // Clear any session_id so guests can't access user images
+      localStorage.removeItem('flipaha_session_id');
 
       lockChat();
     } else {
@@ -88,10 +110,16 @@ async function checkAuthStatus() {
       const authEl = document.getElementById('authButtons');
       const logoutEl = document.getElementById('logoutButton');
       const dashEl = document.getElementById('dashboardButton');
+      const histEl = document.getElementById('imageHistoryButton');
 
       if (authEl) authEl.style.display = 'none';
       if (logoutEl) logoutEl.style.display = 'block';
+      if (histEl) histEl.style.display = 'block';
       unlockChat();
+
+      // Tie session_id to the logged-in user so image history is per-user
+      const userSessionId = 'user_' + data.user_id;
+      localStorage.setItem('flipaha_session_id', userSessionId);
 
       // Show dashboard only for admin
       if (data.role === 'admin') {
@@ -101,7 +129,6 @@ async function checkAuthStatus() {
       }
 
       console.log("Logged in as user ID:", data.user_id);
-      // currentUserID = data.user_id;
     }
   } catch (error) {
     // If auth check fails (network/server), keep chat locked for safety and show login
@@ -114,6 +141,9 @@ async function checkAuthStatus() {
 window.addEventListener('load', checkAuthStatus);
 
 async function goLogout() {
+  // Clear user-specific session so image history is not accessible after logout
+  localStorage.removeItem('flipaha_session_id');
+
   await fetch(`${API_BASE_URL}/logout`, {
     method: 'POST',
     credentials: 'include'
@@ -1333,6 +1363,8 @@ document.addEventListener('click', (e) => {
 
   // ---------- Open / Close ----------
   function openScanner() {
+    // Prevent opening if camera is locked (user not logged in)
+    if (cameraBtn && cameraBtn.disabled) return;
     resetScanner();
     modal.classList.add('active');
   }
@@ -1383,6 +1415,9 @@ document.addEventListener('click', (e) => {
     resultSection.style.display = 'none';
     dropZone.style.display = 'none';
     hideMsg(errorDiv); hideMsg(successDiv); hideMsg(warningsDiv);
+
+    // Upload immediately so quality warnings appear before the user presses Convert
+    uploadImage();
   }
 
   // ---------- Upload ----------
@@ -1404,8 +1439,12 @@ document.addEventListener('click', (e) => {
       if (data.session_id) localStorage.setItem('flipaha_session_id', data.session_id);
       scanner.imageId = data.image_id;
 
+      // Show quality warnings if the image is blurry, dark, or small
       if (data.quality?.warnings?.length) {
-        showMsg(warningsDiv, '⚠️ ' + data.quality.warnings.join(', '));
+        const hint = data.quality.hint || '';
+        const warningText = '⚠️ ' + data.quality.warnings.join('\n⚠️ ')
+          + (hint ? '\n\n' + hint : '');
+        showMsg(warningsDiv, warningText);
       }
       return true;
     } catch (err) {
@@ -1449,7 +1488,7 @@ document.addEventListener('click', (e) => {
       updateScannerPreview();
       previewSection.style.display = 'none';
       resultSection.style.display = 'block';
-      showMsg(successDiv, '✅ Equation extracted! Edit below then insert into chat.');
+      showMsg(successDiv, '✅ Equation extracted! Edit below or insert into chat and edit there.');
 
       // Log analytics
       try {

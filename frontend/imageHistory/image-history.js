@@ -4,6 +4,8 @@ let images = [];
 
 // Logout function
 async function goLogout() {
+    // Clear user-specific session so image history is not accessible after logout
+    localStorage.removeItem('flipaha_session_id');
     await fetch('/logout', {
         method: 'POST',
         credentials: 'include'
@@ -54,9 +56,21 @@ document.addEventListener('keydown', (e) => {
 
 async function initializeImageHistory() {
     try {
-        // Get session ID from localStorage
-        currentSessionId = localStorage.getItem('flipaha_session_id');
-        console.log('Image History - Session ID from localStorage:', currentSessionId);
+        // Verify user is logged in before showing any image history
+        const authRes = await fetch('/api/me', { credentials: 'include' });
+        const authData = await authRes.json();
+
+        if (!authData.logged_in) {
+            console.warn('User not logged in, redirecting to login');
+            showErrorMessage('Please log in to view your image history.');
+            showEmptyState();
+            return;
+        }
+
+        // Use user-specific session ID
+        currentSessionId = 'user_' + authData.user_id;
+        localStorage.setItem('flipaha_session_id', currentSessionId);
+        console.log('Image History - User session ID:', currentSessionId);
         
         if (!currentSessionId) {
             console.warn('No session ID found in localStorage');

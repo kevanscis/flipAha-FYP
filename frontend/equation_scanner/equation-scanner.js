@@ -134,6 +134,9 @@ function handleFileSelect() {
 
     clearMessages();
     showPreview();
+
+    // Upload immediately so quality warnings appear before the user presses Convert
+    uploadImage();
 }
 
 function showPreview() {
@@ -301,7 +304,7 @@ async function uploadImage() {
         state.previewUrl = data.preview;
 
         if (data.quality && data.quality.warnings && data.quality.warnings.length > 0) {
-            showQualityWarnings(data.quality.warnings);
+            showQualityWarnings(data.quality.warnings, data.quality.hint);
         }
 
         return true;
@@ -794,7 +797,7 @@ function showEditorMessage(message, type) {
     }, 3000);
 }
 
-function showQualityWarnings(warnings) {
+function showQualityWarnings(warnings, hint) {
     const warningsDiv = document.getElementById('qualityWarnings');
     const warningsList = document.getElementById('warningsList');
 
@@ -806,6 +809,15 @@ function showQualityWarnings(warnings) {
         li.textContent = warning;
         warningsList.appendChild(li);
     });
+
+    // Show actionable hint if provided
+    if (hint) {
+        const hintLi = document.createElement('li');
+        hintLi.style.fontWeight = 'bold';
+        hintLi.style.marginTop = '8px';
+        hintLi.textContent = hint;
+        warningsList.appendChild(hintLi);
+    }
 
     warningsDiv.style.display = 'block';
 }

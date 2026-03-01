@@ -770,6 +770,16 @@ def upload_image():
         file_data = file.read()
         image_id = str(uuid.uuid4())
         
+        # Check image quality (blurry, dark, small, etc.)
+        quality_result = image_processor.check_image_quality(file_data)
+        
+        # Build user-friendly warnings with a "Try a clearer photo" hint
+        warnings = quality_result.get('warnings', [])
+        hint = None
+        if warnings:
+            # Add a clear actionable hint for low-quality images
+            hint = '📸 Try a clearer photo for more accurate results.'
+        
         # Store the image data for later retrieval
         store_image(session_id, image_id, file_data)
         
@@ -778,7 +788,13 @@ def upload_image():
             'image_id': image_id,
             'session_id': session_id,
             'filename': secure_filename(file.filename),
-            'size': len(file_data)
+            'size': len(file_data),
+            'quality': {
+                'valid': quality_result.get('valid', True),
+                'warnings': warnings,
+                'hint': hint,
+                'metrics': quality_result.get('metrics', {})
+            }
         }), 200
     except Exception as e:
         return jsonify({
@@ -903,6 +919,7 @@ def get_images():
     Get all images for a session
     Query params: session_id
     Returns: {images: [...], stats: {total_images: N}}
+    Only returns images if the session belongs to the logged-in user.
     """
     try:
         import base64
@@ -913,6 +930,21 @@ def get_images():
                 'success': False,
                 'error': 'Missing session_id parameter'
             }), 400
+        
+        # Verify the requesting user owns this session
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required'
+            }), 401
+        
+        expected_session = f'user_{user_id}'
+        if session_id != expected_session:
+            return jsonify({
+                'success': False,
+                'error': 'Access denied: you can only view your own image history'
+            }), 403
         
         # Get all images for this session
         session_images = image_store.get(session_id, {})
