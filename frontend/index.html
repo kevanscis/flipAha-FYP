@@ -27,42 +27,6 @@
 
     <!-- Custom styles -->
     <link rel="stylesheet" href="styles.css">
-    <style>
-        .header-nav {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            margin-top: 20px;
-            flex-wrap: wrap;
-        }
-
-        .nav-button {
-            padding: 10px 20px;
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 8px;
-            cursor: pointer;
-            text-decoration: none;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .nav-button:hover {
-            background: rgba(255, 255, 255, 0.3);
-            border-color: rgba(255, 255, 255, 0.5);
-        }
-
-        .nav-button.active {
-            background: rgba(255, 255, 255, 0.4);
-            border-color: rgba(255, 255, 255, 0.8);
-            color: #fff;
-            box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
-        }
-    </style>
 </head>
 <body>
     <div class="container">
@@ -76,13 +40,13 @@
                 <p>Your Personal Online Math Tutor</p>
                 <div class="header-nav">
                     <button class="nav-button active"><i class="fas fa-comments"></i> Chat Tutor</button>
-                    <div id="dashboardButton" style="display: none;">
+                    <div id="dashboardButton">
                         <a class="nav-button" href="/dashboard"><i class="fas fa-chart-bar"></i> Dashboard</a>
                     </div>
                     <div id="authButtons">
                         <a class="nav-button" href="/login"><i class="fas fa-sign-in-alt"></i> Login</a>
                     </div>
-                    <div id="logoutButton" style="display: none;">
+                    <div id="logoutButton">
                         <button class="nav-button" onclick="goLogout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
                     </div>
                 </div>
