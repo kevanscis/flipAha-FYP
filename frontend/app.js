@@ -178,6 +178,11 @@ function latexToSmartText(latex) {
   // Vectors
   text = text.replace(/\\overrightarrow\{([^}]+)\}/g, '$1⃗');
 
+  // Degree: ^{\circ} → ° (must be before brace stripping)
+  text = text.replace(/\^\{\\circ\}/g, '°');
+  text = text.replace(/\^\\circ/g, '°');
+  text = text.replace(/\\circ/g, '°');
+
   // Operators
   text = text.replace(/\\times/g, '×');
   text = text.replace(/\\leq/g, '≤');
@@ -616,7 +621,7 @@ function handleInputChange() {
 
   // Extract the current word/phrase for suggestions
   // Match more characters including backslash for LaTeX commands
-  const mathSymbolRegex = /[A-Za-z0-9_\\^/+\-*(),{}<>=!|√∛∜×·⋅≤≥≠±∞∪∩≈∫∑⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ⃗αβγδΔθλμωΩπ'"]/;
+  const mathSymbolRegex = /[A-Za-z0-9_\\^/+\-*(),{}<>=!|√∛∜×·⋅≤≥≠±∞∪∩≈∫∑⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ⃗αβγδΔθλμωΩπ°'"]/;
   const isChar = (ch) => mathSymbolRegex.test(ch);
 
   // Get current word/phrase
@@ -872,7 +877,7 @@ function handleInputChange() {
     if (suggestions.length > 0) {
       const rawStart = start + termStartOffset;
       const rawEnd = rawStart + queryTerm.length;
-      const replaceableCharRegex = /[A-Za-z0-9_\\^{}()√∛∜α-ωΑ-Ωπθδλμσωβγ+\-−⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ]/;
+      const replaceableCharRegex = /[A-Za-z0-9_\\^{}()√∛∜α-ωΑ-Ωπθδλμσωβγ+\-−⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ°]/;
       let replaceStart = rawStart;
       let replaceEnd = rawEnd;
 
@@ -1040,8 +1045,8 @@ function selectSuggestion(latex) {
     }
   }
 
-  const safePrefix = preservePlainTextSegments(prefix);
-  const safeSuffix = preservePlainTextSegments(suffix);
+  const safePrefix = preservePlainTextSegments(prefix).replace(/°/g, '^{\\circ}');
+  const safeSuffix = preservePlainTextSegments(suffix).replace(/°/g, '^{\\circ}');
   questionInput.setValue(`${safePrefix}${suggestionLatex}${safeSuffix}`);
 
   try {

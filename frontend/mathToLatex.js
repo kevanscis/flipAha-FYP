@@ -120,6 +120,24 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     allSuggestions.push(`${base}^{${exponent}}`);
   }
 
+  // 0.5. Degree notation shorthand detection
+  // "35o" → user typed letter 'o' as degree symbol
+  const degreeOMatch = compactQueryTerm.match(/^(\d+(?:\.\d+)?)o$/i);
+  if (degreeOMatch) {
+    allSuggestions.push(`${degreeOMatch[1]}^{\\circ}`);
+  }
+
+  // "350" → trailing zero may be intended as degree symbol for "35°"
+  if (!degreeOMatch) {
+    const degreeZeroMatch = compactQueryTerm.match(/^(\d{2,})0$/);
+    if (degreeZeroMatch) {
+      const possibleAngle = parseInt(degreeZeroMatch[1], 10);
+      if (possibleAngle > 0 && possibleAngle <= 360) {
+        allSuggestions.push(`${degreeZeroMatch[1]}^{\\circ}`);
+      }
+    }
+  }
+
   // 1. Try trig system via trig module (most comprehensive for trig)
   if (typeof globalThis !== 'undefined' && globalThis.subjects && globalThis.subjects.trig) {
     const trigSuggestions = globalThis.subjects.trig.getTrigSuggestions(queryTerm, maxSuggestions);

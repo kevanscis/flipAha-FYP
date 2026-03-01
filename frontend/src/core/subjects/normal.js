@@ -94,6 +94,16 @@
     ["!=", "\\neq"],
     ["+-", "\\pm"],
 
+    // Degree notation: 35degree, 35deg, 35° → 35°
+    ["%degree", "$1^{\\circ}"],
+    ["%degrees", "$1^{\\circ}"],
+    ["%deg", "$1^{\\circ}"],
+    ["% degree", "$1^{\\circ}"],
+    ["% degrees", "$1^{\\circ}"],
+    ["% deg", "$1^{\\circ}"],
+    ["%°", "$1^{\\circ}"],
+    ["% °", "$1^{\\circ}"],
+
     // Greek letters - lowercase (with wildcard support for partial typing)
     ["al%", "\\alpha"],
     ["be%", "\\beta"],
