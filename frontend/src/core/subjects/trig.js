@@ -63,8 +63,32 @@
       .replace(/omgea|omeag|oemga|omeega/gi, 'omega');
   }
 
+  function shouldSkipCentralRuleMatching(input, existingSuggestions = []) {
+    const text = String(input ?? '').trim();
+    if (!text) return false;
+    if (!Array.isArray(existingSuggestions) || existingSuggestions.length === 0) return false;
+
+    const looksLikeInverseTrig = /^(?:\\)?(?:(?:arc|a)(?:sin|cos|tan)|(?:sin|cos|tan|sec|csc|cot|cosec)\s*(?:\^\s*\{?\s*-?1\s*\}?|[−-]\s*1))(?:\s*(?:\(|[a-z\\θπα-ω]))?/i.test(text);
+    return looksLikeInverseTrig;
+  }
+
   function getFuzzySuggestions(value, maxSuggestions = 5){
-    const normalized = String(value).toLowerCase().replace(/\\/g,'');
+    const normalizedRaw = String(value)
+      .toLowerCase()
+      .replace(/−/g, '-')
+      .replace(/⁻/g, '-')
+      .replace(/¹/g, '1')
+      .replace(/\s+/g, '')
+      .replace(/\\/g, '');
+
+    const inverseNoArgMatch = normalizedRaw.match(/^(arc|a)?(sin|cos|tan|sec|csc|cot|cosec)(?:\^\{?-?1\}?|[\-]1)$/i);
+    if (inverseNoArgMatch) {
+      const rawFunc = String(inverseNoArgMatch[2] || '').toLowerCase();
+      const normalizedFunc = rawFunc === 'cosec' ? 'csc' : rawFunc;
+      return [`\\${normalizedFunc}^{-1}(x)`].slice(0, maxSuggestions);
+    }
+
+    const normalized = normalizedRaw.replace(/[^a-z]/g, '');
     const candidates = FUZZY_TRIG_RULES.map(r=>({...r, distance:levenshteinDistance(normalized,r.key)}));
     candidates.sort((a,b)=>a.distance-b.distance);
     const best = candidates[0];
@@ -75,7 +99,13 @@
   }
 
   function parseTrigExpression(input){
-    const normalized = String(input).toLowerCase().trim();
+    const normalized = String(input)
+      .toLowerCase()
+      .trim()
+      .replace(/−/g, '-')
+      .replace(/⁻/g, '-')
+      .replace(/¹/g, '1')
+      .replace(/\s+/g, '');
     const stripUnmatchedTrailingParens = (value) => {
       let result = String(value ?? '').trim();
       const countParens = (text) => {
@@ -96,6 +126,53 @@
 
       return result;
     };
+
+    const inverseAliasMatch = normalized.match(/^(?:\\)?(arc|a)(sin|cos|tan)(?:\s*(?:\^\s*\{?\s*-?1\s*\}?|[−-]\s*1|⁻¹))?\s*(?:\(\s*([^)]*)\s*\)|([a-z0-9\\πθα-ω+\-*/.^{}]+))?\s*$/i);
+    if (inverseAliasMatch) {
+      const func = String(inverseAliasMatch[2] || '').toLowerCase();
+      const parenArg = inverseAliasMatch[3];
+      const inlineArg = inverseAliasMatch[4];
+      const rawArg = typeof parenArg === 'string' && parenArg.length > 0
+        ? parenArg
+        : (inlineArg || '');
+
+      return {
+        function: func,
+        modifier: '^-1',
+        argument: stripUnmatchedTrailingParens(rawArg),
+        matched: true
+      };
+    }
+
+    const inverseAliasOpenParenMatch = normalized.match(/^(?:\\)?(arc|a)(sin|cos|tan)(?:\s*(?:\^\s*\{?\s*-?1\s*\}?|[−-]\s*1|⁻¹))?\s*\(\s*(.*)$/i);
+    if (inverseAliasOpenParenMatch) {
+      const func = String(inverseAliasOpenParenMatch[2] || '').toLowerCase();
+      const rawArg = String(inverseAliasOpenParenMatch[3] || '');
+
+      return {
+        function: func,
+        modifier: '^-1',
+        argument: stripUnmatchedTrailingParens(rawArg),
+        matched: true
+      };
+    }
+
+    const inversePlainMatch = normalized.match(/^(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)\s*[−-]\s*1\s*(?:\(\s*([^)]*)\s*\)|([a-z0-9\\πθα-ω+\-*/.^{}()]+))?\s*$/i);
+    if (inversePlainMatch) {
+      const func = String(inversePlainMatch[1] || '').toLowerCase();
+      const parenArg = inversePlainMatch[2];
+      const inlineArg = inversePlainMatch[3];
+      const rawArg = typeof parenArg === 'string' && parenArg.length > 0
+        ? parenArg
+        : (inlineArg || '');
+
+      return {
+        function: func,
+        modifier: '^-1',
+        argument: stripUnmatchedTrailingParens(rawArg),
+        matched: true
+      };
+    }
 
     const patterns = [
       /^(?:\\)?(sin|cos|tan|csc|cosec|sec|cot)((?:\^\{?-?1\}?|\^2|\^3|\^n)?)\s*\(\s*(.*)$/i,
@@ -198,10 +275,26 @@
     let output = String(rawOperand || '').trim();
     if (!output) return output;
 
+    const isWrappedByOuterParens = (text) => {
+      if (!text.startsWith('(') || !text.endsWith(')')) return false;
+      let depth = 0;
+      for (let i = 0; i < text.length; i += 1) {
+        const ch = text[i];
+        if (ch === '(') depth += 1;
+        if (ch === ')') depth -= 1;
+        if (depth === 0 && i < text.length - 1) return false;
+      }
+      return depth === 0;
+    };
+
     const openCount = (output.match(/\(/g) || []).length;
     const closeCount = (output.match(/\)/g) || []).length;
     if (openCount > closeCount && output.startsWith('(')) {
       output = output.slice(1).trim();
+    }
+
+    while (isWrappedByOuterParens(output)) {
+      output = output.slice(1, -1).trim();
     }
 
     return output;
@@ -209,10 +302,11 @@
 
   function generateTrigExpressionSuggestions(rawArg, latexFunc, modifierLatex){
     const suggestions = new Set();
-    const normalizedArg = normalizeTrigArgument(rawArg);
+    const cleanRawArg = sanitizeIncompleteTrigOperand(rawArg);
+    const normalizedArg = normalizeTrigArgument(cleanRawArg);
     suggestions.add(`${latexFunc}${modifierLatex}(${normalizedArg})`);
 
-    const compactRawArg = String(rawArg).trim().replace(/\s+/g, '');
+    const compactRawArg = String(cleanRawArg).trim().replace(/\s+/g, '');
     const fractionAmbiguities = (typeof globalThis !== 'undefined' && typeof globalThis.buildFractionAmbiguityCandidates === 'function')
       ? globalThis.buildFractionAmbiguityCandidates(compactRawArg)
       : [];
@@ -226,7 +320,7 @@
     }
 
     if (!modifierLatex) {
-      const compactRaw = String(rawArg).trim().replace(/\s+/g, '');
+      const compactRaw = String(cleanRawArg).trim().replace(/\s+/g, '');
       const powerAmbigMatch = compactRaw.match(/^(\d+)([a-zα-ω\\]+)([+\-].+)$/i);
       if (powerAmbigMatch) {
         const coeff = powerAmbigMatch[1];
@@ -248,7 +342,7 @@
       }
     }
 
-    const compact = String(rawArg).trim().replace(/\s+/g, '');
+    const compact = String(cleanRawArg).trim().replace(/\s+/g, '');
     const ambigMatch = compact.match(/^(.+)\+((\d*)?(?:\\pi|π|pi))\/(\d+)$/i);
     if (ambigMatch) {
       const lhsRaw = ambigMatch[1];
@@ -277,7 +371,7 @@
     if (modifier){ if (modifier.includes('-1')||modifier==='^-1') modifierLatex='^{-1}'; else if (modifier==='^2') modifierLatex='^{2}'; else if (modifier==='^3') modifierLatex='^{3}'; }
     if (argument){
       const rawArg = String(argument).trim();
-      const canonicalArg = normalizeCommonTypos(rawArg);
+      const canonicalArg = normalizeCommonTypos(sanitizeIncompleteTrigOperand(rawArg));
 
       if (/[+\-*/]/.test(canonicalArg) || /(?:pi|π)/i.test(canonicalArg)) {
         return generateTrigExpressionSuggestions(canonicalArg, latexFunc, modifierLatex).slice(0, maxSuggestions);
@@ -337,7 +431,16 @@
       if (thetaMatch){ const map = { 'theta':'\\theta','θ':'\\theta','x':'x','t':'t','alpha':'\\alpha','beta':'\\beta','gamma':'\\gamma','delta':'\\delta','lambda':'\\lambda','mu':'\\mu','sigma':'\\sigma','omega':'\\omega' }; const key = canonicalArg.replace(/\\/g,'').toLowerCase(); const mapped = map[key] || canonicalArg; return [`${latexFunc}${modifierLatex}(${mapped})`]; }
       const lowerArg = canonicalArg.toLowerCase().replace(/\\/g,'').replace(/[{}\\]/g,'').replace(/\s+/g,'');
       const completedArgs = TRIG_CONFIG.arguments.filter(a=>{ const norm = a.toLowerCase().replace(/\\/g,'').replace(/[{}\\]/g,'').replace(/\s+/g,''); return norm.includes(lowerArg) || lowerArg.includes(norm); }).slice(0,maxSuggestions);
-      return completedArgs.map(arg=>`${latexFunc}${modifierLatex}(${arg})`);
+      if (completedArgs.length > 0) {
+        return completedArgs.map(arg=>`${latexFunc}${modifierLatex}(${arg})`);
+      }
+
+      const normalizedFreeArg = normalizeTrigArgument(canonicalArg);
+      if (normalizedFreeArg) {
+        return [`${latexFunc}${modifierLatex}(${normalizedFreeArg})`];
+      }
+
+      return [`${latexFunc}${modifierLatex}(x)`];
     }
     return TRIG_CONFIG.arguments.slice(0,maxSuggestions).map(arg=>`${'\\'+parsed.function}${(parsed.modifier||'').replace('^-1','^{-1}') }(${arg})`);
   }
@@ -372,7 +475,8 @@
       generateTrigSuggestions,
       getFuzzySuggestions,
       normalizeTrigArgument,
-      sanitizeIncompleteTrigOperand
+      sanitizeIncompleteTrigOperand,
+      shouldSkipCentralRuleMatching
     };
   }
   if (typeof module !== 'undefined' && module.exports){
@@ -382,7 +486,8 @@
       generateTrigSuggestions,
       getFuzzySuggestions,
       normalizeTrigArgument,
-      sanitizeIncompleteTrigOperand
+      sanitizeIncompleteTrigOperand,
+      shouldSkipCentralRuleMatching
     };
   }
 })();

@@ -211,6 +211,11 @@ function latexToSmartText(latex) {
   // Vectors
   text = text.replace(/\\overrightarrow\{([^}]+)\}/g, '$1⃗');
 
+  // Degree: ^{\circ} → ° (must be before brace stripping)
+  text = text.replace(/\^\{\\circ\}/g, '°');
+  text = text.replace(/\^\\circ/g, '°');
+  text = text.replace(/\\circ/g, '°');
+
   // Operators
   text = text.replace(/\\times/g, '×');
   text = text.replace(/\\leq/g, '≤');
@@ -271,6 +276,29 @@ function normalizeMathLiveArtifacts(value) {
 
 function normalizeToLatex(input) {
   let s = normalizeMathLiveArtifacts(input);
+
+  const normalizeInverseAlias = (value, aliasPattern, canonicalFunc) => {
+    const regex = new RegExp(
+      `(^|[^A-Za-z\\\\])(?:\\\\)?(?:${aliasPattern})(?:\\s*(?:\\^\\s*\\{?\\s*-?1\\s*\\}?|[−-]\\s*1|⁻¹))?\\s*(\\([^)]*\\)|[A-Za-z0-9_\\\\α-ωΑ-Ωπθ]+)?`,
+      'gi'
+    );
+
+    return value.replace(regex, (match, prefix, rawArg) => {
+      const arg = String(rawArg || '').trim();
+      if (!arg) return `${prefix}${canonicalFunc}^{-1}`;
+      if (arg.startsWith('(')) return `${prefix}${canonicalFunc}^{-1}${arg}`;
+      return `${prefix}${canonicalFunc}^{-1}(${arg})`;
+    });
+  };
+
+  s = normalizeInverseAlias(s, 'arcsin|asin', '\\sin');
+  s = normalizeInverseAlias(s, 'arccos|acos', '\\cos');
+  s = normalizeInverseAlias(s, 'arctan|atan', '\\tan');
+
+  // Common constants
+  s = s
+    .replace(/π/g, '\\pi')
+    .replace(/(^|[^A-Za-z\\])pi(?=[^A-Za-z]|$)/gi, '$1\\pi');
 
   // Logs
   s = s.replace(/\blog\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/g, '\\log_{$1}($2)');
@@ -609,7 +637,7 @@ function handleInputChange() {
 
   // Extract the current word/phrase for suggestions
   // Match more characters including backslash for LaTeX commands
-  const mathSymbolRegex = /[A-Za-z0-9_\\^/+\-*(),{}<>=!|√∛∜×·⋅≤≥≠±∞∪∩≈∫∑⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ⃗αβγδΔθλμωΩπ'"]/;
+  const mathSymbolRegex = /[A-Za-z0-9_\\^/+\-*(),{}<>=!|√∛∜×·⋅≤≥≠±∞∪∩≈∫∑⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ⃗αβγδΔθλμωΩπ°'"]/;
   const isChar = (ch) => mathSymbolRegex.test(ch);
 
   // Get current word/phrase
@@ -663,8 +691,19 @@ function handleInputChange() {
         }
         if (depth === 0) {
           if (char === '+' || char === '-') {
-            const beforeOp = expr.substring(Math.max(0, i - 3), i).toLowerCase();
-            const isInverseTrig = /(sin|cos|tan)$/.test(beforeOp) && char === '-' && expr[i + 1] === '1';
+            let prevIndex = i - 1;
+            while (prevIndex >= 0 && /\s/.test(expr[prevIndex])) {
+              prevIndex -= 1;
+            }
+            const prevNonSpace = prevIndex >= 0 ? expr[prevIndex] : '';
+            const isUnarySign = prevIndex < 0 || /[+\-*/=,(]/.test(prevNonSpace);
+            if (isUnarySign) {
+              continue;
+            }
+
+            const compactPrefix = expr.slice(0, i).replace(/\s+/g, '');
+            const inversePrefixPattern = /(?:(?:\\)?(?:sin|cos|tan|sec|csc|cot|cosec)(?:\^\{?)?|(?:\\)?(?:arc|a)(?:sin|cos|tan))$/i;
+            const isInverseTrig = char === '-' && expr[i + 1] === '1' && inversePrefixPattern.test(compactPrefix);
             if (!isInverseTrig) {
               lastOperatorIndex = i;
             }
@@ -676,6 +715,19 @@ function handleInputChange() {
               const beforeSlash = expr.slice(0, i);
               const looksLikeTrigPiFraction = /(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)\s*\d*(?:\\pi|π|pi)$/i.test(beforeSlash);
               if (looksLikeTrigPiFraction) {
+                continue;
+              }
+
+              const leftFragment = expr.slice(0, i);
+              const rightFragment = expr.slice(i + 1);
+              const leftTrimmed = leftFragment.trimEnd();
+              const rightTrimmed = rightFragment.trimStart();
+              const leftChar = leftTrimmed[leftTrimmed.length - 1] || '';
+              const rightChar = rightTrimmed[0] || '';
+              const slashLooksLikeFraction = /[A-Za-z0-9)\]}'\\πθα-ω]/i.test(leftChar)
+                && /[A-Za-z0-9(\[{'\\πθα-ω]/i.test(rightChar);
+
+              if (slashLooksLikeFraction) {
                 continue;
               }
             }
@@ -742,7 +794,9 @@ function handleInputChange() {
     if (trailingTrigStart !== -1) {
       const trailingTrigTerm = query.substring(trailingTrigStart).trim();
       const isCompactTrigAmbiguity = /^(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)\s*\d*[a-zα-ω\\()]+\s*[+\-].+/i.test(trailingTrigTerm);
-      const shouldPreferTrailingTrig = trailingTrigStart > termStartOffset || isCompactTrigAmbiguity;
+      const leadingSegment = query.substring(termStartOffset, trailingTrigStart).trim();
+      const hasLeadingNumericFactor = /^[-+]?\d+(?:\.\d+)?(?:\s*\/\s*[-+]?\d+(?:\.\d+)?)?$/.test(leadingSegment);
+      const shouldPreferTrailingTrig = (trailingTrigStart > termStartOffset && !hasLeadingNumericFactor) || isCompactTrigAmbiguity;
 
       if (shouldPreferTrailingTrig) {
         queryTerm = trailingTrigTerm;
@@ -757,6 +811,56 @@ function handleInputChange() {
       if (searchValue.includes(s)) return false;
       return true;
     });
+
+    const normalizeInverseIntentSource = (value) => String(value || '')
+      .toLowerCase()
+      .replace(/\s+/g, '')
+      .replace(/−/g, '-')
+      .replace(/⁻/g, '-')
+      .replace(/¹/g, '1')
+      .replace(/²/g, '2')
+      .replace(/³/g, '3')
+      .replace(/\^\{?(-?1)\}?/g, '^-1');
+
+    const inverseIntentSource = normalizeInverseIntentSource(queryTermText || queryTerm || '');
+    const inverseIntentMatch = inverseIntentSource.match(/^(?:arc|a)?(sin|cos|tan|sec|csc|cot|cosec)(?:\^-1|-1)(?:\((.*)\)|([a-z0-9_\\πθα-ω.+\-*/^{}]+))?$/i);
+    if (inverseIntentMatch) {
+      const rawFunc = String(inverseIntentMatch[1] || '').toLowerCase();
+      const normalizedFunc = rawFunc === 'cosec' ? 'csc' : rawFunc;
+      const rawArg = String(inverseIntentMatch[2] || inverseIntentMatch[3] || '').trim();
+      const hasTypedArg = rawArg && rawArg !== '-1' && rawArg !== '−1';
+
+      suggestions = suggestions.filter(item => {
+        const text = String(item || '');
+        return /\^\{\s*[−-]?1\s*\}|\^[−-]?1|⁻¹/.test(text);
+      });
+
+      const fallbackInverse = hasTypedArg
+        ? `\\${normalizedFunc}^{-1}(${rawArg})`
+        : `\\${normalizedFunc}^{-1}(x)`;
+
+      if (!suggestions.includes(fallbackInverse)) {
+        suggestions.unshift(fallbackInverse);
+      }
+    }
+
+    const compactSquareSource = String(queryTermText || queryTerm || '')
+      .replace(/\s+/g, '')
+      .replace(/⁻¹/g, '^-1')
+      .replace(/²/g, '^2')
+      .replace(/³/g, '^3')
+      .replace(/ⁿ/g, '^n');
+    const directSquareMatch = compactSquareSource.match(/^(.*\))(?:\^?\{?([0-9n]+)\}?)$/i);
+    if (directSquareMatch) {
+      const directSquareSuggestion = `${directSquareMatch[1]}^{${directSquareMatch[2]}}`;
+      if (
+        directSquareSuggestion !== queryTerm &&
+        !searchValue.includes(directSquareSuggestion) &&
+        !suggestions.includes(directSquareSuggestion)
+      ) {
+        suggestions.unshift(directSquareSuggestion);
+      }
+    }
 
     const trigNames = ['sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'cosec'];
     const alphaTail = (queryTermText || queryTerm || '').match(/[A-Za-z]+$/);
@@ -789,15 +893,22 @@ function handleInputChange() {
     if (suggestions.length > 0) {
       const rawStart = start + termStartOffset;
       const rawEnd = rawStart + queryTerm.length;
-      const replaceableCharRegex = /[A-Za-z0-9_\\√∛∜α-ωΑ-Ωπθδλμσωβγ]/;
+      const replaceableCharRegex = /[A-Za-z0-9_\\^{}()√∛∜α-ωΑ-Ωπθδλμσωβγ+\-−⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ°]/;
       let replaceStart = rawStart;
       let replaceEnd = rawEnd;
+
+      const rawToken = searchValue.slice(rawStart, rawEnd);
+      const hasUnarySignPrefix = /^\s*[+\-−](?:\s*[+\-−])*/.test(rawToken);
 
       while (replaceStart < replaceEnd && !replaceableCharRegex.test(searchValue[replaceStart] || '')) {
         replaceStart += 1;
       }
       while (replaceEnd > replaceStart && !replaceableCharRegex.test(searchValue[replaceEnd - 1] || '')) {
         replaceEnd -= 1;
+      }
+
+      if (hasUnarySignPrefix) {
+        replaceStart = rawStart;
       }
 
       if (replaceStart >= replaceEnd) {
@@ -950,8 +1061,8 @@ function selectSuggestion(latex) {
     }
   }
 
-  const safePrefix = preservePlainTextSegments(prefix);
-  const safeSuffix = preservePlainTextSegments(suffix);
+  const safePrefix = preservePlainTextSegments(prefix).replace(/°/g, '^{\\circ}');
+  const safeSuffix = preservePlainTextSegments(suffix).replace(/°/g, '^{\\circ}');
   questionInput.setValue(`${safePrefix}${suggestionLatex}${safeSuffix}`);
 
   try {
@@ -1060,6 +1171,11 @@ function computeSuggestionReplacementRange(latex, currentValue = '') {
   const trigSuffixMatch = queryText.match(/^(.*?)(sin|cos|tan|sec|csc|cot|cosec)$/i);
   if (isTrigSuggestion && trigSuffixMatch && trigSuffixMatch[1]) {
     const prefix = trigSuffixMatch[1];
+    const normalizedPrefix = prefix.toLowerCase();
+    const isInverseAliasPrefix = /^(a|ar|arc)$/.test(normalizedPrefix);
+    if (isInverseAliasPrefix) {
+      return { replaceStart: start, replaceEnd: end };
+    }
     return { replaceStart: start + prefix.length, replaceEnd: end };
   }
 

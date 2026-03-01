@@ -89,7 +89,17 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     .replace(/\\cdot(?!s)/g, '*')
     .replace(/\\times/g, '*')
     .replace(/[·⋅]/g, '*')
-    .replace(/\\left/g, '').replace(/\\right/g, '');
+    .replace(/−/g, '-')
+    .replace(/\\left/g, '').replace(/\\right/g, '')
+    .replace(/⁻¹/g, '^-1')
+    .replace(/²/g, '^2')
+    .replace(/³/g, '^3')
+    .replace(/ⁿ/g, '^n');
+
+  trimmed = trimmed.replace(/^([+\-]+)\s*(?:\\pi|pi)$/i, (match, signs) => {
+    const hasMinus = String(signs || '').includes('-');
+    return hasMinus ? '-pi' : 'pi';
+  });
 
   if (typeof globalThis !== 'undefined' && typeof globalThis.normalizeCommonMathTypos === 'function') {
     trimmed = globalThis.normalizeCommonMathTypos(trimmed);
@@ -101,6 +111,54 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
 
   const allSuggestions = [];
 
+  // 0. Bracketed power fallback: (... )2, (... )^2, (... )^{2} -> (... )^{2}
+  const compactQueryTerm = queryTerm.replace(/\s+/g, '');
+  const bracketPowerMatch = compactQueryTerm.match(/^(.*\))(?:\^?\{?([0-9n]+)\}?)$/i);
+  if (bracketPowerMatch) {
+    const base = bracketPowerMatch[1];
+    const exponent = bracketPowerMatch[2];
+    allSuggestions.push(`${base}^{${exponent}}`);
+  }
+
+  // 0.5. Degree notation shorthand detection
+  // "35o" → user typed letter 'o' as degree symbol
+  const degreeOMatch = compactQueryTerm.match(/^(\d+(?:\.\d+)?)o$/i);
+  if (degreeOMatch) {
+    allSuggestions.push(`${degreeOMatch[1]}^{\\circ}`);
+  }
+
+  // "350" → trailing zero may be intended as degree symbol for "35°"
+  if (!degreeOMatch) {
+    const degreeZeroMatch = compactQueryTerm.match(/^(\d{2,})0$/);
+    if (degreeZeroMatch) {
+      const possibleAngle = parseInt(degreeZeroMatch[1], 10);
+      if (possibleAngle > 0 && possibleAngle <= 360) {
+        allSuggestions.push(`${degreeZeroMatch[1]}^{\\circ}`);
+      }
+    }
+  }
+
+  // 0.6. Fractional power shorthand: x1/2 → x^{1/2}, x2/3 → x^{2/3}
+  // Students often omit ^ and brackets when writing fractional exponents
+  const fracPowerMatch = compactQueryTerm.match(/^([a-zA-Zα-ωΑ-Ωπθ][a-zA-Z0-9α-ωΑ-Ωπθ]*)(\d+)\/(\d+)$/);
+  if (fracPowerMatch) {
+    const base = fracPowerMatch[1];
+    const num = fracPowerMatch[2];
+    const den = fracPowerMatch[3];
+    // Fractional power interpretation: x^(1/2), x^(2/3), etc.
+    allSuggestions.push(`{${base}}^{\\frac{${num}}{${den}}}`);
+    // Special roots
+    if (num === '1' && den === '2') {
+      allSuggestions.push(`\\sqrt{${base}}`);
+    } else if (num === '1' && den === '3') {
+      allSuggestions.push(`\\sqrt[3]{${base}}`);
+    } else if (num === '1') {
+      allSuggestions.push(`\\sqrt[${den}]{${base}}`);
+    }
+    // Multiplication interpretation: x * 1/2
+    allSuggestions.push(`${base} \\cdot \\frac{${num}}{${den}}`);
+  }
+
   // 1. Try trig system via trig module (most comprehensive for trig)
   if (typeof globalThis !== 'undefined' && globalThis.subjects && globalThis.subjects.trig) {
     const trigSuggestions = globalThis.subjects.trig.getTrigSuggestions(queryTerm, maxSuggestions);
@@ -109,10 +167,20 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     }
   }
 
+  const shouldSkipCentralRuleMatching =
+    typeof globalThis !== 'undefined' &&
+    globalThis.subjects &&
+    globalThis.subjects.trig &&
+    typeof globalThis.subjects.trig.shouldSkipCentralRuleMatching === 'function'
+      ? globalThis.subjects.trig.shouldSkipCentralRuleMatching(queryTerm, allSuggestions)
+      : false;
+
   // 2. Try centralized rule matching (all subject rules)
-  const matchResult = matchRules(queryTerm);
-  if (matchResult.found) {
-    allSuggestions.push(...matchResult.suggestions);
+  if (!shouldSkipCentralRuleMatching) {
+    const matchResult = matchRules(queryTerm);
+    if (matchResult.found) {
+      allSuggestions.push(...matchResult.suggestions);
+    }
   }
 
   // 2.5 Fraction ambiguity (algebra): a/bx can mean (a/b)x or a/(bx)

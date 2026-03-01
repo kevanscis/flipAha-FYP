@@ -22,27 +22,20 @@
     return output;
   }
 
-  function buildFractionAmbiguityCandidates(input){
-    const raw = String(input ?? '').trim().replace(/\s+/g, '');
-    if (!raw || !raw.includes('/')) return [];
-
-    const match = raw.match(/^([+\-]?\d+(?:\.\d+)?)\/([+\-]?\d+(?:\.\d+)?)([A-Za-z\\α-ωΑ-Ωπθδλμσωβγ][A-Za-z0-9_\\^{}α-ωΑ-Ωπθδλμσωβγ]*)$/i);
-    if (!match) return [];
-
-    const numerator = match[1];
-    const denominator = match[2];
-    const tail = match[3];
-
-    return [
-      `\\frac{${numerator}}{${denominator}}${tail}`,
-      `\\frac{${numerator}}{${denominator}${tail}}`
-    ];
-  }
-
   // Export normal/general rules for centralized compilation in mathToLatex.js
   const NORMAL_RULES = [
     ["%over%", "\\frac{$1}{$2}"],
     ["%divide%", "\\frac{$1}{$2}"],
+    ["pi", "\\pi"],
+    ["-pi", "-\\pi"],
+    ["1/root(2)", ["\\frac{1}{\\sqrt{2}}", "\\frac{\\sqrt{2}}{2}"]],
+    ["1/root2", ["\\frac{1}{\\sqrt{2}}", "\\frac{\\sqrt{2}}{2}"]],
+    ["1/sqrt(2)", ["\\frac{1}{\\sqrt{2}}", "\\frac{\\sqrt{2}}{2}"]],
+    ["1/sqrt2", ["\\frac{1}{\\sqrt{2}}", "\\frac{\\sqrt{2}}{2}"]],
+    ["1/root(3)", ["\\frac{1}{\\sqrt{3}}", "\\frac{\\sqrt{3}}{3}"]],
+    ["1/root3", ["\\frac{1}{\\sqrt{3}}", "\\frac{\\sqrt{3}}{3}"]],
+    ["1/sqrt(3)", ["\\frac{1}{\\sqrt{3}}", "\\frac{\\sqrt{3}}{3}"]],
+    ["1/sqrt3", ["\\frac{1}{\\sqrt{3}}", "\\frac{\\sqrt{3}}{3}"]],
     ["mod", "\\left|x\\right|"],
     ["sum from % to % (%)", "\\sum_{$1}^{$2} ($3)"],
     ["sum % to % (%)", "\\sum_{$1}^{$2} ($3)"],
@@ -81,14 +74,17 @@
     ["%^(1/2)", "\\sqrt{$1}"],
     ["%^(1/3)", "\\sqrt[3]{$1}"],
     ["%^(%/%)", "{$1}^{\\frac{$2}{$3}}"],
-    ["x", ["x", "x^{1/3}", "x^{2}", "x^{3}", "x^{n}"]],
-    ["y", ["y", "y^{1/3}", "y^{2}", "y^{3}", "y^{n}"]],
-    ["z", ["z", "z^{1/3}", "z^{2}", "z^{3}", "z^{n}"]],
-    ["a", ["a", "a^{1/3}", "a^{2}", "a^{3}", "a^{n}"]],
+    ["x", ["x", "\\sqrt[3]{x}", "x^{2}", "x^{3}", "x^{n}"]],
+    ["y", ["y", "\\sqrt[3]{y}", "y^{2}", "y^{3}", "y^{n}"]],
+    ["z", ["z", "\\sqrt[3]{z}", "z^{2}", "z^{3}", "z^{n}"]],
+    ["a", ["a", "\\sqrt[3]{a}", "a^{2}", "a^{3}", "a^{n}"]],
     ["x2", "x^{2}"],
     ["x3", "x^{3}"],
     ["e^(%)", "e^{$1}"],
     ["exp(%)", "e^{$1}"],
+    ["%)^2", "$1)^{2}"],
+    ["%)^{2}", "$1)^{2}"],
+    ["%)2", "$1)^{2}"],
     ["%^2", "{$1}^{2}"],
     ["%^3", "{$1}^{3}"],
     ["%^(%)", "{$1}^{$2}"],
@@ -97,6 +93,16 @@
     [">=", "\\geq"],
     ["!=", "\\neq"],
     ["+-", "\\pm"],
+
+    // Degree notation: 35degree, 35deg, 35° → 35°
+    ["%degree", "$1^{\\circ}"],
+    ["%degrees", "$1^{\\circ}"],
+    ["%deg", "$1^{\\circ}"],
+    ["% degree", "$1^{\\circ}"],
+    ["% degrees", "$1^{\\circ}"],
+    ["% deg", "$1^{\\circ}"],
+    ["%°", "$1^{\\circ}"],
+    ["% °", "$1^{\\circ}"],
 
     // Greek letters - lowercase (with wildcard support for partial typing)
     ["al%", "\\alpha"],
@@ -125,9 +131,14 @@
     if (typeof globalThis !== 'undefined'){
     globalThis.NORMAL_RULES = NORMAL_RULES;
     globalThis.normalizeCommonMathTypos = normalizeCommonMathTypos;
-    globalThis.buildFractionAmbiguityCandidates = buildFractionAmbiguityCandidates;
   }
+
+  const exportedFractionBuilder =
+    typeof globalThis !== 'undefined' && typeof globalThis.buildFractionAmbiguityCandidates === 'function'
+      ? globalThis.buildFractionAmbiguityCandidates
+      : () => [];
+
   if (typeof module !== 'undefined' && module.exports){
-    module.exports = { NORMAL_RULES, normalizeCommonMathTypos, buildFractionAmbiguityCandidates };
+    module.exports = { NORMAL_RULES, normalizeCommonMathTypos, buildFractionAmbiguityCandidates: exportedFractionBuilder };
   }
 })();
