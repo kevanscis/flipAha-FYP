@@ -420,6 +420,25 @@
         if (!modifierLatex && Number.isFinite(Number(coeff)) && Number(coeff) >= 2){ const power = `${latexFunc}^{${coeff}}(${mapped})`; return [direct,power].slice(0,maxSuggestions); }
         return [direct];
       }
+      const inlinePowerMatch = canonicalArg.match(/^(\\[a-zA-Z]+|[a-zA-Z]+|π|θ)(\d+)$/);
+      if (inlinePowerMatch){
+        const varToken = inlinePowerMatch[1];
+        const exponent = inlinePowerMatch[2];
+        const key = varToken.replace(/^\\/,'').toLowerCase();
+        const map = {
+          'theta':'\\theta','θ':'\\theta','x':'x','t':'t',
+          'alpha':'\\alpha','beta':'\\beta','gamma':'\\gamma','delta':'\\delta',
+          'lambda':'\\lambda','mu':'\\mu','sigma':'\\sigma','omega':'\\omega',
+          'pi':'\\pi','π':'\\pi'
+        };
+        const mapped = map[key] || varToken;
+        const powerArg = `${mapped}^{${exponent}}`;
+        if (!modifierLatex && Number.isFinite(Number(exponent)) && Number(exponent) >= 2){
+          const coeffArg = `${exponent}${mapped}`;
+          return [`${latexFunc}${modifierLatex}(${powerArg})`, `${latexFunc}${modifierLatex}(${coeffArg})`].slice(0,maxSuggestions);
+        }
+        return [`${latexFunc}${modifierLatex}(${powerArg})`];
+      }
       const piMatch = canonicalArg.match(/^(?:([0-9]+)\s*)?(?:\\pi|π|pi)(?:\s*\/\s*([0-9]+))?$/i);
       if (piMatch){
         const num = piMatch[1] ? Number(piMatch[1]) : 1; const den = piMatch[2] ? Number(piMatch[2]) : null; const suggestions = [];
