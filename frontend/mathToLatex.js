@@ -127,16 +127,7 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     allSuggestions.push(`${degreeOMatch[1]}^{\\circ}`);
   }
 
-  // "350" → trailing zero may be intended as degree symbol for "35°"
-  if (!degreeOMatch) {
-    const degreeZeroMatch = compactQueryTerm.match(/^(\d{2,})0$/);
-    if (degreeZeroMatch) {
-      const possibleAngle = parseInt(degreeZeroMatch[1], 10);
-      if (possibleAngle > 0 && possibleAngle <= 360) {
-        allSuggestions.push(`${degreeZeroMatch[1]}^{\\circ}`);
-      }
-    }
-  }
+
 
   // 0.6. Fractional power shorthand: x1/2 → x^{1/2}, x2/3 → x^{2/3}
   // Students often omit ^ and brackets when writing fractional exponents
