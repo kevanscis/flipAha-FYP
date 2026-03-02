@@ -277,6 +277,10 @@ function normalizeToLatex(input) {
 
   // Fractions
   s = s.replace(
+    /(^|[^A-Za-z0-9/])([+\-]?\d+(?:\.\d+)?)\s*\/\s*([+\-]?\d+(?:\.\d+)?)([A-Za-z\\α-ωΑ-Ωπθδλμσωβγ][A-Za-z0-9_\\^{}()α-ωΑ-Ωπθδλμσωβγ]*)(?=$|[^A-Za-z0-9/])/g,
+    '$1\\frac{$2}{$3}$4'
+  );
+  s = s.replace(
     /(^|[^A-Za-z0-9/])(\([^)]+\)|[A-Za-z0-9]+)\s*\/\s*(\([^)]+\)|[A-Za-z0-9]+)(?=$|[^A-Za-z0-9/])/g,
     '$1\\frac{$2}{$3}'
   );
@@ -1045,8 +1049,8 @@ function selectSuggestion(latex) {
     }
   }
 
-  const safePrefix = preservePlainTextSegments(prefix).replace(/°/g, '^{\\circ}');
-  const safeSuffix = preservePlainTextSegments(suffix).replace(/°/g, '^{\\circ}');
+  const safePrefix = normalizeToLatex(preservePlainTextSegments(prefix).replace(/°/g, '^{\\circ}'));
+  const safeSuffix = normalizeToLatex(preservePlainTextSegments(suffix).replace(/°/g, '^{\\circ}'));
   questionInput.setValue(`${safePrefix}${suggestionLatex}${safeSuffix}`);
 
   try {
