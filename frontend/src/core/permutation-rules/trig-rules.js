@@ -311,6 +311,59 @@
     return perms;
   }
 
+  function generateParsedTrigPermutations(parsed) {
+    const perms = new Set();
+    if (!parsed || typeof parsed !== 'object') return [];
+
+    if (parsed.type === 'trigonometry' || parsed.type === 'trigonometry_pi') {
+      const trigSource = `${parsed.prefix || ''}${parsed.keyword || ''}${parsed.operand || ''}`;
+      const trigPerms = generateTrigPermutations(trigSource || parsed.originalExpr || '');
+      for (const perm of trigPerms) perms.add(perm);
+
+      const rawKeyword = String(parsed.keyword || '').toLowerCase();
+      const normalizedFunc = normalizeTrigFunc(rawKeyword);
+      const rawOperand = String(parsed.operand || '').trim();
+      const trigSubject =
+        typeof globalThis !== 'undefined' && globalThis.subjects
+          ? (globalThis.subjects.trig || {})
+          : {};
+
+      const sanitizeIncompleteOperand =
+        typeof trigSubject.sanitizeIncompleteTrigOperand === 'function'
+          ? trigSubject.sanitizeIncompleteTrigOperand
+          : (operand) => String(operand || '').trim();
+
+      const normalizeTrigOperand =
+        typeof trigSubject.normalizeTrigArgument === 'function'
+          ? trigSubject.normalizeTrigArgument
+          : (operand) => String(operand || '').trim();
+
+      const normalizedOperand = normalizeTrigOperand(sanitizeIncompleteOperand(rawOperand));
+      const rawPrefix = String(parsed.prefix || '');
+
+      if (normalizedFunc && normalizedOperand) {
+        const alreadyWrapped = /^\(.*\)$/.test(normalizedOperand);
+        const trigCall = alreadyWrapped
+          ? `\\${normalizedFunc}${normalizedOperand}`
+          : `\\${normalizedFunc}(${normalizedOperand})`;
+        perms.add(trigCall);
+        if (rawPrefix) {
+          perms.add(`${rawPrefix}${trigCall}`);
+          const needsStar = /[a-z0-9)πθα-ω]$/i.test(rawPrefix);
+          if (needsStar) perms.add(`${rawPrefix}*${trigCall}`);
+        }
+      }
+    }
+
+    if (parsed.type === 'inverse_trigonometry') {
+      const inverseSource = String(parsed.originalExpr || '').trim();
+      const invTrigPerms = generateInverseTrigPermutations(inverseSource);
+      for (const perm of invTrigPerms) perms.add(perm);
+    }
+
+    return Array.from(perms).filter(isValidTrigExpression);
+  }
+
   function isValidTrigExpression(expr) {
     if (!expr || typeof expr !== 'string') return false;
     const trimmed = expr.trim();
@@ -338,6 +391,7 @@
   if (typeof globalThis !== 'undefined') {
     globalThis.trigPermutationRules = {
       generateTrigPermutations,
+      generateParsedTrigPermutations,
       generateTrigDigitPermutations,
       generateTrigVarPermutations,
       generateTrigAmbiguityPermutations,
@@ -349,6 +403,7 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       generateTrigPermutations,
+      generateParsedTrigPermutations,
       generateTrigDigitPermutations,
       generateTrigVarPermutations,
       generateTrigAmbiguityPermutations,

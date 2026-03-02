@@ -291,7 +291,15 @@ function normalizeToLatex(input) {
 function normalizeSuggestionLatex(value) {
   const raw = String(value ?? '').trim();
   if (!raw) return '';
-  if (raw.startsWith('\\')) return raw;
+
+  const looksLikeLatex =
+    raw.startsWith('\\') ||
+    /\\[a-zA-Z]+/.test(raw) ||
+    /\^\{[^}]+\}/.test(raw) ||
+    /_\{[^}]+\}/.test(raw) ||
+    /\{\\frac\{/.test(raw);
+
+  if (looksLikeLatex) return raw;
 
   if (typeof window.mathToLatex === 'function') {
     try {

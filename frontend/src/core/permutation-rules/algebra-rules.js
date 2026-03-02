@@ -54,6 +54,45 @@
     return perms;
   }
 
+  function generateParsedAlgebraPermutations(parsed) {
+    const perms = new Set();
+    if (!parsed || typeof parsed !== 'object') return [];
+
+    if (parsed.type === 'implicit_multiplication') {
+      const fromParsed = generateImplicitMultiplicationPermutations(
+        parsed.num1,
+        parsed.variable,
+        parsed.num2,
+        parsed.prefix,
+        parsed.suffix
+      );
+      for (const perm of fromParsed) perms.add(perm);
+    }
+
+    if (parsed.type === 'function_application') {
+      const fromParsed = generateFunctionAppPermutations(
+        parsed.keyword,
+        parsed.variable,
+        parsed.prefix,
+        parsed.suffix
+      );
+      for (const perm of fromParsed) perms.add(perm);
+    }
+
+    if (parsed.type === 'power_ambiguity') {
+      const fromParsed = generatePowerAmbiguityPermutations(
+        parsed.base,
+        parsed.exponent,
+        parsed.variable,
+        parsed.prefix,
+        parsed.suffix
+      );
+      for (const perm of fromParsed) perms.add(perm);
+    }
+
+    return Array.from(perms).filter(isValidAlgebraExpression);
+  }
+
   /**
    * General dispatcher for backward compatibility
    * Takes full input string and applies all algebra rules
@@ -119,6 +158,7 @@
   if (typeof globalThis !== 'undefined') {
     globalThis.algebraPermutationRules = {
       generateAlgebraPermutations,
+      generateParsedAlgebraPermutations,
       generateFunctionAppPermutations,
       generateImplicitMultiplicationPermutations,
       generatePowerAmbiguityPermutations,
@@ -128,6 +168,7 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       generateAlgebraPermutations,
+      generateParsedAlgebraPermutations,
       generateFunctionAppPermutations,
       generateImplicitMultiplicationPermutations,
       generatePowerAmbiguityPermutations,

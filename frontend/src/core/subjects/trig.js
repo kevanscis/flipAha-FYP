@@ -489,6 +489,7 @@
   if (typeof globalThis !== 'undefined'){
     globalThis.subjects = globalThis.subjects || {};
     globalThis.subjects.trig = {
+      getSuggestions: getTrigSuggestions,
       getTrigSuggestions,
       parseTrigExpression,
       generateTrigSuggestions,
@@ -500,6 +501,7 @@
   }
   if (typeof module !== 'undefined' && module.exports){
     module.exports = {
+      getSuggestions: getTrigSuggestions,
       getTrigSuggestions,
       parseTrigExpression,
       generateTrigSuggestions,

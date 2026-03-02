@@ -52,6 +52,11 @@
     return Array.from(perms).filter(perm => isValidLogExpression(perm));
   }
 
+  function generateParsedLogPermutations(parsed) {
+    if (!parsed || typeof parsed !== 'object' || parsed.type !== 'logarithm') return [];
+    return generateLogPermutations(parsed.operand);
+  }
+
   function isValidLogExpression(expr) {
     if (!expr || typeof expr !== 'string') return false;
     const trimmed = expr.trim();
@@ -69,9 +74,9 @@
   }
 
   if (typeof globalThis !== 'undefined') {
-    globalThis.logPermutationRules = { generateLogPermutations, isValidLogExpression };
+    globalThis.logPermutationRules = { generateLogPermutations, generateParsedLogPermutations, isValidLogExpression };
   }
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { generateLogPermutations, isValidLogExpression };
+    module.exports = { generateLogPermutations, generateParsedLogPermutations, isValidLogExpression };
   }
 })();

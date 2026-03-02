@@ -110,6 +110,10 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
   const queryTerm = trimmed;
 
   const allSuggestions = [];
+  const subjectModules =
+    typeof globalThis !== 'undefined' && globalThis.subjects && typeof globalThis.subjects === 'object'
+      ? Object.values(globalThis.subjects)
+      : [];
 
   // 0. Bracketed power fallback: (... )2, (... )^2, (... )^{2} -> (... )^{2}
   const compactQueryTerm = queryTerm.replace(/\s+/g, '');
@@ -138,56 +142,27 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     }
   }
 
-  // 0.6. Fractional power shorthand: x1/2 → x^{1/2}, x2/3 → x^{2/3}
-  // Students often omit ^ and brackets when writing fractional exponents
-  const fracPowerMatch = compactQueryTerm.match(/^([a-zA-Zα-ωΑ-Ωπθ][a-zA-Z0-9α-ωΑ-Ωπθ]*)(\d+)\/(\d+)$/);
-  if (fracPowerMatch) {
-    const base = fracPowerMatch[1];
-    const num = fracPowerMatch[2];
-    const den = fracPowerMatch[3];
-    // Fractional power interpretation: x^(1/2), x^(2/3), etc.
-    allSuggestions.push(`{${base}}^{\\frac{${num}}{${den}}}`);
-    // Special roots
-    if (num === '1' && den === '2') {
-      allSuggestions.push(`\\sqrt{${base}}`);
-    } else if (num === '1' && den === '3') {
-      allSuggestions.push(`\\sqrt[3]{${base}}`);
-    } else if (num === '1') {
-      allSuggestions.push(`\\sqrt[${den}]{${base}}`);
-    }
-    // Multiplication interpretation: x * 1/2
-    allSuggestions.push(`${base} \\cdot \\frac{${num}}{${den}}`);
-  }
-
-  // 1. Try trig system via trig module (most comprehensive for trig)
-  if (typeof globalThis !== 'undefined' && globalThis.subjects && globalThis.subjects.trig) {
-    const trigSuggestions = globalThis.subjects.trig.getTrigSuggestions(queryTerm, maxSuggestions);
-    if (Array.isArray(trigSuggestions) && trigSuggestions.length) {
-      allSuggestions.push(...trigSuggestions);
+  // 0.6 Subject-level dynamic suggestions
+  for (const subject of subjectModules) {
+    if (!subject || typeof subject.getSuggestions !== 'function') continue;
+    const suggestions = subject.getSuggestions(queryTerm, maxSuggestions);
+    if (Array.isArray(suggestions) && suggestions.length) {
+      allSuggestions.push(...suggestions);
     }
   }
 
   const shouldSkipCentralRuleMatching =
-    typeof globalThis !== 'undefined' &&
-    globalThis.subjects &&
-    globalThis.subjects.trig &&
-    typeof globalThis.subjects.trig.shouldSkipCentralRuleMatching === 'function'
-      ? globalThis.subjects.trig.shouldSkipCentralRuleMatching(queryTerm, allSuggestions)
-      : false;
+    subjectModules.some(subject =>
+      subject &&
+      typeof subject.shouldSkipCentralRuleMatching === 'function' &&
+      subject.shouldSkipCentralRuleMatching(queryTerm, allSuggestions)
+    );
 
   // 2. Try centralized rule matching (all subject rules)
   if (!shouldSkipCentralRuleMatching) {
     const matchResult = matchRules(queryTerm);
     if (matchResult.found) {
       allSuggestions.push(...matchResult.suggestions);
-    }
-  }
-
-  // 2.5 Fraction ambiguity (algebra): a/bx can mean (a/b)x or a/(bx)
-  if (typeof globalThis !== 'undefined' && typeof globalThis.buildFractionAmbiguityCandidates === 'function') {
-    const fractionAmbiguities = globalThis.buildFractionAmbiguityCandidates(queryTerm);
-    if (Array.isArray(fractionAmbiguities) && fractionAmbiguities.length) {
-      allSuggestions.push(...fractionAmbiguities);
     }
   }
 
@@ -204,9 +179,52 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
       allSuggestions.push(...uniquePerms);
     }
   }
+
+  const normalizedSuggestions = allSuggestions.map((value) => {
+    let output = String(value ?? '').trim();
+    if (!output) return output;
+    for (const subject of subjectModules) {
+      if (!subject || typeof subject.normalizeSuggestion !== 'function') continue;
+      const normalized = subject.normalizeSuggestion(output, queryTerm);
+      if (typeof normalized === 'string' && normalized.trim()) {
+        output = normalized.trim();
+      }
+    }
+    return output;
+  });
   
-  // 4. Deduplicate and limit
-  const uniqueSuggestions = [...new Set(allSuggestions)];
+  // 4. Deduplicate and limit (semantic dedupe, not just exact-string dedupe)
+  const canonicalizeSuggestion = (value) => {
+    let normalized = String(value ?? '').trim();
+    if (!normalized) return '';
+
+    normalized = normalized
+      .replace(/\left/g, '')
+      .replace(/\right/g, '')
+      .replace(/\s+/g, '')
+      .replace(/²/g, '^2')
+      .replace(/³/g, '^3')
+      .replace(/ⁿ/g, '^n')
+      .replace(/\^\{([^{}]+)\}/g, '^$1')
+      .replace(/_\{([^{}]+)\}/g, '_$1')
+      .replace(/\{([a-zA-Z\\α-ωΑ-Ωπθ][a-zA-Z0-9_\\α-ωΑ-Ωπθ]*)\}\^/g, '$1^')
+      .replace(/\{([a-zA-Z\\α-ωΑ-Ωπθ][a-zA-Z0-9_\\α-ωΑ-Ωπθ]*)\}_/g, '$1_');
+
+    return normalized;
+  };
+
+  const uniqueSuggestions = [];
+  const seenCanonical = new Set();
+  for (const suggestion of normalizedSuggestions) {
+    const candidate = String(suggestion ?? '').trim();
+    if (!candidate) continue;
+
+    const canonical = canonicalizeSuggestion(candidate);
+    if (!canonical || seenCanonical.has(canonical)) continue;
+
+    seenCanonical.add(canonical);
+    uniqueSuggestions.push(candidate);
+  }
   
   // 5. If still nothing, return queryTerm as-is
   if (uniqueSuggestions.length === 0) {
@@ -251,80 +269,29 @@ function generatePermutations(input) {
     return applyPermutationRulesDirect(mathExpr);
   }
   
-  // Route to appropriate permutation generator based on parsed type
-  if (parsed.type === 'logarithm' && globalThis.logPermutationRules) {
-    const logPerms = globalThis.logPermutationRules.generateLogPermutations(parsed.operand);
-    console.log('[generatePermutations] Log perms for', parsed.operand, ':', logPerms);
+  // Route to rule modules using parsed handlers
+  if (globalThis.logPermutationRules?.generateParsedLogPermutations) {
+    const logPerms = globalThis.logPermutationRules.generateParsedLogPermutations(parsed);
+    console.log('[generatePermutations] Log perms for', mathExpr, ':', logPerms);
     for (const perm of logPerms) perms.add(perm);
   }
-  
-  if (parsed.type === 'trigonometry' && globalThis.trigPermutationRules) {
-    const trigSource = `${parsed.prefix || ''}${parsed.keyword || ''}${parsed.operand || ''}`;
-    const trigPerms = globalThis.trigPermutationRules.generateTrigPermutations(trigSource);
-    console.log('[generatePermutations] Trig perms for', trigSource, ':', trigPerms);
+
+  if (globalThis.trigPermutationRules?.generateParsedTrigPermutations) {
+    const trigPerms = globalThis.trigPermutationRules.generateParsedTrigPermutations(parsed);
+    console.log('[generatePermutations] Trig perms for', mathExpr, ':', trigPerms);
     for (const perm of trigPerms) perms.add(perm);
-
-    const rawKeyword = String(parsed.keyword || '').toLowerCase();
-    const normalizedFunc = rawKeyword === 'cosec' ? 'csc' : rawKeyword;
-    const rawOperand = String(parsed.operand || '').trim();
-    const trigSubject = globalThis.subjects?.trig || {};
-    const sanitizeIncompleteOperand =
-      typeof trigSubject.sanitizeIncompleteTrigOperand === 'function'
-        ? trigSubject.sanitizeIncompleteTrigOperand
-        : (operand) => String(operand || '').trim();
-    const normalizeTrigOperand =
-      typeof trigSubject.normalizeTrigArgument === 'function'
-        ? trigSubject.normalizeTrigArgument
-        : (operand) => String(operand || '').trim();
-
-    const normalizedOperand = normalizeTrigOperand(sanitizeIncompleteOperand(rawOperand));
-    const rawPrefix = String(parsed.prefix || '');
-
-    if (normalizedFunc && normalizedOperand) {
-      const alreadyWrapped = /^\(.*\)$/.test(normalizedOperand);
-      const trigCall = alreadyWrapped
-        ? `\\${normalizedFunc}${normalizedOperand}`
-        : `\\${normalizedFunc}(${normalizedOperand})`;
-      perms.add(trigCall);
-      if (rawPrefix) {
-        perms.add(`${rawPrefix}${trigCall}`);
-        const needsStar = /[a-z0-9)πθα-ω]$/i.test(rawPrefix);
-        if (needsStar) {
-          perms.add(`${rawPrefix}*${trigCall}`);
-        }
-      }
-    }
   }
-  
-  if (parsed.type === 'inverse_trigonometry' && globalThis.trigPermutationRules) {
-    const invTrigPerms = globalThis.trigPermutationRules.generateInverseTrigPermutations(mathExpr);
-    console.log('[generatePermutations] Inverse trig perms for', mathExpr, ':', invTrigPerms);
-    for (const perm of invTrigPerms) perms.add(perm);
-  }
-  
-  if (parsed.type === 'implicit_multiplication' && globalThis.algebraPermutationRules) {
-    // Pass parsed structure instead of string
-    const algPerms = globalThis.algebraPermutationRules.generateImplicitMultiplicationPermutations(
-      parsed.num1, parsed.variable, parsed.num2, parsed.prefix, parsed.suffix
-    );
-    console.log('[generatePermutations] Algebra perms (mult):', algPerms);
+
+  if (globalThis.algebraPermutationRules?.generateParsedAlgebraPermutations) {
+    const algPerms = globalThis.algebraPermutationRules.generateParsedAlgebraPermutations(parsed);
+    console.log('[generatePermutations] Algebra perms for', mathExpr, ':', algPerms);
     for (const perm of algPerms) perms.add(perm);
   }
-  
-  if (parsed.type === 'function_application' && globalThis.algebraPermutationRules) {
-    const algPerms = globalThis.algebraPermutationRules.generateFunctionAppPermutations(
-      parsed.keyword, parsed.variable, parsed.prefix, parsed.suffix
-    );
-    console.log('[generatePermutations] Algebra perms (func):', algPerms);
-    for (const perm of algPerms) perms.add(perm);
-  }
-  
-  if (parsed.type === 'power_ambiguity' && globalThis.algebraPermutationRules) {
-    const algPerms = globalThis.algebraPermutationRules.generatePowerAmbiguityPermutations(
-      parsed.base, parsed.exponent, parsed.variable, parsed.prefix, parsed.suffix
-    );
-    console.log('[generatePermutations] Algebra perms (power):', algPerms);
-    for (const perm of algPerms) perms.add(perm);
+
+  if (globalThis.exponentPermutationRules) {
+    const expPerms = globalThis.exponentPermutationRules.generateExponentPermutations(mathExpr);
+    console.log('[generatePermutations] Exponent perms for', mathExpr, ':', expPerms);
+    for (const perm of expPerms) perms.add(perm);
   }
   
   const result = Array.from(perms).filter(perm => isValidPermutation(perm));
@@ -352,6 +319,10 @@ function applyPermutationRulesDirect(input) {
       const algPerms = globalThis.algebraPermutationRules.generateAlgebraPermutations(input);
       for (const perm of algPerms) perms.add(perm);
     }
+    if (globalThis.exponentPermutationRules) {
+      const expPerms = globalThis.exponentPermutationRules.generateExponentPermutations(input);
+      for (const perm of expPerms) perms.add(perm);
+    }
   }
   
   return Array.from(perms).filter(perm => isValidPermutation(perm));
@@ -368,6 +339,7 @@ function isValidPermutation(expr) {
     if (globalThis.logPermutationRules?.isValidLogExpression(trimmed)) return true;
     if (globalThis.trigPermutationRules?.isValidTrigExpression?.(trimmed)) return true;
     if (globalThis.algebraPermutationRules?.isValidAlgebraExpression?.(trimmed)) return true;
+    if (globalThis.exponentPermutationRules?.isValidExponentExpression?.(trimmed)) return true;
   }
   
   // Fallback general validation

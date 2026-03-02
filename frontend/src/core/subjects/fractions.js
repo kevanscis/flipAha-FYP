@@ -201,12 +201,14 @@
     globalThis.buildFractionAmbiguityCandidates = buildFractionAmbiguityCandidates;
     globalThis.subjects = globalThis.subjects || {};
     globalThis.subjects.fractions = {
+      getSuggestions: buildFractionAmbiguityCandidates,
       buildFractionAmbiguityCandidates
     };
   }
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
+      getSuggestions: buildFractionAmbiguityCandidates,
       buildFractionAmbiguityCandidates
     };
   }
