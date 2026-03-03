@@ -131,16 +131,12 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
     allSuggestions.push(`${degreeOMatch[1]}^{\\circ}`);
   }
 
-  // "350" → trailing zero may be intended as degree symbol for "35°"
-  if (!degreeOMatch) {
-    const degreeZeroMatch = compactQueryTerm.match(/^(\d{2,})0$/);
-    if (degreeZeroMatch) {
-      const possibleAngle = parseInt(degreeZeroMatch[1], 10);
-      if (possibleAngle > 0 && possibleAngle <= 360) {
-        allSuggestions.push(`${degreeZeroMatch[1]}^{\\circ}`);
-      }
-    }
-  }
+  const normalizeDegreeLatex = (value) => String(value ?? '')
+    .replace(/\^\{\s*\\circ\s*\}/g, '°')
+    .replace(/\^\\circ/g, '°')
+    .replace(/(\d+(?:\.\d+)?)\s*(?:°|deg|degree|degrees)\b/gi, '$1°')
+    .replace(/(\d+(?:\.\d+)?)°+/g, '$1°')
+    .replace(/(\d+(?:\.\d+)?)°/g, '$1^{\\circ}');
 
   // 0.6 Subject-level dynamic suggestions
   for (const subject of subjectModules) {
@@ -190,7 +186,7 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
         output = normalized.trim();
       }
     }
-    return output;
+    return normalizeDegreeLatex(output);
   });
   
   // 4. Deduplicate and limit (semantic dedupe, not just exact-string dedupe)
@@ -202,6 +198,8 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
       .replace(/\left/g, '')
       .replace(/\right/g, '')
       .replace(/\s+/g, '')
+      .replace(/(\d+(?:\.\d+)?)\s*(?:°|deg|degree|degrees)/gi, '$1^{\\circ}')
+      .replace(/(\^\{\\circ\})+/g, '^{\\circ}')
       .replace(/²/g, '^2')
       .replace(/³/g, '^3')
       .replace(/ⁿ/g, '^n')
@@ -228,7 +226,7 @@ function getLatexSuggestions(input, maxSuggestions = 5) {
   
   // 5. If still nothing, return queryTerm as-is
   if (uniqueSuggestions.length === 0) {
-    return [queryTerm];
+    return [normalizeDegreeLatex(queryTerm)];
   }
   
   return uniqueSuggestions.slice(0, maxSuggestions);

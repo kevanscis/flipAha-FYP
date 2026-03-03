@@ -8,6 +8,7 @@ let suggestionContext = { start: 0, end: 0 };
 let inputMethod = 'typing';
 let usedSuggestion = false;
 let suppressSuggestionForValue = '';
+let keepPlainTypingAfterSuggestion = false;
 
 // Configuration
 const API_BASE_URL = 'http://localhost:5000'; // Update with your backend URL
@@ -241,8 +242,41 @@ function normalizeMathLiveArtifacts(value) {
     .replace(/\\right/g, '');
 }
 
+function enforceMathFieldTextMode() {
+  if (!questionInput) return;
+
+  try {
+    questionInput.defaultMode = 'text';
+  } catch {
+    // Ignore unsupported APIs
+  }
+
+  try {
+    questionInput.mode = 'text';
+  } catch {
+    // Ignore unsupported APIs
+  }
+
+  try {
+    if (typeof questionInput.executeCommand === 'function') {
+      questionInput.executeCommand(['switchMode', 'text']);
+    }
+  } catch {
+    // Ignore unsupported APIs
+  }
+}
+
 function normalizeToLatex(input) {
   let s = normalizeMathLiveArtifacts(input);
+
+  // Degree notation canonicalization:
+  // support 45°, 45deg/degrees, and already-latex 45^{\circ}/45^\circ.
+  // Canonical output is always 45^{\circ} (applied once).
+  s = s
+    .replace(/\^\{\s*\\circ\s*\}/g, '°')
+    .replace(/\^\\circ/g, '°')
+    .replace(/(\d+(?:\.\d+)?)\s*(?:deg|degree|degrees)\b/gi, '$1°')
+    .replace(/(\d+(?:\.\d+)?)°/g, '$1^{\\circ}');
 
   const normalizeInverseAlias = (value, aliasPattern, canonicalFunc) => {
     const regex = new RegExp(
@@ -266,6 +300,15 @@ function normalizeToLatex(input) {
   s = s
     .replace(/π/g, '\\pi')
     .replace(/(^|[^A-Za-z\\])pi(?=[^A-Za-z]|$)/gi, '$1\\pi');
+
+  // Comparison / relation operators
+  s = s
+    .replace(/<=/g, '\\leq')
+    .replace(/>=/g, '\\geq')
+    .replace(/!=/g, '\\neq')
+    .replace(/≤/g, '\\leq')
+    .replace(/≥/g, '\\geq')
+    .replace(/≠/g, '\\neq');
 
   // Logs
   s = s.replace(/\blog\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/g, '\\log_{$1}($2)');
@@ -453,6 +496,9 @@ function initializeMathField() {
   
   // Handle input changes for suggestions
   questionInput.addEventListener('input', () => {
+    if (keepPlainTypingAfterSuggestion) {
+      enforceMathFieldTextMode();
+    }
     handleInputChange();
   });
   
@@ -476,7 +522,17 @@ async function handleSubmitQuestion(e) {
   }
 
   const rawQuestion = questionInput.getValue('latex-expanded').trim();
-  const question = normalizeMathLiveArtifacts(rawQuestion).trim();
+  const question = normalizeMathLiveArtifacts(rawQuestion)
+    .replace(/<=/g, '\\leq')
+    .replace(/>=/g, '\\geq')
+    .replace(/!=/g, '\\neq')
+    .replace(/≤/g, '\\leq')
+    .replace(/≥/g, '\\geq')
+    .replace(/≠/g, '\\neq')
+    .replace(/(\d+(?:\.\d+)?)\s*(?:°|deg|degree|degrees)/gi, '$1^{\\circ}')
+    .replace(/(\^\{\\circ\})+/g, '^{\\circ}')
+    .replace(/(\d+(?:\.\d+)?)\^\{\\circ\}(?:\s*(?:°|deg|degree|degrees))/gi, '$1^{\\circ}')
+    .trim();
   
   if (!question) {
     showResponseStatus('error', 'Please enter a math question');
@@ -821,6 +877,10 @@ function handleInputChange() {
     const inverseIntentSource = normalizeInverseIntentSource(queryTermText || queryTerm || '');
     const inverseIntentMatch = inverseIntentSource.match(/^(?:arc|a)?(sin|cos|tan|sec|csc|cot|cosec)(?:\^-1|-1)(?:\((.*)\)|([a-z0-9_\\πθα-ω.+\-*/^{}]+))?$/i);
     if (inverseIntentMatch) {
+      const isFractionShorthand = /(?:\^-1|-1)\s*\/\s*\d/.test(inverseIntentSource);
+      if (isFractionShorthand) {
+        // Keep arithmetic trig forms like cos(-1/2), cos(-1/2x) instead of forcing inverse-only suggestions.
+      } else {
       const rawFunc = String(inverseIntentMatch[1] || '').toLowerCase();
       const normalizedFunc = rawFunc === 'cosec' ? 'csc' : rawFunc;
       const rawArg = String(inverseIntentMatch[2] || inverseIntentMatch[3] || '').trim();
@@ -837,6 +897,7 @@ function handleInputChange() {
 
       if (!suggestions.includes(fallbackInverse)) {
         suggestions.unshift(fallbackInverse);
+      }
       }
     }
 
@@ -1031,12 +1092,7 @@ function selectSuggestion(latex) {
   const currentValue = getInputTextValue();
   const { replaceStart, replaceEnd } = computeSuggestionReplacementRange(suggestionLatex, currentValue);
 
-  try {
-    questionInput.defaultMode = 'text';
-    questionInput.mode = 'text';
-  } catch {
-    // Ignore if mode APIs are not supported
-  }
+  enforceMathFieldTextMode();
 
   const prefix = currentValue.slice(0, replaceStart || 0);
   let suffix = currentValue.slice(replaceEnd || 0);
@@ -1057,16 +1113,12 @@ function selectSuggestion(latex) {
     }
   }
 
-  const safePrefix = normalizeToLatex(preservePlainTextSegments(prefix).replace(/°/g, '^{\\circ}'));
-  const safeSuffix = normalizeToLatex(preservePlainTextSegments(suffix).replace(/°/g, '^{\\circ}'));
+  const safePrefix = normalizeToLatex(preservePlainTextSegments(prefix));
+  const safeSuffix = normalizeToLatex(preservePlainTextSegments(suffix));
   questionInput.setValue(`${safePrefix}${suggestionLatex}${safeSuffix}`);
 
-  try {
-    questionInput.defaultMode = 'text';
-    questionInput.mode = 'text';
-  } catch {
-    // Ignore if mode APIs are not supported
-  }
+  enforceMathFieldTextMode();
+  keepPlainTypingAfterSuggestion = true;
 
   hideSuggestions();
 
@@ -1079,6 +1131,9 @@ function selectSuggestion(latex) {
   usedSuggestion = false;
 
   requestAnimationFrame(() => {
+    if (keepPlainTypingAfterSuggestion) {
+      enforceMathFieldTextMode();
+    }
     questionInput.focus();
     handleInputChange();
   });

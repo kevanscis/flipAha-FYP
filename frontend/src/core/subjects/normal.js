@@ -120,6 +120,11 @@
     ["%°", "$1^{\\circ}"],
     ["% °", "$1^{\\circ}"],
 
+    // Geometry angle notation: angle ABC -> \angle ABC
+    ["angle %", "\\angle $1"],
+    ["angle%", "\\angle $1"],
+    ["∠%", "\\angle $1"],
+
     // Greek letters - lowercase (with wildcard support for partial typing)
     ["al%", "\\alpha"],
     ["be%", "\\beta"],

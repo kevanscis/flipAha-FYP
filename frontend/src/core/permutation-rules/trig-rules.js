@@ -77,7 +77,23 @@
     const normalizedInput = normalizeMathTypos(input.trim());
     if (!normalizedInput) return perms;
 
-    let match = normalizedInput.match(/^(.*?)(sin|cos|tan|sec|csc|cot|cosec)\s*(\d+)([a-zα-ω\\]+)([+\-].+)?$/i);
+    // Signed fractional shorthand: cos-1/2x -> \cos(-1/2x)
+    let match = normalizedInput.match(/^(.*?)(sin|cos|tan|sec|csc|cot|cosec)\s*([+\-]\s*\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)([a-zα-ω\\]+)?([+\-].+)?$/i);
+    if (match) {
+      const [_, prefix, func, numeratorRaw, denominator, varToken, tailRaw] = match;
+      const normalizedFunc = normalizeTrigFunc(func);
+      const numerator = String(numeratorRaw || '').replace(/\s+/g, '');
+      const normalizedVar = varToken ? normalizeGreekToken(varToken) : '';
+      const tail = normalizeTrigText(tailRaw || '');
+
+      perms.add(`${prefix}\\${normalizedFunc}(${numerator}/${denominator}${normalizedVar}${tail})`);
+      if (normalizedVar) {
+        perms.add(`${prefix}\\${normalizedFunc}((${numerator}/${denominator})${normalizedVar}${tail})`);
+      }
+      return perms;
+    }
+
+    match = normalizedInput.match(/^(.*?)(sin|cos|tan|sec|csc|cot|cosec)\s*(\d+)([a-zα-ω\\]+)([+\-].+)?$/i);
     if (match) {
       const [_, prefix, func, coeff, varToken, tailRaw] = match;
       const normalizedFunc = normalizeTrigFunc(func);
