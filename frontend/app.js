@@ -1065,8 +1065,93 @@ function preservePlainTextSegments(value) {
     const trailingWhitespace = source.slice(j, k);
 
     const isLatexCommandToken = prevChar === '\\';
-    const shouldPreserveAsText = token.length > 2 && !knownMathWords.has(lower) && !isLatexCommandToken;
+    const isSingleLetterToken = /^[A-Za-z]$/.test(token);
+    const shouldPreserveAsText = !knownMathWords.has(lower) && !isLatexCommandToken && !isSingleLetterToken;
     if (shouldPreserveAsText) {
+      output += `\\text{${token}${trailingWhitespace}}`;
+    } else {
+      output += token + trailingWhitespace;
+    }
+
+    i = k;
+  }
+
+  return output;
+}
+
+function stabilizeEnglishTextInLatex(latex) {
+  const source = String(latex || '');
+  if (!source) return source;
+
+  const knownMathWords = new Set([
+    'sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'cosec',
+    'asin', 'acos', 'atan', 'arcsin', 'arccos', 'arctan',
+    'log', 'ln', 'sqrt', 'root', 'pi', 'theta',
+    'alpha', 'beta', 'gamma', 'delta', 'lambda', 'mu', 'sigma', 'omega',
+    'x', 'y', 'z'
+  ]);
+
+  let i = 0;
+  let output = '';
+
+  const copyBalancedBlock = (startIndex) => {
+    let index = startIndex;
+    let depth = 0;
+    while (index < source.length) {
+      const ch = source[index];
+      if (ch === '{') depth += 1;
+      if (ch === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          index += 1;
+          break;
+        }
+      }
+      index += 1;
+    }
+    return index;
+  };
+
+  while (i < source.length) {
+    if (source.startsWith('\\text{', i)) {
+      const endIndex = copyBalancedBlock(i + 5);
+      output += source.slice(i, endIndex);
+      i = endIndex;
+      continue;
+    }
+
+    const char = source[i];
+    if (char === '\\') {
+      output += char;
+      i += 1;
+      while (i < source.length && /[A-Za-z]/.test(source[i])) {
+        output += source[i];
+        i += 1;
+      }
+      continue;
+    }
+
+    if (!/[A-Za-z]/.test(char)) {
+      output += char;
+      i += 1;
+      continue;
+    }
+
+    const prevChar = i > 0 ? source[i - 1] : '';
+    let j = i;
+    while (j < source.length && /[A-Za-z]/.test(source[j])) j += 1;
+    const token = source.slice(i, j);
+    const lower = token.toLowerCase();
+
+    let k = j;
+    while (k < source.length && /\s/.test(source[k])) k += 1;
+    const trailingWhitespace = source.slice(j, k);
+
+    const isLatexCommandToken = prevChar === '\\';
+    const isSingleLetterToken = /^[A-Za-z]$/.test(token);
+    const shouldWrapAsText = !knownMathWords.has(lower) && !isLatexCommandToken && !isSingleLetterToken;
+
+    if (shouldWrapAsText) {
       output += `\\text{${token}${trailingWhitespace}}`;
     } else {
       output += token + trailingWhitespace;
@@ -1097,7 +1182,8 @@ function selectSuggestion(latex) {
 
     const latexPrefix = currentLatex.slice(0, contextualLatexRange.replaceStart);
     const latexSuffix = currentLatex.slice(contextualLatexRange.replaceEnd);
-    questionInput.setValue(`${latexPrefix}${suggestionLatex}${latexSuffix}`);
+    const mergedLatex = `${latexPrefix}${suggestionLatex}${latexSuffix}`;
+    questionInput.setValue(stabilizeEnglishTextInLatex(mergedLatex));
 
     enforceMathFieldTextMode();
     keepPlainTypingAfterSuggestion = true;
@@ -1126,7 +1212,8 @@ function selectSuggestion(latex) {
 
     const latexPrefix = currentLatex.slice(0, latexReplacementRange.replaceStart);
     const latexSuffix = currentLatex.slice(latexReplacementRange.replaceEnd);
-    questionInput.setValue(`${latexPrefix}${suggestionLatex}${latexSuffix}`);
+    const mergedLatex = `${latexPrefix}${suggestionLatex}${latexSuffix}`;
+    questionInput.setValue(stabilizeEnglishTextInLatex(mergedLatex));
 
     enforceMathFieldTextMode();
     keepPlainTypingAfterSuggestion = true;
