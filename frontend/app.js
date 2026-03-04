@@ -1090,6 +1090,63 @@ function selectSuggestion(latex) {
   // Set the LaTeX value in MathLive
 
   const currentValue = getInputTextValue();
+  const currentLatex = questionInput.getValue('latex-expanded') || questionInput.getValue() || '';
+  const contextualLatexRange = computeLatexReplacementRangeFromTextContext(suggestionLatex, currentLatex, currentValue);
+  if (contextualLatexRange) {
+    enforceMathFieldTextMode();
+
+    const latexPrefix = currentLatex.slice(0, contextualLatexRange.replaceStart);
+    const latexSuffix = currentLatex.slice(contextualLatexRange.replaceEnd);
+    questionInput.setValue(`${latexPrefix}${suggestionLatex}${latexSuffix}`);
+
+    enforceMathFieldTextMode();
+    keepPlainTypingAfterSuggestion = true;
+
+    hideSuggestions();
+
+    prevInputValue = getInputTextValue();
+    suppressSuggestionForValue = String(prevInputValue || '').replace(/\s+/g, '');
+    smartRanges = [];
+    usedSuggestion = false;
+
+    requestAnimationFrame(() => {
+      if (keepPlainTypingAfterSuggestion) {
+        enforceMathFieldTextMode();
+      }
+      questionInput.focus();
+      handleInputChange();
+    });
+    return;
+  }
+
+  const latexReplacementRange = computeTrailingTrigLatexReplacementRange(suggestionLatex, currentLatex);
+
+  if (latexReplacementRange) {
+    enforceMathFieldTextMode();
+
+    const latexPrefix = currentLatex.slice(0, latexReplacementRange.replaceStart);
+    const latexSuffix = currentLatex.slice(latexReplacementRange.replaceEnd);
+    questionInput.setValue(`${latexPrefix}${suggestionLatex}${latexSuffix}`);
+
+    enforceMathFieldTextMode();
+    keepPlainTypingAfterSuggestion = true;
+
+    hideSuggestions();
+
+    prevInputValue = getInputTextValue();
+    suppressSuggestionForValue = String(prevInputValue || '').replace(/\s+/g, '');
+    smartRanges = [];
+
+    setTimeout(() => {
+      if (keepPlainTypingAfterSuggestion) {
+        enforceMathFieldTextMode();
+      }
+      questionInput.focus();
+      handleInputChange();
+    });
+    return;
+  }
+
   const { replaceStart, replaceEnd } = computeSuggestionReplacementRange(suggestionLatex, currentValue);
 
   enforceMathFieldTextMode();
@@ -1139,6 +1196,77 @@ function selectSuggestion(latex) {
   });
 }
 
+function computeLatexReplacementRangeFromTextContext(latex, currentLatex = '', currentValue = '') {
+  const sourceLatex = String(currentLatex || '');
+  const sourceText = String(currentValue || '');
+  if (!sourceLatex || !sourceText) return null;
+
+  const { replaceStart, replaceEnd } = computeSuggestionReplacementRange(latex, sourceText);
+  const boundedStart = Math.max(0, Math.min(sourceText.length, replaceStart || 0));
+  const boundedEnd = Math.max(boundedStart, Math.min(sourceText.length, replaceEnd || 0));
+  const tokenText = sourceText.slice(boundedStart, boundedEnd).trim();
+  if (!tokenText) return null;
+
+  const candidates = new Set();
+  candidates.add(tokenText);
+  candidates.add(tokenText.replace(/\s+/g, ''));
+  candidates.add(normalizeToLatex(tokenText));
+  candidates.add(normalizeToLatex(preservePlainTextSegments(tokenText)));
+
+  const normalizedLatex = sourceLatex.toLowerCase();
+  const nearTailThreshold = Math.max(0, sourceLatex.length - 120);
+
+  for (const candidateRaw of candidates) {
+    const candidate = String(candidateRaw || '').trim();
+    if (!candidate) continue;
+
+    const index = normalizedLatex.lastIndexOf(candidate.toLowerCase());
+    if (index === -1) continue;
+    if (index < nearTailThreshold) continue;
+
+    return {
+      replaceStart: index,
+      replaceEnd: index + candidate.length
+    };
+  }
+
+  return null;
+}
+
+function computeTrailingTrigLatexReplacementRange(latex, currentLatex = '') {
+  const suggestionText = latexToSmartText(latex || '');
+  const isTrigSuggestion = /^(sin|cos|tan|sec|csc|cot)\b/i.test(suggestionText);
+  if (!isTrigSuggestion) return null;
+
+  const source = String(currentLatex || '');
+  if (!source.trim()) return null;
+
+  const trigRegex = /\\?(?:cosec|sin|cos|tan|sec|csc|cot)\b/gi;
+  let match = null;
+  let lastTrigStart = -1;
+
+  while ((match = trigRegex.exec(source)) !== null) {
+    const index = match.index;
+    const before = index > 0 ? source[index - 1] : '';
+    if (index === 0 || /[^A-Za-z]/.test(before) || before === ')') {
+      lastTrigStart = index;
+    }
+  }
+
+  if (lastTrigStart <= 0) return null;
+
+  const leadingSegment = source.slice(0, lastTrigStart).trim();
+  if (!leadingSegment) return null;
+
+  let replaceEnd = source.length;
+  while (replaceEnd > lastTrigStart && /\s/.test(source[replaceEnd - 1])) {
+    replaceEnd -= 1;
+  }
+
+  if (replaceEnd <= lastTrigStart) return null;
+  return { replaceStart: lastTrigStart, replaceEnd };
+}
+
 function computeSuggestionReplacementRange(latex, currentValue = '') {
   const start = suggestionContext.start || 0;
   const end = suggestionContext.end || 0;
@@ -1146,6 +1274,28 @@ function computeSuggestionReplacementRange(latex, currentValue = '') {
   const suggestionText = latexToSmartText(latex || '');
 
   const isTrigSuggestion = /^(sin|cos|tan|sec|csc|cot)\b/i.test(suggestionText);
+
+  if (isTrigSuggestion && currentValue) {
+    const source = String(currentValue || '');
+    const trigRegex = /\\?(?:cosec|sin|cos|tan|sec|csc|cot)\b/gi;
+    let match = null;
+    let lastTrigStart = -1;
+
+    while ((match = trigRegex.exec(source)) !== null) {
+      const index = match.index;
+      const before = index > 0 ? source[index - 1] : '';
+      if (index === 0 || /[^A-Za-z]/.test(before) || before === ')') {
+        lastTrigStart = index;
+      }
+    }
+
+    if (lastTrigStart > 0) {
+      const leading = source.slice(0, lastTrigStart).trim();
+      if (leading) {
+        return { replaceStart: lastTrigStart, replaceEnd: source.length };
+      }
+    }
+  }
 
   if (isTrigSuggestion && currentValue) {
     const trigNames = ['sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'cosec'];
