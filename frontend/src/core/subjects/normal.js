@@ -4,6 +4,7 @@
     let output = String(input ?? '');
 
     const typoPatterns = [
+      // Greek letter typos
       { regex: /alpah|alhpa|aplha/gi, canonical: 'alpha' },
       { regex: /betha|btea/gi, canonical: 'beta' },
       { regex: /gama|gammar|gammma/gi, canonical: 'gamma' },
@@ -12,7 +13,43 @@
       { regex: /lamda|lamba|lmbda|lambada/gi, canonical: 'lambda' },
       { regex: /mew/gi, canonical: 'mu' },
       { regex: /sigam|simga|sogma/gi, canonical: 'sigma' },
-      { regex: /omgea|omeag|oemga|omeega/gi, canonical: 'omega' }
+      { regex: /omgea|omeag|oemga|omeega/gi, canonical: 'omega' },
+
+      // Trig function typos (full words → abbreviations)
+      { regex: /\bsine\b/gi, canonical: 'sin' },
+      { regex: /\bcosine\b/gi, canonical: 'cos' },
+      { regex: /\btangent\b/gi, canonical: 'tan' },
+      { regex: /\bsecant\b/gi, canonical: 'sec' },
+      { regex: /\bcosecant\b/gi, canonical: 'cosec' },
+      { regex: /\bcotangent\b/gi, canonical: 'cot' },
+      // common misspellings of trig functions
+      { regex: /\bsni\b/gi, canonical: 'sin' },
+      { regex: /\bcso\b|\bcoss\b/gi, canonical: 'cos' },
+      { regex: /\btna\b|\btann\b/gi, canonical: 'tan' },
+      { regex: /\bsec(?:c|k)\b/gi, canonical: 'sec' },
+      { regex: /\bcso?ec\b/gi, canonical: 'cosec' },
+      { regex: /\bcto\b|\bcott\b/gi, canonical: 'cot' },
+      // inverse trig full words
+      { regex: /\barcsin(?:e)?\b/gi, canonical: 'arcsin' },
+      { regex: /\barccos(?:ine)?\b/gi, canonical: 'arccos' },
+      { regex: /\barctan(?:gent)?\b/gi, canonical: 'arctan' },
+
+      // Log/exp typos
+      { regex: /\blogarithm\b|\blogrithm\b|\blogairthm\b|\blogarithim\b/gi, canonical: 'log' },
+      { regex: /\blogn\b/gi, canonical: 'ln' },
+      { regex: /\bnatrual\s*log\b|\bnatual\s*log\b/gi, canonical: 'ln' },
+
+      // sqrt / square typos
+      { regex: /\bsqaure\b|\bsqurae\b|\bsqure\b/gi, canonical: 'square' },
+      { regex: /\bsqaure\s*root\b|\bsqurae\s*root\b|\bsqure\s*root\b/gi, canonical: 'sqrt' },
+      { regex: /\bsquare\s*root\b/gi, canonical: 'sqrt' },
+      { regex: /\bsqrt(?=\b)/gi, canonical: 'sqrt' },  // normalize already-correct
+
+      // Other common math term typos
+      { regex: /\binfinity\b|\binfintiy\b|\binfinnity\b|\binifnity\b/gi, canonical: 'infinity' },
+      { regex: /\bintergral\b|\bintegeral\b|\bintergal\b/gi, canonical: 'integral' },
+      { regex: /\bdifferentaite\b|\bdifferentait\b|\bdiferentiate\b/gi, canonical: 'differentiate' },
+      { regex: /\bsummation\b|\bsumation\b|\bsummmation\b/gi, canonical: 'summation' },
     ];
 
     for (const entry of typoPatterns) {

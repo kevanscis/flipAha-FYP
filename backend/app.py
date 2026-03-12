@@ -507,6 +507,47 @@ def submit_suggestion_feedback():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/suggestion-feedback/scores', methods=['GET'])
+def get_suggestion_scores():
+    """Return aggregated feedback scores per suggestion for ranking.
+
+    Response: { scores: { "<latex>": { ups, downs, total, score }, ... } }
+    score = (ups - downs) / total  (range -1 to 1)
+    Only suggestions with >= 2 ratings are included to reduce noise.
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT suggestion_text,
+                   SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END) AS ups,
+                   SUM(CASE WHEN rating = 0 THEN 1 ELSE 0 END) AS downs,
+                   COUNT(*) AS total
+            FROM suggestion_feedback
+            GROUP BY suggestion_text
+            HAVING total >= 2
+            ORDER BY total DESC
+        """)
+        rows = cursor.fetchall()
+        conn.close()
+
+        scores = {}
+        for r in rows:
+            total = r['total']
+            ups = r['ups'] or 0
+            downs = r['downs'] or 0
+            scores[r['suggestion_text']] = {
+                'ups': ups,
+                'downs': downs,
+                'total': total,
+                'score': round((ups - downs) / total, 4) if total else 0
+            }
+
+        return jsonify({'success': True, 'scores': scores}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/dashboard/suggestion-feedback')
 def dashboard_suggestion_feedback():
     # Only allow admin

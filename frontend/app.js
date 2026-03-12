@@ -9,8 +9,65 @@ let inputMethod = 'typing';
 let usedSuggestion = false;
 let suppressSuggestionForValue = '';
 
+// Feedback-based suggestion ranking cache
+// Maps suggestion LaTeX text → { score: -1..1, ups, downs, total }
+let suggestionFeedbackScores = {};
+
 // Configuration
 const API_BASE_URL = 'http://localhost:5000'; // Update with your backend URL
+
+/**
+ * Load aggregated suggestion feedback scores from the backend.
+ * Called on page load and after submitting feedback.
+ * Used by getLatexSuggestions to re-rank results.
+ */
+async function loadSuggestionFeedbackScores() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/suggestion-feedback/scores`, {
+      credentials: 'include'
+    });
+    const data = await res.json();
+    if (data.success && data.scores) {
+      suggestionFeedbackScores = data.scores;
+      console.log('[Feedback] Loaded scores for', Object.keys(data.scores).length, 'suggestions');
+    }
+  } catch (e) {
+    console.warn('[Feedback] Could not load suggestion scores:', e.message);
+  }
+}
+
+/**
+ * Re-rank suggestion list using feedback data.
+ * Suggestions with positive feedback rise; negative feedback drops them.
+ * @param {string[]} suggestions - LaTeX suggestions in original order
+ * @returns {string[]} - Re-ranked suggestions
+ */
+function rankSuggestionsByFeedback(suggestions) {
+  if (!suggestions || suggestions.length <= 1) return suggestions;
+  if (!suggestionFeedbackScores || Object.keys(suggestionFeedbackScores).length === 0) {
+    return suggestions;
+  }
+
+  // Assign a boost/penalty based on feedback score (-1 to 1)
+  const scored = suggestions.map((s, originalIndex) => {
+    const fb = suggestionFeedbackScores[s];
+    // feedbackBoost: positive for liked suggestions, negative for disliked
+    // Weight it by confidence (more ratings = more confidence)
+    const feedbackBoost = fb
+      ? fb.score * Math.min(1, fb.total / 10)  // confidence caps at 10 ratings
+      : 0;
+    return { suggestion: s, originalIndex, feedbackBoost };
+  });
+
+  // Stable sort: higher boost first, then preserve original order
+  scored.sort((a, b) => {
+    const diff = b.feedbackBoost - a.feedbackBoost;
+    if (Math.abs(diff) < 0.001) return a.originalIndex - b.originalIndex;
+    return diff;
+  });
+
+  return scored.map(s => s.suggestion);
+}
 
 function goHome(){
   window.location.href = `${API_BASE_URL}/`;
@@ -42,7 +99,6 @@ function lockChat() {
 
   if (!questionInput || !sendBtn) return;
 
-  questionInput.disabled = true;
   sendBtn.disabled = true;
 
   // Lock camera button when not logged in
@@ -52,10 +108,9 @@ function lockChat() {
     cameraBtn.title = 'Please log in to use the equation scanner';
   }
 
-  questionInput.setAttribute(
-    'placeholder',
-    '\\text{Please log in to get started}'
-  );
+  questionInput.contentEditable = 'false';
+  questionInput.classList.add('locked');
+  questionInput.dataset.placeholder = 'Please log in to get started';
 }
 
 function unlockChat() {
@@ -65,7 +120,6 @@ function unlockChat() {
 
   if (!questionInput || !sendBtn) return;
 
-  questionInput.disabled = false;
   sendBtn.disabled = false;
 
   // Unlock camera button when logged in
@@ -75,10 +129,9 @@ function unlockChat() {
     cameraBtn.title = 'Scan equation from image';
   }
 
-  questionInput.setAttribute(
-    'placeholder',
-    '\\text{Ask your math question... (e.g. 1/2, sin x, x^2)}'
-  );
+  questionInput.contentEditable = 'true';
+  questionInput.classList.remove('locked');
+  questionInput.dataset.placeholder = 'Ask your math question... (e.g. 1/2, sin x, x^2)';
 }
 
 async function checkAuthStatus() {
@@ -139,6 +192,7 @@ async function checkAuthStatus() {
 }
 
 window.addEventListener('load', checkAuthStatus);
+window.addEventListener('load', loadSuggestionFeedbackScores);
 
 async function goLogout() {
   // Clear user-specific session so image history is not accessible after logout
@@ -171,8 +225,8 @@ function getFeedbackUpBtn() { return document.getElementById('suggestionUpBtn');
 function getFeedbackDownBtn() { return document.getElementById('suggestionDownBtn'); }
 
 
-// MathLive element
-let questionInput = null;
+// Input elements
+let questionInput = null;   // the contenteditable div
 let mathFieldReady = false;
 
 // Character Maps
@@ -282,6 +336,45 @@ function cleanInsertedText(s) {
     .replace(/[\u200B-\u200D\uFEFF]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/**
+ * Convert LaTeX to clean, readable plain text for the input field.
+ * e.g. "x^{3}" → "x^3", "\\frac{1}{2}" → "1/2", "\\sin(x)" → "sin(x)"
+ */
+function latexToReadableText(latex) {
+  let text = String(latex || '');
+  // Remove \left and \right
+  text = text.replace(/\\left/g, '').replace(/\\right/g, '');
+  // Fractions: \frac{a}{b} → a/b
+  const replaceFrac = () => {
+    const next = text.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2');
+    const changed = next !== text;
+    text = next;
+    return changed;
+  };
+  while (replaceFrac()) {}
+  // Roots: \sqrt{x} → sqrt(x), \sqrt[n]{x} → sqrt[n](x)
+  text = text.replace(/\\sqrt\[(\d+)\]\{([^}]+)\}/g, 'sqrt[$1]($2)');
+  text = text.replace(/\\sqrt\{([^}]+)\}/g, 'sqrt($1)');
+  // Remove backslash from known functions
+  text = text.replace(/\\(sin|cos|tan|sec|csc|cot|arcsin|arccos|arctan|log|ln)\b/g, '$1');
+  // Greek: \pi → pi, \theta → theta, etc.
+  text = text.replace(/\\(pi|theta|alpha|beta|gamma|delta|lambda|mu|omega|sigma|infty)\b/g, '$1');
+  // Operators
+  text = text.replace(/\\times/g, '*').replace(/\\cdot/g, '*');
+  text = text.replace(/\\pm/g, '+-');
+  text = text.replace(/\\leq/g, '<=').replace(/\\geq/g, '>=');
+  text = text.replace(/\\neq/g, '!=').replace(/\\approx/g, '~=');
+  // Exponents: ^{3} → ^3
+  text = text.replace(/\^\{([^}]+)\}/g, '^$1');
+  // Subscripts: _{3} → _3
+  text = text.replace(/_\{([^}]+)\}/g, '_$1');
+  // Strip remaining braces
+  text = text.replace(/[{}]/g, '');
+  // Clean up whitespace
+  text = text.replace(/\s+/g, ' ').trim();
+  return text;
 }
 
 function normalizeLatexForOverlay(latex) {
@@ -396,18 +489,16 @@ function renderMixedTextMath(rawText, bubbleDiv) {
 
 function getInputTextValue() {
   if (!questionInput) return '';
-
-  // Avoid calling unsupported formats on MathLive (some builds throw
-  // "Unexpected format \"text\"" inside their internals). Instead
-  // rely on LaTeX output which is stable across versions and convert
-  // it to a readable/plain form for our suggestion pipeline.
-  try {
-    const latexValue = questionInput.getValue();
-    return latexToSmartText(latexValue || '');
-  } catch (e) {
-    // If MathLive changed API or the field isn't ready, return empty.
-    return '';
-  }
+  let text = '';
+  questionInput.childNodes.forEach(node => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      // Strip zero-width spaces used for cursor positioning
+      text += (node.textContent || '').replace(/\u200B/g, '');
+    } else if (node.classList && node.classList.contains('math-chip')) {
+      text += node.dataset.text || '';
+    }
+  });
+  return text;
 }
 
 // Message Rendering
@@ -458,41 +549,209 @@ function showResponseStatus(type, message) {
   }
 }
 
-// Initialize MathLive when DOM is ready
+// Initialize contenteditable math input
 function initializeMathField() {
   questionInput = document.getElementById('questionInput');
   
   if (!questionInput) {
-    console.error('MathField not found');
+    console.error('Math input field not found');
     return;
   }
-  
-  mathFieldReady = true;
 
-  // Keep input disabled until authentication is confirmed.
-  
-  // Configure MathLive - smart mode is set via HTML attribute
-  questionInput.mathVirtualKeyboardPolicy = 'manual';
-
-  // In smart mode, MathLive can treat a plain 'x' as a multiplication shortcut.
-  // Keep 'x' as a variable when the user types it.
-  try {
-    const existingShortcuts = questionInput.inlineShortcuts || {};
-    questionInput.inlineShortcuts = {
-      ...existingShortcuts,
-      x: 'x',
-      X: 'X'
-    };
-  } catch {
-    // Ignore if inlineShortcuts is not supported in this MathLive build
-  }
-  
-  // Handle input changes for suggestions
-  questionInput.addEventListener('input', () => {
+  // Listen for input changes
+  questionInput.addEventListener('input', function() {
+    // Clean up: if contenteditable gets <br> or <div>, normalize
+    cleanContentEditable();
     handleInputChange();
   });
-  
-  console.log('MathLive field initialized with smart mode');
+
+  // Submit on Enter, prevent newlines
+  questionInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      document.getElementById('questionForm').dispatchEvent(
+        new Event('submit', { cancelable: true })
+      );
+    }
+  });
+
+  // Paste as plain text only
+  questionInput.addEventListener('paste', function(e) {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+    document.execCommand('insertText', false, text);
+  });
+
+  // Click on a math chip to open inline editor
+  questionInput.addEventListener('click', function(e) {
+    const chip = e.target.closest('.math-chip');
+    if (!chip || !questionInput.contains(chip)) return;
+    openChipEditor(chip);
+  });
+
+  mathFieldReady = true;
+  console.log('Math input field initialized');
+}
+
+// Remove stray <br>/<div> that contenteditable can insert
+function cleanContentEditable() {
+  if (!questionInput) return;
+  const brs = questionInput.querySelectorAll('br');
+  brs.forEach(br => br.remove());
+  // Unwrap any <div> wrappers (some browsers wrap lines in divs)
+  const divs = questionInput.querySelectorAll('div');
+  divs.forEach(div => {
+    while (div.firstChild) div.parentNode.insertBefore(div.firstChild, div);
+    div.remove();
+  });
+}
+
+/**
+ * Open an inline edit field on a math chip so the user can modify
+ * the expression in-place (e.g. change the exponent from 3 to 2).
+ * On Enter or blur, the edited text is re-rendered as a new chip.
+ */
+function openChipEditor(chip) {
+  const readableText = chip.dataset.text || latexToReadableText(chip.dataset.latex || '');
+
+  // Create a small inline input replacing the chip
+  const editor = document.createElement('input');
+  editor.type = 'text';
+  editor.className = 'chip-editor';
+  editor.value = readableText;
+  // Size it to fit the text
+  editor.style.width = Math.max(readableText.length * 0.7, 2) + 'em';
+
+  // Replace chip with editor
+  chip.parentNode.replaceChild(editor, chip);
+  editor.focus();
+  editor.select();
+
+  const commitEdit = () => {
+    // Prevent double-commit
+    if (editor._committed) return;
+    editor._committed = true;
+
+    const newText = editor.value.trim();
+    if (!newText) {
+      // If emptied, just remove the editor
+      editor.remove();
+      questionInput.normalize();
+      prevInputValue = getInputTextValue();
+      handleInputChange();
+      return;
+    }
+
+    // Convert edited text to LaTeX and create a new chip
+    let newLatex;
+    try {
+      newLatex = smartTextToLatex(newText);
+    } catch {
+      newLatex = newText;
+    }
+
+    const newChip = document.createElement('span');
+    newChip.className = 'math-chip';
+    newChip.contentEditable = 'false';
+    newChip.dataset.latex = newLatex;
+    newChip.dataset.text = newText;
+    try {
+      katex.render(newLatex, newChip, { throwOnError: false, displayMode: false });
+    } catch {
+      newChip.textContent = newText;
+    }
+
+    editor.parentNode.replaceChild(newChip, editor);
+
+    // Ensure cursor can be placed after the chip
+    if (!newChip.nextSibling || newChip.nextSibling.nodeType !== Node.TEXT_NODE) {
+      const spacer = document.createTextNode('\u200B');
+      if (newChip.nextSibling) {
+        questionInput.insertBefore(spacer, newChip.nextSibling);
+      } else {
+        questionInput.appendChild(spacer);
+      }
+    }
+
+    // Place cursor after chip
+    try {
+      const target = newChip.nextSibling;
+      const range = document.createRange();
+      const sel = window.getSelection();
+      const off = (target.textContent || '').startsWith('\u200B') ? 1 : 0;
+      range.setStart(target, off);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch { /* fallback */ }
+
+    prevInputValue = getInputTextValue();
+    suppressSuggestionForValue = '';
+    handleInputChange();
+  };
+
+  // Commit on Enter
+  editor.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      commitEdit();
+    }
+    if (e.key === 'Escape') {
+      // Cancel — restore original chip
+      editor._committed = true;
+      editor.parentNode.replaceChild(chip, editor);
+      questionInput.focus();
+    }
+  });
+
+  // Commit on blur (click away)
+  editor.addEventListener('blur', () => {
+    // Small delay so Enter handler fires first
+    setTimeout(commitEdit, 50);
+  });
+}
+
+// Get the current LaTeX representation of the input
+function getInputLatex() {
+  if (!questionInput) return '';
+  let latex = '';
+  questionInput.childNodes.forEach(node => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const t = (node.textContent || '').replace(/\u200B/g, '').trim();
+      if (t) {
+        try { latex += smartTextToLatex(t); } catch { latex += t; }
+      }
+    } else if (node.classList && node.classList.contains('math-chip')) {
+      latex += node.dataset.latex || '';
+    }
+  });
+  return latex.trim();
+}
+
+// Get caret offset in logical text coordinates
+function getCaretOffset() {
+  const sel = window.getSelection();
+  if (!sel.rangeCount || !questionInput.contains(sel.anchorNode)) {
+    return getInputTextValue().length;
+  }
+  const range = sel.getRangeAt(0);
+  let offset = 0;
+  for (const node of questionInput.childNodes) {
+    if (node === range.startContainer || node.contains(range.startContainer)) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return offset + range.startOffset;
+      }
+      // Cursor is at the chip boundary
+      return offset + (node.dataset ? (node.dataset.text || '').length : 0);
+    }
+    if (node.nodeType === Node.TEXT_NODE) {
+      offset += (node.textContent || '').length;
+    } else if (node.classList && node.classList.contains('math-chip')) {
+      offset += (node.dataset.text || '').length;
+    }
+  }
+  return offset;
 }
 
 // Wait for page load
@@ -507,11 +766,12 @@ async function handleSubmitQuestion(e) {
   e.preventDefault();
 
   if (!questionInput || !mathFieldReady) {
-    console.error('MathField not ready');
+    console.error('Math input not ready');
     return;
   }
 
-  const rawQuestion = questionInput.getValue('latex-expanded').trim();
+  const rawText = getInputTextValue().trim();
+  const rawQuestion = rawText ? getInputLatex() : '';
   const question = normalizeMathLiveArtifacts(rawQuestion).trim();
   
   if (!question) {
@@ -523,14 +783,15 @@ async function handleSubmitQuestion(e) {
   addMessage({ text: question, role: 'user' });
   
   // Clear input
-  questionInput.setValue('');
+  questionInput.innerHTML = '';
   smartRanges = [];
   prevInputValue = '';
 
   // Set loading state
   loading = true;
   submitBtn.disabled = true;
-  questionInput.disabled = true;
+  questionInput.contentEditable = 'false';
+  questionInput.classList.add('locked');
   showResponseStatus('loading', 'Processing your question...');
 
   // Add loading message
@@ -580,7 +841,8 @@ async function handleSubmitQuestion(e) {
   } finally {
     loading = false;
     submitBtn.disabled = false;
-    questionInput.disabled = false;
+    questionInput.contentEditable = 'true';
+    questionInput.classList.remove('locked');
     questionInput.focus();
     inputMethod = 'typing';
     usedSuggestion = false;
@@ -637,33 +899,48 @@ function updateSmartRanges(prevValue, nextValue) {
 function handleInputChange() {
   if (!questionInput || !mathFieldReady) return;
 
-  if (!usedSuggestion){
+  // Reset usedSuggestion once the user starts typing/backspacing again
+  if (usedSuggestion) {
+    // The first call right after selectSuggestion() sets prevInputValue;
+    // once the value actually changes (user typed/backspaced), reset the flag.
+    const currentVal = getInputTextValue();
+    if (currentVal !== prevInputValue) {
+      usedSuggestion = false;
+      inputMethod = 'typing';
+    }
+  } else {
     inputMethod = 'typing';
   }
   
-  // Get LaTeX representation - our rules now match LaTeX format
-  const latexValue = questionInput.getValue();
+  // Get text value from input
   const textValue = getInputTextValue();
+  let latexValue = '';
+  try {
+    latexValue = textValue ? smartTextToLatex(textValue) : '';
+  } catch (e) {
+    console.warn('smartTextToLatex error:', e);
+    latexValue = textValue;
+  }
   const searchValue = textValue;
   const normalizedSearchValue = String(searchValue || '').replace(/\s+/g, '');
 
   if (suppressSuggestionForValue && normalizedSearchValue === suppressSuggestionForValue) {
+    // Still matches the just-inserted suggestion — suppress, but update state
+    prevInputValue = searchValue;
     hideSuggestions();
     return;
   }
-  if (suppressSuggestionForValue && normalizedSearchValue !== suppressSuggestionForValue) {
-    suppressSuggestionForValue = '';
-  }
+  // Clear suppression as soon as the value diverges
+  suppressSuggestionForValue = '';
   
   console.log('LaTeX value:', latexValue); // Debug
   console.log('Search value:', searchValue); // Debug
   
-  const caret = searchValue.length;
+  // Use actual cursor position from contenteditable
+  const caret = getCaretOffset();
 
   smartRanges = updateSmartRanges(prevInputValue, searchValue);
   prevInputValue = searchValue;
-
-  renderOverlay();
 
   // Extract the current word/phrase for suggestions
   // Match more characters including backslash for LaTeX commands
@@ -677,28 +954,26 @@ function handleInputChange() {
   while (end < searchValue.length && isChar(searchValue[end])) end += 1;
   
   let query = searchValue.slice(start, end).trim();
-  const queryText = latexToSmartText(query);
+  let queryText = '';
+  try {
+    queryText = latexToSmartText(query);
+  } catch (e) {
+    console.warn('latexToSmartText error:', e);
+    queryText = query;
+  }
   
-  // Clean query from placeholders and empty groups to ensure better matching
-  // This allows "log\placeholder" to match the "log" rule
-  // Also remove trailing subscripts/superscripts that might be artifacts of smart mode
-  query = query.replace(/\\placeholder(\{[^}]*\})?/g, '')
-               .replace(/\{\}/g, '')
-               .replace(/[_^]$/, ''); // Remove dangling subscript/superscript indicators
-
-  // MathLive builds structured constructs with placeholders (e.g. "\\sum_{...}^{...}").
-  // For suggestions, we usually want to match the base command.
-  if (query.startsWith('\\sum')) query = '\\sum';
-  if (query.startsWith('\\int')) query = '\\int';
+  // Clean query from empty groups
+  query = query.replace(/\{\}/g, '')
+               .replace(/[_^]$/, '');
                
-  // If query became empty or just backslash, check if we had content before
+  // If query became empty or just backslash, treat as empty
   if (query === '\\' || query === '') {
-     // If we stripped everything, maybe just use the original without placeholder to be safe, 
-     // or let it be empty (which will hide suggestions)
+    query = '';
   }
 
   console.log('Query for suggestions:', query); // Debug
 
+  try {
   if (query.length > 0) {
     // Extract the actual term used for suggestions (after operators)
     // Split on operators ONLY if they're at the top level (not inside parentheses)
@@ -955,6 +1230,8 @@ function handleInputChange() {
         queryTerm,
         queryTermText
       };
+      // Re-rank using community feedback before showing
+      suggestions = rankSuggestionsByFeedback(suggestions);
       showSuggestions(suggestions);
     } else {
       hideSuggestions();
@@ -962,10 +1239,10 @@ function handleInputChange() {
   } else {
     hideSuggestions();
   }
-}
-
-function renderOverlay() {
-  // MathLive handles its own rendering
+  } catch (e) {
+    console.warn('Suggestion processing error:', e);
+    hideSuggestions();
+  }
 }
 
 function showSuggestions(suggestions) {
@@ -1054,7 +1331,7 @@ function preservePlainTextSegments(value) {
 /**
  * Convert "smart text" (the output of latexToSmartText) back to valid LaTeX.
  * This reverses Unicode superscripts, bare trig names, Greek letters, etc.
- * so MathLive can interpret the result correctly in setValue().
+ * so KaTeX can render the result correctly.
  */
 function smartTextToLatex(text) {
   let s = String(text || '');
@@ -1107,21 +1384,13 @@ function selectSuggestion(latex) {
   usedSuggestion = true;
 
   console.log(inputMethod, usedSuggestion);
-  // Set the LaTeX value in MathLive
 
   const currentValue = getInputTextValue();
-  const { replaceStart, replaceEnd } = computeSuggestionReplacementRange(suggestionLatex, currentValue);
+  let { replaceStart, replaceEnd } = computeSuggestionReplacementRange(suggestionLatex, currentValue);
 
-  try {
-    questionInput.defaultMode = 'text';
-    questionInput.mode = 'text';
-  } catch {
-    // Ignore if mode APIs are not supported
-  }
-
+  // Handle trailing paren balance
+  const suffix = currentValue.slice(replaceEnd || 0);
   const prefix = currentValue.slice(0, replaceStart || 0);
-  let suffix = currentValue.slice(replaceEnd || 0);
-
   if (suggestionLatex.endsWith(')') && suffix.startsWith(')')) {
     const countParenBalance = (text) => {
       let balance = 0;
@@ -1131,23 +1400,27 @@ function selectSuggestion(latex) {
       }
       return balance;
     };
-
     const balanceAfterInsert = countParenBalance(`${prefix}${suggestionLatex}`);
     if (balanceAfterInsert <= 0) {
-      suffix = suffix.slice(1);
+      replaceEnd += 1; // consume the extra closing paren
     }
   }
 
-  const safePrefix = preservePlainTextSegments(smartTextToLatex(prefix));
-  const safeSuffix = preservePlainTextSegments(smartTextToLatex(suffix));
-  questionInput.setValue(`${safePrefix}${suggestionLatex}${safeSuffix}`);
-
+  // Create a rendered math chip
+  const chip = document.createElement('span');
+  chip.className = 'math-chip';
+  chip.contentEditable = 'false';
+  chip.dataset.latex = suggestionLatex;
+  chip.dataset.text = latexToReadableText(suggestionLatex);
   try {
-    questionInput.defaultMode = 'text';
-    questionInput.mode = 'text';
+    katex.render(suggestionLatex, chip, { throwOnError: false, displayMode: false });
   } catch {
-    // Ignore if mode APIs are not supported
+    chip.textContent = chip.dataset.text;
   }
+
+  // Preserve existing chips: splice the new chip into the DOM at the right position
+  // Walk child nodes mapping logical text offsets → DOM nodes
+  insertChipIntoDOM(replaceStart, replaceEnd, chip);
 
   hideSuggestions();
   
@@ -1155,8 +1428,6 @@ function selectSuggestion(latex) {
   showSuggestionFeedbackUI(latex);
 
   // Reset suggestion-tracking state after programmatic insertion.
-  // Some MathLive builds don't emit consistent input events for insert(),
-  // which can leave suggestion extraction stale until another full edit cycle.
   prevInputValue = getInputTextValue();
   suppressSuggestionForValue = String(prevInputValue || '').replace(/\s+/g, '');
   smartRanges = [];
@@ -1165,6 +1436,106 @@ function selectSuggestion(latex) {
     questionInput.focus();
     handleInputChange();
   });
+}
+
+/**
+ * Insert a chip into the contenteditable div at logical text range [start, end),
+ * preserving all existing chips and only modifying the affected text node(s).
+ */
+function insertChipIntoDOM(replaceStart, replaceEnd, chip) {
+  const nodes = Array.from(questionInput.childNodes);
+  const newChildren = [];
+  let pos = 0;
+  let chipInserted = false;
+
+  for (const node of nodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      // Get the logical text (without zero-width spaces)
+      const raw = node.textContent || '';
+      const logical = raw.replace(/\u200B/g, '');
+      const nodeStart = pos;
+      const nodeEnd = pos + logical.length;
+
+      if (nodeEnd <= replaceStart || nodeStart >= replaceEnd) {
+        // Node is fully outside replacement range — keep as-is
+        newChildren.push(node);
+      } else {
+        // This text node overlaps with the replacement range
+        const cutStart = Math.max(0, replaceStart - nodeStart);
+        const cutEnd = Math.min(logical.length, replaceEnd - nodeStart);
+
+        const beforeText = logical.slice(0, cutStart);
+        const afterText = logical.slice(cutEnd);
+
+        if (beforeText) {
+          newChildren.push(document.createTextNode(beforeText));
+        }
+        if (!chipInserted) {
+          newChildren.push(chip);
+          chipInserted = true;
+        }
+        if (afterText) {
+          newChildren.push(document.createTextNode(afterText));
+        }
+      }
+      pos += logical.length;
+
+    } else if (node.classList && node.classList.contains('math-chip')) {
+      const chipText = node.dataset.text || '';
+      const nodeStart = pos;
+      const nodeEnd = pos + chipText.length;
+
+      if (nodeEnd <= replaceStart || nodeStart >= replaceEnd) {
+        // Chip fully outside — keep it
+        newChildren.push(node);
+      } else {
+        // Chip overlaps replacement (unusual, but handle gracefully — replace it)
+        if (!chipInserted) {
+          newChildren.push(chip);
+          chipInserted = true;
+        }
+      }
+      pos += chipText.length;
+
+    } else {
+      // Other nodes (shouldn't happen) — keep
+      newChildren.push(node);
+    }
+  }
+
+  // If chip was not inserted (e.g. appending at end), add it
+  if (!chipInserted) {
+    newChildren.push(chip);
+  }
+
+  // Rebuild content preserving chips
+  questionInput.innerHTML = '';
+  newChildren.forEach(n => questionInput.appendChild(n));
+
+  // Ensure there's a text node after the chip for continued typing
+  const nextAfterChip = chip.nextSibling;
+  let cursorTarget;
+  if (!nextAfterChip || nextAfterChip.nodeType !== Node.TEXT_NODE) {
+    cursorTarget = document.createTextNode('\u200B');
+    if (nextAfterChip) {
+      questionInput.insertBefore(cursorTarget, nextAfterChip);
+    } else {
+      questionInput.appendChild(cursorTarget);
+    }
+  } else {
+    cursorTarget = nextAfterChip;
+  }
+
+  // Place cursor right after the chip
+  try {
+    const range = document.createRange();
+    const sel = window.getSelection();
+    const startOffset = (cursorTarget.textContent || '').startsWith('\u200B') ? 1 : 0;
+    range.setStart(cursorTarget, startOffset);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } catch { /* focus fallback */ }
 }
 
 function showSuggestionFeedbackUI(latex) {
@@ -1213,6 +1584,9 @@ async function sendSuggestionFeedback(latex, rating) {
     if (!data.success) {
       console.warn('Feedback not recorded:', data);
       showResponseStatus('error', 'Could not record feedback');
+    } else {
+      // Refresh feedback scores so future suggestions reflect this rating
+      loadSuggestionFeedbackScores();
     }
   } catch (e) {
     console.error('Error sending suggestion feedback', e);
@@ -1271,7 +1645,7 @@ questionForm.addEventListener('submit', handleSubmitQuestion);
 
 // Close suggestions on click outside
 document.addEventListener('click', (e) => {
-  if (!suggestionList.contains(e.target) && e.target !== questionInput) {
+  if (!suggestionList.contains(e.target) && !questionInput.contains(e.target)) {
     hideSuggestions();
   }
 });
@@ -1513,17 +1887,24 @@ document.addEventListener('click', (e) => {
     const latex = (latexInput.value || '').trim();
     if (!latex) { showMsg(errorDiv, 'Nothing to insert.'); return; }
 
-    // Insert as rendered math (not raw text) at cursor position
+    // Insert a rendered math chip into the contenteditable input
     if (questionInput && mathFieldReady) {
+      const chip = document.createElement('span');
+      chip.className = 'math-chip';
+      chip.contentEditable = 'false';
+      chip.dataset.latex = latex;
+      chip.dataset.text = latexToReadableText(latex);
+      try {
+        katex.render(latex, chip, { throwOnError: false, displayMode: false });
+      } catch {
+        chip.textContent = chip.dataset.text;
+      }
+      questionInput.appendChild(chip);
+      // Add zero-width space for continued typing
+      questionInput.appendChild(document.createTextNode('\u200B'));
       questionInput.focus();
-      questionInput.insert(latex, {
-        insertionMode: 'insertAfter',
-        selectionMode: 'after',
-        mode: 'math'
-      });
-      // Switch back to text mode so the user can keep typing
-      questionInput.mode = 'text';
       inputMethod = 'image';
+      handleInputChange();
     }
 
     closeScanner();
