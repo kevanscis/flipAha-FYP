@@ -8,12 +8,8 @@ let suggestionContext = { start: 0, end: 0 };
 let inputMethod = 'typing';
 let usedSuggestion = false;
 let suppressSuggestionForValue = '';
-
-// [DISABLED] Feedback-based suggestion ranking – commented out while working on new ranking approach
-// let suggestionFeedbackScores = {};
-// async function loadSuggestionFeedbackScores() { ... }
-// function rankSuggestionsByFeedback(suggestions) { ... }
-// See git history for full implementation
+let lastShownSuggestions = [];   // track suggestions shown for ML feedback
+let lastSuggestionQuery = '';    // track the raw input that triggered suggestions
 
 // Configuration
 const API_BASE_URL = 'http://localhost:5000'; // Update with your backend URL
@@ -916,8 +912,8 @@ function handleInputChange() {
   query = query.replace(/\{\}/g, '')
                .replace(/[_^]$/, '');
                
-  // If query became empty or just backslash, treat as empty
-  if (query === '\\' || query === '') {
+  // If query became empty, just backslash, or a bare operator, treat as empty
+  if (query === '\\' || query === '' || /^[+\-*/=,\s]+$/.test(query)) {
     query = '';
   }
 
@@ -1039,9 +1035,18 @@ function handleInputChange() {
 
     if (!compactTrigExpression || hasTopLevelPlusMinus) {
       if (lastTopLevelOperatorIndex !== -1) {
-        queryTerm = query.substring(lastTopLevelOperatorIndex + 1).trim();
-        termStartOffset = lastTopLevelOperatorIndex + 1;
-        queryTermText = latexToSmartText(queryTerm);
+        const afterOp = query.substring(lastTopLevelOperatorIndex + 1).trim();
+        if (afterOp.length > 0) {
+          // There is a term after the operator — use it
+          queryTerm = afterOp;
+          termStartOffset = lastTopLevelOperatorIndex + 1;
+          queryTermText = latexToSmartText(queryTerm);
+        } else {
+          // Trailing operator (e.g. "10x +") — use the term before the operator
+          queryTerm = query.substring(0, lastTopLevelOperatorIndex).trim();
+          termStartOffset = 0;
+          queryTermText = latexToSmartText(queryTerm);
+        }
       }
     }
 
@@ -1072,7 +1077,8 @@ function handleInputChange() {
       }
     }
 
-    let suggestions = grammarSuggestions;
+    // Filter out suggestions containing placeholder '?' (incomplete parse artifacts)
+    let suggestions = grammarSuggestions.filter(s => !s.includes('?'));
 
     const normalizeInverseIntentSource = (value) => String(value || '')
       .toLowerCase()
@@ -1170,8 +1176,16 @@ function handleInputChange() {
         queryTerm,
         queryTermText
       };
-      // [DISABLED] Re-rank using community feedback before showing
-      // suggestions = rankSuggestionsByFeedback(suggestions);
+      // Re-rank suggestions using XGBoost-style GBDT model
+      if (typeof globalThis.suggestionRanker?.rankSuggestions === 'function') {
+        try {
+          suggestions = globalThis.suggestionRanker.rankSuggestions(queryTerm, suggestions);
+        } catch (e) {
+          console.warn('Suggestion ranker error:', e);
+        }
+      }
+      lastShownSuggestions = suggestions.slice();
+      lastSuggestionQuery = queryTerm;
       showSuggestions(suggestions);
     } else {
       hideSuggestions();
@@ -1517,7 +1531,12 @@ async function sendSuggestionFeedback(latex, rating) {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ suggestion_text: latex, rating })
+      body: JSON.stringify({
+        suggestion_text: latex,
+        rating,
+        raw_input: lastSuggestionQuery,
+        all_suggestions: lastShownSuggestions,
+      })
     });
 
     const data = await res.json();
@@ -1525,8 +1544,16 @@ async function sendSuggestionFeedback(latex, rating) {
       console.warn('Feedback not recorded:', data);
       showResponseStatus('error', 'Could not record feedback');
     } else {
-      // [DISABLED] Refresh feedback scores so future suggestions reflect this rating
-      // loadSuggestionFeedbackScores();
+      // Feed the interaction to the online GBDT learner so ranking improves
+      if (typeof globalThis.suggestionRanker?.addFeedback === 'function') {
+        try {
+          globalThis.suggestionRanker.addFeedback(
+            lastSuggestionQuery, latex, lastShownSuggestions, rating
+          );
+        } catch (e) {
+          console.warn('Online learner error:', e);
+        }
+      }
     }
   } catch (e) {
     console.error('Error sending suggestion feedback', e);

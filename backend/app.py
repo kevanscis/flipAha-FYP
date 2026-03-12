@@ -478,6 +478,9 @@ def submit_suggestion_feedback():
         data = request.get_json(silent=True) or {}
         suggestion_text = (data.get('suggestion_text') or '').strip()
         question_id = data.get('question_id')
+        raw_input = (data.get('raw_input') or '').strip()
+        all_suggestions_list = data.get('all_suggestions') or []
+        all_suggestions_json = json.dumps(all_suggestions_list) if all_suggestions_list else None
         # Accept either 'rating' (preferred) or legacy 'useful' boolean
         if 'rating' in data:
             try:
@@ -497,12 +500,52 @@ def submit_suggestion_feedback():
         with conn:
             conn.execute("""
                 INSERT INTO suggestion_feedback (
-                    feedback_id, user_id, question_id, suggestion_text, rating, feedback_timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?)
-            """, (feedback_id, user_id, question_id, suggestion_text, rating, ts))
+                    feedback_id, user_id, question_id, suggestion_text, rating,
+                    raw_input, all_suggestions, feedback_timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (feedback_id, user_id, question_id, suggestion_text, rating,
+                  raw_input, all_suggestions_json, ts))
         conn.close()
 
         return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/suggestion-feedback/training-data', methods=['GET'])
+def get_training_data():
+    """Export feedback data for offline GBDT model training.
+
+    Response: JSON array of { suggestion_text, rating, raw_input, all_suggestions }
+    Admin only.
+    """
+    if session.get('role') != 'admin':
+        abort(403)
+
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT suggestion_text, rating, raw_input, all_suggestions,
+                   feedback_timestamp
+            FROM suggestion_feedback
+            ORDER BY feedback_timestamp
+        """)
+        rows = cursor.fetchall()
+        conn.close()
+
+        data = []
+        for r in rows:
+            entry = {
+                'suggestion_text': r['suggestion_text'],
+                'rating': r['rating'],
+                'raw_input': r['raw_input'] or '',
+                'all_suggestions': json.loads(r['all_suggestions']) if r['all_suggestions'] else [],
+                'timestamp': r['feedback_timestamp'],
+            }
+            data.append(entry)
+
+        return jsonify({'success': True, 'data': data}), 200
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

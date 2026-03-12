@@ -45,12 +45,26 @@ def create_tables():
         question_id TEXT,
         suggestion_text TEXT NOT NULL,
         rating INTEGER NOT NULL,
+        raw_input TEXT,
+        all_suggestions TEXT,
         feedback_timestamp DATETIME NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users(user_id),
         FOREIGN KEY (question_id) REFERENCES questions(question_id)
     );
     """)
     db.commit()
+
+    # Migrate: add new columns if they don't exist (for existing databases)
+    try:
+        db.execute("ALTER TABLE suggestion_feedback ADD COLUMN raw_input TEXT")
+    except Exception:
+        pass  # column already exists
+    try:
+        db.execute("ALTER TABLE suggestion_feedback ADD COLUMN all_suggestions TEXT")
+    except Exception:
+        pass  # column already exists
+    db.commit()
+
     db.close()
 
 create_tables()
