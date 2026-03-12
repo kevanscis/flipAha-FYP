@@ -464,7 +464,51 @@
   });
 
   // --------------------------------------------------------------------------
-  // Rule 11: Function + additive — tanx+pi/6 → tan(x+pi/6)
+  // Rule 11: Double angle — 2sin(x)cos(x) → sin(2x)
+  // Recognizes the pattern coefficient·sin(arg)·cos(arg) where coefficient is 2.
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'double-angle',
+    match(node) {
+      if (node.type !== 'implicit_multiply') return false;
+      const factors = node.factors;
+      // Check for pattern: 2 * sin(arg) * cos(arg) in any order
+      const hasTwo = factors.some(f => f.type === 'number' && f.value === '2');
+      const sinNode = factors.find(f => f.type === 'function' && f.name === 'sin');
+      const cosNode = factors.find(f => f.type === 'function' && f.name === 'cos');
+      return hasTwo && sinNode && cosNode;
+    },
+    expand(node) {
+      const { ASTNode, astToLatex } = getParser();
+      const factors = node.factors;
+      const results = [];
+
+      // Original: 2sin(x)cos(x)
+      results.push(node);
+
+      // Find sin and cos nodes to extract arg
+      const sinNode = factors.find(f => f.type === 'function' && f.name === 'sin');
+      const cosNode = factors.find(f => f.type === 'function' && f.name === 'cos');
+
+      if (sinNode && cosNode && sinNode.args.length > 0 && cosNode.args.length > 0) {
+        const sinArg = astToLatex(sinNode.args[0]);
+        const cosArg = astToLatex(cosNode.args[0]);
+
+        // Only offer identity when both args are the same
+        if (sinArg === cosArg) {
+          const arg = sinNode.args[0];
+          // sin(2x) — double angle identity
+          const doubledArg = ASTNode.implicitMul([ASTNode.number('2'), arg]);
+          results.push(ASTNode.func('sin', [doubledArg], null, true));
+        }
+      }
+
+      return deduplicateASTs(results);
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Rule 12: Function + additive — tanx+pi/6 → tan(x+pi/6)
   // When a function with an implicit arg is the left operand of + or -,
   // the user may have meant the whole additive expression as the argument.
   // --------------------------------------------------------------------------
@@ -544,14 +588,21 @@
   });
 
   // --------------------------------------------------------------------------
-  // Completion 3: Expression → powers & parens
-  // x+1 → (x+1)², (x+1)³, √(x+1)
-  // 2x → (2x)², (2x)³
+  // Completion 3: Simple 2-term product → powers
+  // 2x → (2x)², (2x)³  (only for short algebraic products, not complex exprs)
   // --------------------------------------------------------------------------
   completionRules.push({
     name: 'expression-completions',
     match(node) {
-      return node.type === 'binary' || node.type === 'implicit_multiply';
+      // Only match simple 2-factor implicit multiply of numbers/variables
+      // e.g. 2x, xy — NOT sinxcosx, triangleABC, or long expressions
+      if (node.type === 'implicit_multiply') {
+        if (node.factors.length !== 2) return false;
+        return node.factors.every(f =>
+          f.type === 'number' || f.type === 'variable'
+        );
+      }
+      return false;
     },
     expand(node) {
       const { ASTNode } = getParser();
@@ -944,10 +995,10 @@
     return null;
   }
 
-  /** Common angles that students type in degrees */
+  /** Check if a number could be an angle in degrees (10-360) */
   function isCommonAngle(value) {
-    const angles = ['0', '30', '45', '60', '90', '120', '135', '150', '180', '210', '225', '240', '270', '300', '315', '330', '360'];
-    return angles.includes(String(value));
+    const num = parseInt(String(value), 10);
+    return !isNaN(num) && num >= 10 && num <= 360;
   }
 
   /** Normalize LaTeX for deduplication comparison */

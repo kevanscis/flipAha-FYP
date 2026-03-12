@@ -69,6 +69,14 @@
     'rho':      '\\rho',
     'tau':      '\\tau',
     'eta':      '\\eta',
+    // Geometry & trig symbols
+    'triangle': '\\triangle',
+    'angle':    '\\angle',
+    'perp':     '\\perp',
+    'parallel': '\\parallel',
+    'cong':     '\\cong',
+    'sim':      '\\sim',
+    'therefore':'\\therefore',
   };
 
   // LaTeX-prefixed function names we should also recognize
@@ -101,6 +109,14 @@
     '\\tau':      '\\tau',
     '\\eta':      '\\eta',
     '\\infty':    '\\infty',
+    // Geometry & trig symbols
+    '\\triangle': '\\triangle',
+    '\\angle':    '\\angle',
+    '\\perp':     '\\perp',
+    '\\parallel': '\\parallel',
+    '\\cong':     '\\cong',
+    '\\sim':      '\\sim',
+    '\\therefore':'\\therefore',
   };
 
   // ==========================================================================
@@ -131,6 +147,36 @@
       }
       if (src[i] === '÷') {
         tokens.push({ type: TokenType.OPERATOR, value: '/', pos: i });
+        i++; continue;
+      }
+
+      // Unicode geometry symbols
+      if (src[i] === '△' || src[i] === '▲' || src[i] === '▵') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'triangle', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '∠' || src[i] === '∡') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'angle', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '⊥') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'perp', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '∥') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'parallel', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '≅') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'cong', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '∼' || src[i] === '~') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'sim', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '∴') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'therefore', pos: i });
         i++; continue;
       }
 
@@ -386,9 +432,15 @@
 
     function isAtEnd() { return current().type === TokenType.EOF; }
 
-    // --- Expression (top level) ---
+    // --- Expression (top level): handles = for equations ---
     function parseExpression() {
-      return parseAdditive();
+      let left = parseAdditive();
+      while (!isAtEnd() && current().type === TokenType.OPERATOR && current().value === '=') {
+        const op = advance().value;
+        const right = parseAdditive();
+        left = ASTNode.binary(op, left, right);
+      }
+      return left;
     }
 
     // --- Additive: a + b - c ---
@@ -801,14 +853,35 @@
         return astToLatex(node.expr);
 
       case 'implicit_multiply': {
-        return node.factors.map(f => {
+        // Relation/geometry symbols that need spaces on both sides
+        const relationSymbols = new Set([
+          '\\perp', '\\parallel', '\\cong', '\\sim', '\\therefore'
+        ]);
+        const parts = node.factors.map((f, idx) => {
           const latex = astToLatex(f);
           // Wrap binary operations in parens for clarity
           if (f.type === 'binary' && (f.op === '+' || f.op === '-')) {
-            return `(${latex})`;
+            return { text: `(${latex})`, isRelation: false, node: f };
           }
-          return latex;
-        }).join('');
+          const isRel = f.type === 'constant' && relationSymbols.has(latex);
+          return { text: latex, isRelation: isRel, node: f };
+        });
+        // Join with appropriate spacing
+        let result = parts[0].text;
+        for (let i = 1; i < parts.length; i++) {
+          const prev = parts[i - 1];
+          const curr = parts[i];
+          // Relations get spaces on both sides: A \perp B
+          if (prev.isRelation || curr.isRelation) {
+            result += ' ' + curr.text;
+          // LaTeX command followed by letter: \triangle A
+          } else if (/\\[a-zA-Z]+$/.test(prev.text) && /^[a-zA-Z]/.test(curr.text)) {
+            result += ' ' + curr.text;
+          } else {
+            result += curr.text;
+          }
+        }
+        return result;
       }
 
       default:
