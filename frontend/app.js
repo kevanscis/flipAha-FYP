@@ -392,11 +392,12 @@ function normalizeToLatex(input) {
 function normalizeSuggestionLatex(value) {
   const raw = String(value ?? '').trim();
   if (!raw) return '';
-  if (raw.startsWith('\\')) return raw;
+  // Already looks like LaTeX — return as-is
+  if (raw.startsWith('\\') || /[_^{}\\]/.test(raw)) return raw;
 
-  if (typeof window.mathToLatex === 'function') {
+  if (typeof globalThis.grammarParser?.mathToLatexGrammar === 'function') {
     try {
-      const normalized = String(window.mathToLatex(raw) ?? '').trim();
+      const normalized = String(globalThis.grammarParser.mathToLatexGrammar(raw) ?? '').trim();
       if (normalized) return normalized;
     } catch {
       // Fall back to local normalizer
@@ -1060,11 +1061,18 @@ function handleInputChange() {
     }
     
     // Match rules directly with LaTeX input (use extracted term, not full query)
-    let suggestions = getLatexSuggestions(queryTerm).filter(s => {
-      if (s === queryTerm) return false;
-      if (searchValue.includes(s)) return false;
-      return true;
-    });
+    // --- Grammar-based suggestions (ambiguity resolver) ---
+    let grammarSuggestions = [];
+    if (typeof globalThis.ambiguityResolver?.generateSuggestions === 'function') {
+      try {
+        grammarSuggestions = globalThis.ambiguityResolver.generateSuggestions(queryTerm, 8)
+          .filter(s => s && s !== queryTerm && !searchValue.includes(s));
+      } catch (e) {
+        console.warn('Grammar parser error:', e);
+      }
+    }
+
+    let suggestions = grammarSuggestions;
 
     const normalizeInverseIntentSource = (value) => String(value || '')
       .toLowerCase()
@@ -1125,23 +1133,6 @@ function handleInputChange() {
       suggestions = suggestions.filter(s => /(?:^|\\)(sin|cos|tan|sec|csc|cot|cosec)\b/i.test(String(s)));
     }
 
-    if (suggestions.length === 0 && typeof window.getLayer2Suggestions === 'function') {
-      const layer2Input = queryText || textValue || query;
-      const layer2Candidates = window.getLayer2Suggestions(layer2Input, {
-        curriculum: 'o-level',
-        maxSuggestions: 5
-      });
-
-      const layer2Latex = layer2Candidates
-        .map(candidate => {
-          const value = candidate.text || candidate.display || '';
-          return window.mathToLatex ? window.mathToLatex(value) : value;
-        })
-        .filter(s => s && s !== query && !searchValue.includes(s));
-
-      suggestions = [...new Set(layer2Latex)].slice(0, 5);
-    }
-    
     console.log('Suggestions found:', suggestions); // Debug
 
     if (suggestions.length > 0) {

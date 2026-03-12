@@ -12,8 +12,6 @@
     
     <!-- KaTeX for rendering -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/katex.min.css">
-    
-
 
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
@@ -184,26 +182,11 @@
 
     <script src="nav.js"></script>
     
-    <!-- Subject modules (must load BEFORE mathToLatex.js) -->
-    <script src="src/core/subjects/trig.js"></script>
-    <script src="src/core/subjects/logs.js"></script>
-    <script src="src/core/subjects/vectors.js"></script>
-    <script src="src/core/subjects/normal.js"></script>
-    <script src="src/core/subjects/fractions.js"></script>
-    
-    <!-- Math parser (must load BEFORE mathToLatex.js) -->
-    <script src="src/core/math-extractor-enhanced.js"></script>
-    
-    <!-- Permutation rule files (must load BEFORE mathToLatex.js) -->
-    <script src="src/core/permutation-rules/log-rules.js"></script>
-    <script src="src/core/permutation-rules/trig-rules.js"></script>
-    <script src="src/core/permutation-rules/algebra-rules.js"></script>
-    
-    <!-- Unified Orchestrator (LaTeX + Permutations) -->
-    <script src="mathToLatex.js"></script>
+    <!-- Grammar-based parser & ambiguity resolver -->
+    <script src="src/core/grammar-parser.js"></script>
+    <script src="src/core/ambiguity-resolver.js"></script>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-    <script type="module" src="layer2-suggestions.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
