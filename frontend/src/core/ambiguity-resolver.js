@@ -295,22 +295,32 @@
     name: 'var-number-ambiguity',
     match(node) {
       if (node.type !== 'implicit_multiply') return false;
-      if (node.factors.length !== 2) return false;
-      const [a, b] = node.factors;
-      return a.type === 'variable' && b.type === 'number' && /^[0-9]$/.test(b.value);
+      const factors = node.factors;
+      if (factors.length < 2) return false;
+      const last = factors[factors.length - 1];
+      const secondLast = factors[factors.length - 2];
+      return secondLast.type === 'variable' && last.type === 'number' && /^[0-9]$/.test(last.value);
     },
     expand(node) {
       const { ASTNode } = getParser();
-      const [varNode, numNode] = node.factors;
+      const factors = node.factors;
+      const varNode = factors[factors.length - 2];
+      const numNode = factors[factors.length - 1];
+      const prefix = factors.slice(0, factors.length - 2);
       const results = [];
 
-      // Interpretation A: x² (power)
-      results.push(ASTNode.power(varNode, numNode));
+      function withPrefix(expr) {
+        if (prefix.length === 0) return expr;
+        return ASTNode.implicitMul([...prefix, expr]);
+      }
 
-      // Interpretation B: x₁ (subscript)
-      results.push(ASTNode.subscript(varNode, numNode));
+      // Interpretation A: ...x² (trailing digit as power)
+      results.push(withPrefix(ASTNode.power(varNode, numNode)));
 
-      // Interpretation C: x * 1 (implicit multiply) — original
+      // Interpretation B: ...x₁ (trailing digit as subscript)
+      results.push(withPrefix(ASTNode.subscript(varNode, numNode)));
+
+      // Interpretation C: original (implicit multiply)
       results.push(node);
 
       return results;
@@ -594,10 +604,10 @@
   completionRules.push({
     name: 'expression-completions',
     match(node) {
-      // Only match simple 2-factor implicit multiply of numbers/variables
-      // e.g. 2x, xy — NOT sinxcosx, triangleABC, or long expressions
+      // Match simple implicit multiply of numbers/variables (2–4 factors)
+      // e.g. 2x, xy, 10x2 — NOT sinxcosx, triangleABC, or very long expressions
       if (node.type === 'implicit_multiply') {
-        if (node.factors.length !== 2) return false;
+        if (node.factors.length < 2 || node.factors.length > 4) return false;
         return node.factors.every(f =>
           f.type === 'number' || f.type === 'variable'
         );
