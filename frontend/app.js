@@ -9,65 +9,14 @@ let inputMethod = 'typing';
 let usedSuggestion = false;
 let suppressSuggestionForValue = '';
 
-// Feedback-based suggestion ranking cache
-// Maps suggestion LaTeX text → { score: -1..1, ups, downs, total }
-let suggestionFeedbackScores = {};
+// [DISABLED] Feedback-based suggestion ranking – commented out while working on new ranking approach
+// let suggestionFeedbackScores = {};
+// async function loadSuggestionFeedbackScores() { ... }
+// function rankSuggestionsByFeedback(suggestions) { ... }
+// See git history for full implementation
 
 // Configuration
 const API_BASE_URL = 'http://localhost:5000'; // Update with your backend URL
-
-/**
- * Load aggregated suggestion feedback scores from the backend.
- * Called on page load and after submitting feedback.
- * Used by getLatexSuggestions to re-rank results.
- */
-async function loadSuggestionFeedbackScores() {
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/suggestion-feedback/scores`, {
-      credentials: 'include'
-    });
-    const data = await res.json();
-    if (data.success && data.scores) {
-      suggestionFeedbackScores = data.scores;
-      console.log('[Feedback] Loaded scores for', Object.keys(data.scores).length, 'suggestions');
-    }
-  } catch (e) {
-    console.warn('[Feedback] Could not load suggestion scores:', e.message);
-  }
-}
-
-/**
- * Re-rank suggestion list using feedback data.
- * Suggestions with positive feedback rise; negative feedback drops them.
- * @param {string[]} suggestions - LaTeX suggestions in original order
- * @returns {string[]} - Re-ranked suggestions
- */
-function rankSuggestionsByFeedback(suggestions) {
-  if (!suggestions || suggestions.length <= 1) return suggestions;
-  if (!suggestionFeedbackScores || Object.keys(suggestionFeedbackScores).length === 0) {
-    return suggestions;
-  }
-
-  // Assign a boost/penalty based on feedback score (-1 to 1)
-  const scored = suggestions.map((s, originalIndex) => {
-    const fb = suggestionFeedbackScores[s];
-    // feedbackBoost: positive for liked suggestions, negative for disliked
-    // Weight it by confidence (more ratings = more confidence)
-    const feedbackBoost = fb
-      ? fb.score * Math.min(1, fb.total / 10)  // confidence caps at 10 ratings
-      : 0;
-    return { suggestion: s, originalIndex, feedbackBoost };
-  });
-
-  // Stable sort: higher boost first, then preserve original order
-  scored.sort((a, b) => {
-    const diff = b.feedbackBoost - a.feedbackBoost;
-    if (Math.abs(diff) < 0.001) return a.originalIndex - b.originalIndex;
-    return diff;
-  });
-
-  return scored.map(s => s.suggestion);
-}
 
 function goHome(){
   window.location.href = `${API_BASE_URL}/`;
@@ -192,7 +141,7 @@ async function checkAuthStatus() {
 }
 
 window.addEventListener('load', checkAuthStatus);
-window.addEventListener('load', loadSuggestionFeedbackScores);
+// [DISABLED] window.addEventListener('load', loadSuggestionFeedbackScores);
 
 async function goLogout() {
   // Clear user-specific session so image history is not accessible after logout
@@ -1230,8 +1179,8 @@ function handleInputChange() {
         queryTerm,
         queryTermText
       };
-      // Re-rank using community feedback before showing
-      suggestions = rankSuggestionsByFeedback(suggestions);
+      // [DISABLED] Re-rank using community feedback before showing
+      // suggestions = rankSuggestionsByFeedback(suggestions);
       showSuggestions(suggestions);
     } else {
       hideSuggestions();
@@ -1585,8 +1534,8 @@ async function sendSuggestionFeedback(latex, rating) {
       console.warn('Feedback not recorded:', data);
       showResponseStatus('error', 'Could not record feedback');
     } else {
-      // Refresh feedback scores so future suggestions reflect this rating
-      loadSuggestionFeedbackScores();
+      // [DISABLED] Refresh feedback scores so future suggestions reflect this rating
+      // loadSuggestionFeedbackScores();
     }
   } catch (e) {
     console.error('Error sending suggestion feedback', e);
