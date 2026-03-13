@@ -25,6 +25,7 @@ def create_tables():
         question_timestamp DATETIME NOT NULL,
         input_method TEXT NOT NULL,
         topic TEXT NOT NULL,
+        difficulty TEXT,
         FOREIGN KEY (user_id) REFERENCES users(user_id)                 
     );
                         
@@ -71,6 +72,10 @@ def create_tables():
         pass  # column already exists
     try:
         db.execute("ALTER TABLE suggestion_feedback ADD COLUMN all_suggestions TEXT")
+    except Exception:
+        pass  # column already exists
+    try:
+        db.execute("ALTER TABLE questions ADD COLUMN difficulty TEXT")
     except Exception:
         pass  # column already exists
     db.commit()

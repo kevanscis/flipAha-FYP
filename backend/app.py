@@ -1,6 +1,7 @@
 from flask import Flask, send_from_directory, request, jsonify, session, abort
 from register import register_bp
 from login import login_bp
+from concurrent.futures import ThreadPoolExecutor
 import os
 import json
 import subprocess
@@ -256,8 +257,121 @@ def classify_question_topic(question):
             topic = "Other"
 
         return topic
-    except (urlerror.URLError, urlerror.HTTPError, TimeoutError, ValueError, json.JSONDecodeError) as e:
+    except (requests.RequestException, TimeoutError, ValueError, json.JSONDecodeError):
         return "Other"
+
+
+def classify_question_difficulty(question):
+    """
+    Classify a question difficulty as one of: easy, medium, hard.
+    """
+    payload = {
+        "model": CLOUD_LLM_MODEL,
+        "stream": False,
+        "temperature": 0,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a math question difficulty classifier for O-Level students. "
+                    "Classify the given math question into exactly one level: easy, medium, or hard. "
+                    "Respond with only one lowercase word: easy, medium, or hard."
+                )
+            },
+            {
+                "role": "user",
+                "content": question
+            }
+        ]
+    }
+
+    try:
+        resp = requests.post(
+            f"{CLOUD_LLM_BASE_URL}/chat/completions",
+            json=payload,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0"
+            },
+            timeout=60
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        choices = data.get("choices") or []
+        first = choices[0] if choices else {}
+        message = first.get("message") or {}
+        difficulty = (message.get("content") or "").strip().lower()
+
+        if difficulty not in ("easy", "medium", "hard"):
+            difficulty = "medium"
+
+        return difficulty
+    except Exception:
+        return "medium"
+
+
+def classify_question_metadata(question):
+    """
+    Classify both topic and difficulty in a single LLM call to reduce latency.
+    Returns: {"topic": <Topic>, "difficulty": <easy|medium|hard>}
+    """
+    payload = {
+        "model": CLOUD_LLM_MODEL,
+        "stream": False,
+        "temperature": 0,
+        "max_tokens": 50,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a math metadata classifier for O-Level students. "
+                    "Return ONLY valid JSON with shape: "
+                    "{\"topic\":\"Algebra|Trigonometry|Calculus|Geometry|Statistics|Other\","
+                    "\"difficulty\":\"easy|medium|hard\"}."
+                )
+            },
+            {
+                "role": "user",
+                "content": question
+            }
+        ]
+    }
+
+    valid_topics = {"Algebra", "Trigonometry", "Calculus", "Geometry", "Statistics", "Other"}
+    valid_difficulties = {"easy", "medium", "hard"}
+
+    try:
+        resp = requests.post(
+            f"{CLOUD_LLM_BASE_URL}/chat/completions",
+            json=payload,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0"
+            },
+            timeout=20
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        choices = data.get("choices") or []
+        first = choices[0] if choices else {}
+        message = first.get("message") or {}
+        content = (message.get("content") or "").strip()
+
+        parsed = json.loads(content)
+        topic = str(parsed.get("topic", "Other")).strip()
+        difficulty = str(parsed.get("difficulty", "medium")).strip().lower()
+
+        if topic not in valid_topics:
+            topic = "Other"
+        if difficulty not in valid_difficulties:
+            difficulty = "medium"
+
+        return {"topic": topic, "difficulty": difficulty}
+
+    except Exception:
+        return {"topic": "Other", "difficulty": "medium"}
 
 @app.after_request
 def add_cors_headers(response):
@@ -310,10 +424,15 @@ def ask_question():
                 'error': 'Question is empty'
             }), 400
 
-        # 3) Generate answer via hosted LLM
-        answer, llm_meta = generate_llm_answer(question)
-        # Classify question into a topic
-        topic = classify_question_topic(question)
+        # 3) Run answer and metadata classification in parallel to cut latency.
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            answer_future = executor.submit(generate_llm_answer, question)
+            metadata_future = executor.submit(classify_question_metadata, question)
+            answer, llm_meta = answer_future.result()
+            metadata = metadata_future.result()
+
+        topic = metadata.get("topic", "Other")
+        difficulty = metadata.get("difficulty", "medium")
         
         # Ensure quality before returning to client
         quality = evaluate_response_quality(question, answer)
@@ -341,10 +460,10 @@ def ask_question():
             conn.execute("""
                 INSERT INTO questions (
                     question_id, user_id, question_timestamp,
-                    input_method, topic
+                    input_method, topic, difficulty
                 )
-                VALUES (?, ?, ?, ?, ?)
-            """, (question_id, user_id, ts, input_method, topic))
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (question_id, user_id, ts, input_method, topic, difficulty))
         conn.close()
 
         # 5) Return response
@@ -353,6 +472,7 @@ def ask_question():
             'question': question,
             'answer': answer,
             'topic': topic,
+            'difficulty': difficulty,
             'question_id': question_id,
             'llm': llm_meta,
             'quality': {
@@ -410,10 +530,10 @@ def log_input_method():
             conn.execute("""
                 INSERT INTO questions (
                     question_id, user_id, question_timestamp,
-                    input_method, topic
+                    input_method, topic, difficulty
                 )
-                VALUES (?, ?, ?, ?, ?)
-            """, (question_id, user_id, ts, input_method, 'Other'))
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (question_id, user_id, ts, input_method, 'Other', 'unknown'))
         conn.close()
         
         return jsonify({
@@ -804,12 +924,38 @@ def new_vs_returning_dashboard():
 
 @app.route("/api/dashboard/question-volume")
 def dashboard_question_volume():
-    data = get_weekly_question_volume()
+    start_date = (request.args.get('start_date') or '').strip() or None
+    end_date = (request.args.get('end_date') or '').strip() or None
+
+    for value, label in ((start_date, 'start_date'), (end_date, 'end_date')):
+        if value:
+            try:
+                datetime.strptime(value, '%Y-%m-%d')
+            except ValueError:
+                return jsonify({'error': f'Invalid {label}. Use YYYY-MM-DD'}), 400
+
+    if start_date and end_date and start_date > end_date:
+        return jsonify({'error': 'start_date cannot be after end_date'}), 400
+
+    data = get_weekly_question_volume(start_date=start_date, end_date=end_date)
     return jsonify(data)
 
 @app.route("/api/dashboard/input-method-trends")
 def input_method_trends():
-    data = get_weekly_input_method_trends()
+    start_date = (request.args.get('start_date') or '').strip() or None
+    end_date = (request.args.get('end_date') or '').strip() or None
+
+    for value, label in ((start_date, 'start_date'), (end_date, 'end_date')):
+        if value:
+            try:
+                datetime.strptime(value, '%Y-%m-%d')
+            except ValueError:
+                return jsonify({'error': f'Invalid {label}. Use YYYY-MM-DD'}), 400
+
+    if start_date and end_date and start_date > end_date:
+        return jsonify({'error': 'start_date cannot be after end_date'}), 400
+
+    data = get_weekly_input_method_trends(start_date=start_date, end_date=end_date)
     return jsonify(data), 200
 
 ########################################################################################################################
@@ -1140,9 +1286,45 @@ def topic_frequency():
     """Get the frequency distribution of question topics"""
     if session.get('role') != 'admin':
         abort(403)
+
+    start_date = (request.args.get('start_date') or '').strip() or None
+    end_date = (request.args.get('end_date') or '').strip() or None
+
+    for value, label in ((start_date, 'start_date'), (end_date, 'end_date')):
+        if value:
+            try:
+                datetime.strptime(value, '%Y-%m-%d')
+            except ValueError:
+                return jsonify({'error': f'Invalid {label}. Use YYYY-MM-DD'}), 400
+
+    if start_date and end_date and start_date > end_date:
+        return jsonify({'error': 'start_date cannot be after end_date'}), 400
     
     try:
-        data = get_topic_frequency()
+        data = get_topic_frequency(start_date=start_date, end_date=end_date)
+        return jsonify(data), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/dashboard/question-difficulty')
+def question_difficulty_dashboard():
+    """Get easy/medium/hard question distribution overall and by topic."""
+    if session.get('role') != 'admin':
+        abort(403)
+
+    start_date = (request.args.get('start_date') or '').strip() or None
+    end_date = (request.args.get('end_date') or '').strip() or None
+
+    for value, label in ((start_date, 'start_date'), (end_date, 'end_date')):
+        if value:
+            try:
+                datetime.strptime(value, '%Y-%m-%d')
+            except ValueError:
+                return jsonify({'error': f'Invalid {label}. Use YYYY-MM-DD'}), 400
+
+    try:
+        data = get_question_difficulty_distribution(start_date=start_date, end_date=end_date)
         return jsonify(data), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500

@@ -200,12 +200,24 @@ def get_new_vs_returning_last_7_days():
     conn.close()
     return new_active, returning_active
 
-def get_weekly_question_volume():
+def get_weekly_question_volume(start_date=None, end_date=None):
     conn = get_db()
     cursor = conn.cursor()
 
     today = datetime.now(SINGAPORE_TZ).date()
-    start_date = today - timedelta(days=6)  # last 7 days incl today
+
+    if start_date:
+        start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+    if end_date:
+        end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+
+    if start_date is None and end_date is None:
+        end_date = today
+        start_date = today - timedelta(days=6)  # default: last 7 days incl today
+    elif start_date is None:
+        start_date = end_date - timedelta(days=6)
+    elif end_date is None:
+        end_date = today
 
     cursor.execute("""
         SELECT
@@ -213,9 +225,10 @@ def get_weekly_question_volume():
             COUNT(*) AS count
         FROM questions
         WHERE DATE(question_timestamp) >= ?
+          AND DATE(question_timestamp) <= ?
         GROUP BY day
         ORDER BY day ASC
-    """, (start_date.isoformat(),))
+    """, (start_date.isoformat(), end_date.isoformat()))
 
     rows = cursor.fetchall()
     conn.close()
@@ -223,9 +236,10 @@ def get_weekly_question_volume():
     # Convert to dict for easy lookup
     data = {row["day"]: row["count"] for row in rows}
 
-    # Ensure all 7 days exist (fill missing days with 0)
+    # Ensure every day in range exists (fill missing days with 0)
     result = []
-    for i in range(7):
+    total_days = (end_date - start_date).days + 1
+    for i in range(total_days):
         day = (start_date + timedelta(days=i)).isoformat()
         result.append({
             "day": day,
@@ -235,12 +249,24 @@ def get_weekly_question_volume():
     return result
 
 
-def get_weekly_input_method_trends():
+def get_weekly_input_method_trends(start_date=None, end_date=None):
     conn = get_db()
     cur = conn.cursor()
 
     today = datetime.now(SINGAPORE_TZ).date()
-    start_date = today - timedelta(days=6)  # last 7 days incl today
+
+    if start_date:
+        start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+    if end_date:
+        end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+
+    if start_date is None and end_date is None:
+        end_date = today
+        start_date = today - timedelta(days=6)  # default: last 7 days incl today
+    elif start_date is None:
+        start_date = end_date - timedelta(days=6)
+    elif end_date is None:
+        end_date = today
 
     cur.execute("""
         SELECT
@@ -249,10 +275,11 @@ def get_weekly_input_method_trends():
             COUNT(*) AS count
         FROM questions
         WHERE DATE(question_timestamp) >= ?
+          AND DATE(question_timestamp) <= ?
           AND input_method IN ('typing', 'suggestion', 'image')
         GROUP BY day, input_method
         ORDER BY day ASC
-    """, (start_date.isoformat(),))
+    """, (start_date.isoformat(), end_date.isoformat()))
 
     rows = cur.fetchall()
     conn.close()
@@ -262,7 +289,8 @@ def get_weekly_input_method_trends():
 
     # Fill missing days with 0s for all three series
     result = []
-    for i in range(7):
+    total_days = (end_date - start_date).days + 1
+    for i in range(total_days):
         day = (start_date + timedelta(days=i)).isoformat()
         result.append({
             "day": day,
@@ -273,19 +301,32 @@ def get_weekly_input_method_trends():
 
     return result
 
-def get_topic_frequency():
+def get_topic_frequency(start_date=None, end_date=None):
     """Get the frequency distribution of topics from all questions"""
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("""
+    filters = ["1=1"]
+    params = []
+
+    if start_date:
+        filters.append("DATE(question_timestamp) >= ?")
+        params.append(start_date)
+    if end_date:
+        filters.append("DATE(question_timestamp) <= ?")
+        params.append(end_date)
+
+    where_clause = " AND ".join(filters)
+
+    cursor.execute(f"""
         SELECT
             topic,
             COUNT(*) AS count
         FROM questions
+        WHERE {where_clause}
         GROUP BY topic
         ORDER BY count DESC
-    """)
+    """, tuple(params))
 
     rows = cursor.fetchall()
     conn.close()
@@ -323,6 +364,94 @@ def get_image_feedback_stats():
         "useful": useful,
         "not_useful": not_useful,
         "rate": rate
+    }
+
+
+def get_question_difficulty_distribution(start_date=None, end_date=None):
+    """
+    Return overall and per-topic difficulty breakdown for easy/medium/hard.
+    Optionally filter by question date range (inclusive) using YYYY-MM-DD.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+
+    filters = ["LOWER(COALESCE(difficulty, '')) IN ('easy', 'medium', 'hard')"]
+    params = []
+
+    if start_date:
+        filters.append("DATE(question_timestamp) >= ?")
+        params.append(start_date)
+
+    if end_date:
+        filters.append("DATE(question_timestamp) <= ?")
+        params.append(end_date)
+
+    where_clause = " AND ".join(filters)
+
+    cursor.execute(f"""
+        SELECT LOWER(difficulty) AS difficulty, COUNT(*) AS count
+        FROM questions
+        WHERE {where_clause}
+        GROUP BY LOWER(difficulty)
+    """, tuple(params))
+    overall_rows = cursor.fetchall()
+
+    overall_counts = {"easy": 0, "medium": 0, "hard": 0}
+    for row in overall_rows:
+        level = row["difficulty"]
+        if level in overall_counts:
+            overall_counts[level] = int(row["count"])
+
+    overall_total = sum(overall_counts.values())
+
+    cursor.execute(f"""
+        SELECT
+            topic,
+            SUM(CASE WHEN LOWER(difficulty) = 'easy' THEN 1 ELSE 0 END) AS easy_count,
+            SUM(CASE WHEN LOWER(difficulty) = 'medium' THEN 1 ELSE 0 END) AS medium_count,
+            SUM(CASE WHEN LOWER(difficulty) = 'hard' THEN 1 ELSE 0 END) AS hard_count,
+            COUNT(*) AS total
+        FROM questions
+        WHERE {where_clause}
+        GROUP BY topic
+        ORDER BY total DESC, topic ASC
+    """, tuple(params))
+    topic_rows = cursor.fetchall()
+    conn.close()
+
+    topics = []
+    for row in topic_rows:
+        total = int(row["total"] or 0)
+        easy_count = int(row["easy_count"] or 0)
+        medium_count = int(row["medium_count"] or 0)
+        hard_count = int(row["hard_count"] or 0)
+
+        topics.append({
+            "topic": row["topic"] or "Other",
+            "total": total,
+            "easy_count": easy_count,
+            "medium_count": medium_count,
+            "hard_count": hard_count,
+            "easy_pct": round((easy_count / total) * 100, 1) if total else 0,
+            "medium_pct": round((medium_count / total) * 100, 1) if total else 0,
+            "hard_pct": round((hard_count / total) * 100, 1) if total else 0,
+        })
+
+    return {
+        "date_range": {
+            "start_date": start_date,
+            "end_date": end_date,
+        },
+        "overall": {
+            "total": overall_total,
+            "easy_count": overall_counts["easy"],
+            "medium_count": overall_counts["medium"],
+            "hard_count": overall_counts["hard"],
+            "easy_pct": round((overall_counts["easy"] / overall_total) * 100, 1) if overall_total else 0,
+            "medium_pct": round((overall_counts["medium"] / overall_total) * 100, 1) if overall_total else 0,
+            "hard_pct": round((overall_counts["hard"] / overall_total) * 100, 1) if overall_total else 0,
+        },
+        "topics": topics,
     }
 
 if __name__ == "__main__":
