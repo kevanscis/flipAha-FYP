@@ -203,6 +203,127 @@ def generate_llm_answer(question):
             "error": str(e)
         }
 
+
+def _clean_latex_candidate(text):
+    """Normalize model output into a single LaTeX expression string."""
+    s = _normalize_response_text(text)
+    s = s.replace("```latex", "").replace("```", "").strip()
+
+    # Remove common math delimiters if present.
+    s = re.sub(r"^\$\$(.*)\$\$$", r"\1", s)
+    s = re.sub(r"^\$(.*)\$$", r"\1", s)
+    s = re.sub(r"^\\\((.*)\\\)$", r"\1", s)
+    s = re.sub(r"^\\\[(.*)\\\]$", r"\1", s)
+
+    # If multiple lines are returned, keep the first non-empty one.
+    if "\n" in s:
+        lines = [line.strip() for line in s.split("\n") if line.strip()]
+        s = lines[0] if lines else ""
+
+    return s.strip()
+
+
+def _clean_plain_text_candidate(text):
+    """Normalize short plain-text intent returned by the model."""
+    s = _normalize_response_text(text)
+    s = s.replace("```", "").strip()
+    # Keep intent concise for input-box insertion.
+    if len(s) > 240:
+        s = s[:240].rstrip()
+    return s
+
+
+def generate_equation_draft(user_prompt):
+    """Generate plain-text intent + one LaTeX draft for insertion into chat input."""
+    payload = {
+        "model": CLOUD_LLM_MODEL,
+        "stream": False,
+        "temperature": 0.2,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You convert mixed natural-language math prompts into two outputs. "
+                    "Return ONLY valid JSON with keys: plain_text, latex. "
+                    "plain_text: short normal-language intent with no LaTeX; use empty string if none. "
+                    "latex: exactly ONE LaTeX equation/expression only, no markdown. "
+                    "Do not wrap latex in $...$, \\(...\\), or \\[...\\]. "
+                    "Prefer standard commands like \\frac, \\sqrt, \\sin, \\cos, \\tan. "
+                    "Examples: "
+                    "'Find all solutions to cos(x) = -1' -> {\"plain_text\":\"Find all solutions\",\"latex\":\"\\cos(x)=-1\"}; "
+                    "'What is arcsin(0.5)?' -> {\"plain_text\":\"Evaluate\",\"latex\":\"\\arcsin(0.5)\"}; "
+                    "'What angle has a sine of 0.866?' -> {\"plain_text\":\"Find the angle\",\"latex\":\"\\sin(x)=0.866\"}."
+                )
+            },
+            {
+                "role": "user",
+                "content": user_prompt
+            }
+        ]
+    }
+
+    try:
+        resp = requests.post(
+            f"{CLOUD_LLM_BASE_URL}/chat/completions",
+            json=payload,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0"
+            },
+            timeout=45
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        choices = data.get("choices") or []
+        first = choices[0] if choices else {}
+        message = first.get("message") or {}
+        content = (message.get("content") or "").strip()
+
+        parsed = None
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            # Try extracting JSON object from accidental wrappers.
+            m = re.search(r"\{[\s\S]*\}", content)
+            if m:
+                try:
+                    parsed = json.loads(m.group(0))
+                except json.JSONDecodeError:
+                    parsed = None
+
+        plain_text = ""
+        latex = ""
+        if isinstance(parsed, dict):
+            plain_text = _clean_plain_text_candidate(parsed.get("plain_text") or "")
+            latex = _clean_latex_candidate(parsed.get("latex") or "")
+
+        # Fallback for non-JSON model output.
+        if not latex:
+            latex = _clean_latex_candidate(content)
+
+        if not latex:
+            raise ValueError("Empty equation draft")
+
+        return {
+            "plain_text": plain_text,
+            "latex": latex
+        }, {
+            "provider": "pollinations",
+            "model": CLOUD_LLM_MODEL,
+            "used_fallback": False
+        }
+    except (requests.RequestException, TimeoutError, ValueError, json.JSONDecodeError) as e:
+        return {
+            "plain_text": "",
+            "latex": ""
+        }, {
+            "provider": "fallback-llm-unavailable",
+            "model": None,
+            "used_fallback": True,
+            "error": str(e)
+        }
+
 def classify_question_topic(question):
     """
     Classify a question into a math topic using the LLM.
@@ -397,6 +518,49 @@ def add_cors_headers(response):
 def preflight_questions():
     """Explicit CORS preflight for /api/questions"""
     return jsonify({'status': 'ok'}), 200
+
+
+@app.route('/api/equation-draft', methods=['OPTIONS'])
+def preflight_equation_draft():
+    """Explicit CORS preflight for /api/equation-draft"""
+    return jsonify({'status': 'ok'}), 200
+
+
+@app.route('/api/equation-draft', methods=['POST'])
+def equation_draft():
+    """Generate a LaTeX equation draft from a natural-language request."""
+    try:
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({'success': False, 'error': 'Not logged in'}), 401
+
+        data = request.get_json(silent=True) or {}
+        prompt = (data.get('prompt') or '').strip()
+
+        if not prompt:
+            return jsonify({'success': False, 'error': 'Prompt is required'}), 400
+        if len(prompt) > 300:
+            return jsonify({'success': False, 'error': 'Prompt is too long'}), 400
+
+        draft, llm_meta = generate_equation_draft(prompt)
+        latex = (draft.get('latex') or '').strip()
+        plain_text = (draft.get('plain_text') or '').strip()
+
+        if not latex:
+            return jsonify({
+                'success': False,
+                'error': 'Could not generate an equation right now. Please try again.',
+                'llm': llm_meta
+            }), 503
+
+        return jsonify({
+            'success': True,
+            'plain_text': plain_text,
+            'latex': latex,
+            'llm': llm_meta
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/questions', methods=['POST']) # Updates data on questions table
 def ask_question():

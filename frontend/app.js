@@ -41,6 +41,7 @@ function lockChat() {
   const questionInput = document.getElementById('questionInput');
   const sendBtn = document.getElementById('submitBtn');
   const cameraBtn = document.getElementById('cameraBtn');
+  const llmEquationBtn = document.getElementById('llmEquationBtn');
 
   if (!questionInput || !sendBtn) return;
 
@@ -53,6 +54,12 @@ function lockChat() {
     cameraBtn.title = 'Please log in to use the equation scanner';
   }
 
+  if (llmEquationBtn) {
+    llmEquationBtn.disabled = true;
+    llmEquationBtn.classList.add('btn-locked');
+    llmEquationBtn.title = 'Please log in to use AI equation drafting';
+  }
+
   questionInput.contentEditable = 'false';
   questionInput.classList.add('locked');
   questionInput.dataset.placeholder = 'Please log in to get started';
@@ -62,6 +69,7 @@ function unlockChat() {
   const questionInput = document.getElementById('questionInput');
   const sendBtn = document.getElementById('submitBtn');
   const cameraBtn = document.getElementById('cameraBtn');
+  const llmEquationBtn = document.getElementById('llmEquationBtn');
 
   if (!questionInput || !sendBtn) return;
 
@@ -72,6 +80,12 @@ function unlockChat() {
     cameraBtn.disabled = false;
     cameraBtn.classList.remove('btn-locked');
     cameraBtn.title = 'Scan equation from image';
+  }
+
+  if (llmEquationBtn) {
+    llmEquationBtn.disabled = false;
+    llmEquationBtn.classList.remove('btn-locked');
+    llmEquationBtn.title = 'Draft equation with AI';
   }
 
   questionInput.contentEditable = 'true';
@@ -401,6 +415,131 @@ function normalizeSuggestionLatex(value) {
   }
 
   return normalizeToLatex(raw);
+}
+
+function insertLatexChipIntoInput(latex, sourceMethod) {
+  const normalizedLatex = String(latex || '').trim();
+  if (!normalizedLatex || !questionInput || !mathFieldReady) return false;
+
+  const chip = document.createElement('span');
+  chip.className = 'math-chip';
+  chip.contentEditable = 'false';
+  chip.dataset.latex = normalizedLatex;
+  chip.dataset.text = latexToReadableText(normalizedLatex);
+  try {
+    katex.render(normalizedLatex, chip, { throwOnError: false, displayMode: false });
+  } catch {
+    chip.textContent = chip.dataset.text;
+  }
+
+  questionInput.appendChild(chip);
+  questionInput.appendChild(document.createTextNode('\u200B'));
+  questionInput.focus();
+  inputMethod = sourceMethod || 'typing';
+  handleInputChange();
+  return true;
+}
+
+async function handleGenerateEquationDraft() {
+  const modal = document.getElementById('equationDraftModal');
+  const promptInput = document.getElementById('equationDraftPrompt');
+  const statusEl = document.getElementById('equationDraftStatus');
+
+  if (!modal || !promptInput || !statusEl) return;
+  statusEl.style.display = 'none';
+  statusEl.className = 'equation-draft-status';
+  modal.classList.add('active');
+  setTimeout(() => promptInput.focus(), 0);
+}
+
+function closeEquationDraftModal() {
+  const modal = document.getElementById('equationDraftModal');
+  const promptInput = document.getElementById('equationDraftPrompt');
+  const statusEl = document.getElementById('equationDraftStatus');
+
+  if (!modal || !promptInput || !statusEl) return;
+  modal.classList.remove('active');
+  statusEl.style.display = 'none';
+  statusEl.className = 'equation-draft-status';
+  statusEl.textContent = '';
+  promptInput.value = '';
+}
+
+function setEquationDraftStatus(type, message) {
+  const statusEl = document.getElementById('equationDraftStatus');
+  if (!statusEl) return;
+  statusEl.className = `equation-draft-status ${type}`;
+  statusEl.textContent = message;
+  statusEl.style.display = 'block';
+}
+
+async function submitEquationDraftFromModal() {
+  if (!questionInput || !mathFieldReady || loading) return;
+
+  const promptInput = document.getElementById('equationDraftPrompt');
+  const generateBtn = document.getElementById('equationDraftGenerate');
+  const cancelBtn = document.getElementById('equationDraftCancel');
+  const closeBtn = document.getElementById('equationDraftClose');
+  const trimmedPrompt = String(promptInput?.value || '').trim();
+
+  if (!trimmedPrompt) {
+    setEquationDraftStatus('error', 'Please describe what equation you want.');
+    return;
+  }
+
+  const llmEquationBtn = document.getElementById('llmEquationBtn');
+  if (llmEquationBtn) llmEquationBtn.disabled = true;
+  if (generateBtn) generateBtn.disabled = true;
+  if (cancelBtn) cancelBtn.disabled = true;
+  if (closeBtn) closeBtn.disabled = true;
+  setEquationDraftStatus('loading', 'Generating equation draft...');
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/equation-draft`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: trimmedPrompt })
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Failed to generate equation draft');
+    }
+
+    const plainText = cleanInsertedText(data.plain_text || '');
+    if (plainText) {
+      questionInput.appendChild(document.createTextNode(`${plainText} `));
+    }
+
+    const inserted = insertLatexChipIntoInput(data.latex, 'llm');
+    if (!inserted) {
+      throw new Error('Input field is not ready for insertion');
+    }
+
+    closeEquationDraftModal();
+    if (plainText) {
+      showResponseStatus('success', 'Inserted normal text + equation draft. You can edit before sending.');
+    } else {
+      showResponseStatus('success', 'Equation draft inserted. You can edit before sending.');
+    }
+
+    try {
+      await fetch(`${API_BASE_URL}/api/log-input-method`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input_method: 'llm' })
+      });
+    } catch (_) { /* ignore analytics failure */ }
+  } catch (error) {
+    setEquationDraftStatus('error', 'Error: ' + error.message);
+  } finally {
+    if (llmEquationBtn) llmEquationBtn.disabled = false;
+    if (generateBtn) generateBtn.disabled = false;
+    if (cancelBtn) cancelBtn.disabled = false;
+    if (closeBtn) closeBtn.disabled = false;
+  }
 }
 
 function renderMixedTextMath(rawText, bubbleDiv) {
@@ -1627,6 +1766,36 @@ function computeSuggestionReplacementRange(latex, currentValue = '') {
 // Event Listeners
 questionForm.addEventListener('submit', handleSubmitQuestion);
 
+const llmEquationBtn = document.getElementById('llmEquationBtn');
+if (llmEquationBtn) {
+  llmEquationBtn.addEventListener('click', handleGenerateEquationDraft);
+}
+
+const equationDraftModal = document.getElementById('equationDraftModal');
+const equationDraftClose = document.getElementById('equationDraftClose');
+const equationDraftCancel = document.getElementById('equationDraftCancel');
+const equationDraftGenerate = document.getElementById('equationDraftGenerate');
+const equationDraftPrompt = document.getElementById('equationDraftPrompt');
+
+if (equationDraftClose) equationDraftClose.addEventListener('click', closeEquationDraftModal);
+if (equationDraftCancel) equationDraftCancel.addEventListener('click', closeEquationDraftModal);
+if (equationDraftGenerate) equationDraftGenerate.addEventListener('click', submitEquationDraftFromModal);
+
+if (equationDraftPrompt) {
+  equationDraftPrompt.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      submitEquationDraftFromModal();
+    }
+  });
+}
+
+if (equationDraftModal) {
+  equationDraftModal.addEventListener('click', (e) => {
+    if (e.target === equationDraftModal) closeEquationDraftModal();
+  });
+}
+
 // Close suggestions on click outside
 document.addEventListener('click', (e) => {
   if (!suggestionList.contains(e.target) && !questionInput.contains(e.target)) {
@@ -1871,25 +2040,7 @@ document.addEventListener('click', (e) => {
     const latex = (latexInput.value || '').trim();
     if (!latex) { showMsg(errorDiv, 'Nothing to insert.'); return; }
 
-    // Insert a rendered math chip into the contenteditable input
-    if (questionInput && mathFieldReady) {
-      const chip = document.createElement('span');
-      chip.className = 'math-chip';
-      chip.contentEditable = 'false';
-      chip.dataset.latex = latex;
-      chip.dataset.text = latexToReadableText(latex);
-      try {
-        katex.render(latex, chip, { throwOnError: false, displayMode: false });
-      } catch {
-        chip.textContent = chip.dataset.text;
-      }
-      questionInput.appendChild(chip);
-      // Add zero-width space for continued typing
-      questionInput.appendChild(document.createTextNode('\u200B'));
-      questionInput.focus();
-      inputMethod = 'image';
-      handleInputChange();
-    }
+    insertLatexChipIntoInput(latex, 'image');
 
     closeScanner();
   }

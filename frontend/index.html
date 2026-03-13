@@ -74,6 +74,10 @@
                             <i class="fas fa-camera"></i>
                         </button>
 
+                        <button type="button" class="btn btn-equation" id="llmEquationBtn" title="Draft equation with AI">
+                            <i class="fas fa-wand-magic-sparkles"></i>
+                        </button>
+
                         <div class="input-dropdown-wrapper">
                             <div id="questionInput" class="question-input" contenteditable="true" data-placeholder="Ask your math question... (e.g. 1/2, sin x, x^2)" spellcheck="false"></div>
 
@@ -103,6 +107,31 @@
             <p>&copy; 2026 FlipAha - Math Tutoring Made Easy</p>
         </footer>
 
+    </div>
+
+    <!-- AI Equation Draft Modal -->
+    <div id="equationDraftModal" class="equation-draft-modal">
+        <div class="equation-draft-modal-content">
+            <div class="equation-draft-modal-header">
+                <h3>Draft Equation With AI</h3>
+                <button class="equation-draft-modal-close" id="equationDraftClose">&times;</button>
+            </div>
+            <div class="equation-draft-modal-body">
+                <label for="equationDraftPrompt" class="equation-draft-label">Describe what equation you want:</label>
+                <textarea
+                    id="equationDraftPrompt"
+                    class="equation-draft-input"
+                    rows="4"
+                    maxlength="300"
+                    placeholder="e.g. quadratic formula, simultaneous equations with fractions, binomial expansion of (x+2)^3"
+                ></textarea>
+                <div id="equationDraftStatus" class="equation-draft-status" style="display:none"></div>
+                <div class="equation-draft-actions">
+                    <button id="equationDraftCancel" class="btn btn-secondary" type="button">Cancel</button>
+                    <button id="equationDraftGenerate" class="btn btn-primary" type="button">Generate & Insert</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Equation Scanner Modal -->
