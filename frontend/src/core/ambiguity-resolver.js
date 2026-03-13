@@ -547,6 +547,313 @@
     }
   });
 
+  // --------------------------------------------------------------------------
+  // Rule 13: Trig modifier scope — sin²x vs sin(x²)
+  // sin²x (modifier on function) parsed as ^2 ambiguity
+  // Interpretations: sin²(x), sin(x²), sin(2x), sin(x)²
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'trig-modifier-scope',
+    match(node) {
+      if (node.type !== 'function') return false;
+      const trigFuncs = ['sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'cosec', 'sinh', 'cosh', 'tanh'];
+      if (!trigFuncs.includes(node.name)) return false;
+      if (node.args.length !== 1) return false;
+      if (!node.modifier) return false;
+      // Modifier should be numeric (2, 3, etc.) to be meaningful
+      if (node.modifier.type !== 'number') return false;
+      return /^[2-9]$/.test(node.modifier.value);
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const results = [];
+      const arg = node.args[0];
+      const mod = node.modifier.value; // e.g., '2'
+
+      // Interpretation A: Original — sin²(x) modifier applies to function output
+      results.push(node);
+
+      // Interpretation B: Modifier on argument — sin(x²) modifier applies to input
+      if (arg.type === 'variable' || arg.type === 'number' || arg.type === 'constant') {
+        const modifiedArg = ASTNode.power(arg, ASTNode.number(mod));
+        results.push(ASTNode.func(node.name, [modifiedArg], null, true));
+      }
+
+      // Interpretation C: Modifier means coefficient — sin(2x) when modifier=2
+      if (mod === '2') {
+        const coeffArg = ASTNode.implicitMul([ASTNode.number('2'), arg]);
+        results.push(ASTNode.func(node.name, [coeffArg], null, true));
+      }
+
+      return deduplicateASTs(results);
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Rule 14: Coefficient + power + function — 2sin²(x)
+  // Parses as implicit_mul(2, sin(with modifier 2), x) or similar
+  // Interpretations: 2sin²(x), 2sin(x²), (2sin(x))², 2·sin(x)·x
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'coefficient-power-function',
+    match(node) {
+      if (node.type !== 'implicit_multiply' || node.factors.length < 2) return false;
+      // First factor should be a small number
+      const first = node.factors[0];
+      if (first.type !== 'number' || !/^[2-9]$/.test(first.value)) return false;
+      // Must contain a trig function with a modifier
+      const trigFuncs = ['sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'cosec', 'sinh', 'cosh', 'tanh'];
+      return node.factors.some(f => 
+        f.type === 'function' && 
+        trigFuncs.includes(f.name) && 
+        f.modifier !== null && 
+        f.args.length > 0
+      );
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const results = [];
+      const coeff = node.factors[0]; // the number like 2, 3, etc.
+
+      // Find the function with modifier
+      const funcIdx = node.factors.findIndex(f =>
+        f.type === 'function' && f.modifier !== null
+      );
+      
+      if (funcIdx === -1) return deduplicateASTs([node]);
+
+      const func = node.factors[funcIdx];
+      const arg = func.args[0];
+      const mod = func.modifier;
+
+      // Interpretation A: Original — 2sin²(x)
+      results.push(node);
+
+      // Interpretation B: Modifier applies to input — 2sin(x²)
+      if (arg.type === 'variable' || arg.type === 'number' || arg.type === 'constant') {
+        const modifiedArg = ASTNode.power(arg, mod);
+        const newFunc = ASTNode.func(func.name, [modifiedArg], null, true);
+        const before = node.factors.slice(0, funcIdx);
+        const after = node.factors.slice(funcIdx + 1);
+        const allParts = [...before, newFunc, ...after];
+        if (allParts.length === 1) {
+          results.push(allParts[0]);
+        } else {
+          results.push(ASTNode.implicitMul(allParts));
+        }
+      }
+
+      // Interpretation C: Whole expression squared — (2sin(x))²
+      const funcNoMod = ASTNode.func(func.name, [arg], null, true);
+      const before = node.factors.slice(0, funcIdx);
+      const after = node.factors.slice(funcIdx + 1);
+      const baseExpr = [...before, funcNoMod, ...after];
+      const expr = baseExpr.length === 1 ? baseExpr[0] : ASTNode.implicitMul(baseExpr);
+      results.push(ASTNode.power(expr, mod));
+
+      return deduplicateASTs(results);
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Rule 15: Trig identity composition — sin²+cos²→1; sin/cos→tan
+  // Detects patterns that match common trig identities
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'trig-identity-composition',
+    match(node) {
+      if (node.type !== 'binary') return false;
+      if (node.op === '+') {
+        // sin²(x) + cos²(x) → identity suggestion
+        const { astToLatex } = getParser();
+        if (node.left.type === 'power' && node.right.type === 'power') {
+          const leftBase = node.left.base;
+          const rightBase = node.right.base;
+          if (leftBase.type === 'function' && rightBase.type === 'function') {
+            const leftName = leftBase.name;
+            const rightName = rightBase.name;
+            if ((leftName === 'sin' && rightName === 'cos') || 
+                (leftName === 'cos' && rightName === 'sin')) {
+              // Check if both are squared and have same arg
+              if (node.left.exponent.type === 'number' && /^2$/.test(node.left.exponent.value) &&
+                  node.right.exponent.type === 'number' && /^2$/.test(node.right.exponent.value)) {
+                const leftArg = astToLatex(leftBase.args[0]);
+                const rightArg = astToLatex(rightBase.args[0]);
+                if (leftArg === rightArg) return true;
+              }
+            }
+          }
+        }
+      } else if (node.op === '/') {
+        // sin(x) / cos(x) → tan identity
+        const { astToLatex } = getParser();
+        if (node.left.type === 'function' && node.right.type === 'function') {
+          if (node.left.name === 'sin' && node.right.name === 'cos') {
+            const leftArg = astToLatex(node.left.args[0]);
+            const rightArg = astToLatex(node.right.args[0]);
+            if (leftArg === rightArg) return true;
+          }
+        }
+      }
+      return false;
+    },
+    expand(node) {
+      const { ASTNode, astToLatex } = getParser();
+      const results = [];
+
+      // Original interpretation
+      results.push(node);
+
+      if (node.op === '+') {
+        // sin²(x) + cos²(x) → 1
+        const leftBase = node.left.base;
+        const rightBase = node.right.base;
+        if (leftBase.type === 'function' && rightBase.type === 'function') {
+          if ((leftBase.name === 'sin' && rightBase.name === 'cos') || 
+              (leftBase.name === 'cos' && rightBase.name === 'sin')) {
+            const rightArg = rightBase.args[0];
+            // sin(x) + cos(x) → 1 when both squared
+            if (node.left.exponent && node.right.exponent &&
+                node.left.exponent.type === 'number' && /^2$/.test(node.left.exponent.value) &&
+                node.right.exponent.type === 'number' && /^2$/.test(node.right.exponent.value)) {
+              results.push(ASTNode.number('1'));
+            }
+          }
+        }
+      } else if (node.op === '/') {
+        // sin(x) / cos(x) → tan(x)
+        if (node.left.name === 'sin' && node.right.name === 'cos') {
+          const arg = node.left.args[0];
+          results.push(ASTNode.func('tan', [arg], null, true));
+        }
+      }
+
+      return deduplicateASTs(results);
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Rule 16: Nested trig function with division — sin(x/2) vs sin(x)/2
+  // When trig function's arg is a division that might be ambiguous
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'nested-trig-fraction',
+    match(node) {
+      if (node.type !== 'function') return false;
+      const trigFuncs = ['sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'cosec', 'sinh', 'cosh', 'tanh'];
+      if (!trigFuncs.includes(node.name)) return false;
+      if (node.args.length !== 1) return false;
+      const arg = node.args[0];
+      // Argument should be a division (binary with /)
+      if (arg.type !== 'binary' || arg.op !== '/') return false;
+      return true;
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const results = [];
+      const arg = node.args[0]; // the fraction
+
+      // Interpretation A: Original — sin(x/2)
+      results.push(node);
+
+      // Interpretation B: Function output divided — sin(x) / 2
+      const simpleFunc = ASTNode.func(node.name, [arg.left], null, true);
+      results.push(ASTNode.binary('/', simpleFunc, arg.right));
+
+      return deduplicateASTs(results);
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Rule 17: Trig with shifted argument — tan(x+π/6) parsing ambiguity
+  // When a trig function has an implicit arg that's an additive expression
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'trig-shifted-argument',
+    match(node) {
+      if (node.type !== 'function') return false;
+      const trigFuncs = ['sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'cosec', 'sinh', 'cosh', 'tanh'];
+      if (!trigFuncs.includes(node.name)) return false;
+      if (node.args.length === 0) return false;
+      // Check if arg contains an additive sub-expression that might be ambiguous
+      const arg = node.args[0];
+      if (arg.type === 'binary' && (arg.op === '+' || arg.op === '-')) {
+        return true; // Could be parsed as func(arg1) + arg2 or func(arg1+arg2)
+      }
+      return false;
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const results = [];
+      const arg = node.args[0];
+
+      // Interpretation A: Original — tan(x+π/6) full arg is in function
+      results.push(node);
+
+      if (arg.type === 'binary' && (arg.op === '+' || arg.op === '-')) {
+        // Interpretation B: Only left side is argument — tan(x) + π/6
+        const baseFunc = ASTNode.func(node.name, [arg.left], null, true);
+        results.push(ASTNode.binary(arg.op, baseFunc, arg.right));
+      }
+
+      return deduplicateASTs(results);
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Rule 18: Missing multiplication operator — cos(x)2x
+  // When a function call is immediately followed by other implicit factors
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'missing-multiplication-operator',
+    match(node) {
+      if (node.type !== 'implicit_multiply' || node.factors.length < 2) return false;
+      // Find a function with explicit parens followed by number/variable
+      let hasFunc = false;
+      for (let i = 0; i < node.factors.length - 1; i++) {
+        const f = node.factors[i];
+        const next = node.factors[i + 1];
+        if (f.type === 'function' && f.hasExplicitParens &&
+            (next.type === 'number' || next.type === 'variable' || next.type === 'constant')) {
+          hasFunc = true;
+          break;
+        }
+      }
+      return hasFunc;
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const results = [];
+
+      // Interpretation A: Original — cos(x)·2·x (implicit multiply)
+      results.push(node);
+
+      // Interpretation B: First function absorbs following factors
+      for (let i = 0; i < node.factors.length - 1; i++) {
+        const f = node.factors[i];
+        const next = node.factors[i + 1];
+        if (f.type === 'function' && f.hasExplicitParens &&
+            (next.type === 'number' || next.type === 'variable' || next.type === 'constant')) {
+          // Try absorbing next into function arg
+          const before = node.factors.slice(0, i);
+          const first = f.args[0];
+          const absorbed = ASTNode.implicitMul([first, next]);
+          const newFunc = ASTNode.func(f.name, [absorbed], f.modifier, true);
+          const after = node.factors.slice(i + 2);
+          const allParts = [...before, newFunc, ...after];
+          if (allParts.length === 1) {
+            results.push(allParts[0]);
+          } else {
+            results.push(ASTNode.implicitMul(allParts));
+          }
+          break; // Only offer first ambiguous function
+        }
+      }
+
+      return deduplicateASTs(results);
+    }
+  });
+
   // ==========================================================================
   // COMPLETION RULES — suggest common expansions when no structural ambiguity
   // ==========================================================================
@@ -649,6 +956,31 @@
         results.push(ASTNode.sqrt(node.base, ASTNode.number(String(exp))));
       }
       return results;
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Completion 4b: Inverse trig functions → powered form
+  // arcsin(x) → sin⁻¹(x), arccos(x) → cos⁻¹(x), arctan(x) → tan⁻¹(x)
+  // --------------------------------------------------------------------------
+  completionRules.push({
+    name: 'inverse-trig-completions',
+    match(node) {
+      if (node.type !== 'function') return false;
+      const invTrigFuncs = ['arcsin', 'arccos', 'arctan', 'asin', 'acos', 'atan'];
+      return invTrigFuncs.includes(node.name) && node.args.length > 0;
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      // Convert arcsin(x) → sin^-1(x), arccos(x) → cos^-1(x), arctan(x) → tan^-1(x)
+      const baseName = node.name.replace(/^a(rc)?/, ''); // arcsin→sin, asin→sin, etc.
+      const poweredForm = ASTNode.func(
+        baseName,
+        node.args,
+        ASTNode.unary('-', ASTNode.number('1')),
+        true
+      );
+      return [poweredForm];
     }
   });
 
