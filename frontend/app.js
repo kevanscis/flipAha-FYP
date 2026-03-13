@@ -740,6 +740,16 @@ async function handleSubmitQuestion(e) {
   questionInput.classList.add('locked');
   showResponseStatus('loading', 'Processing your question...');
 
+  // Implicit negative signal: if suggestions were shown but user typed without
+  // clicking any of them, treat it as a rejection of all shown suggestions.
+  if (lastShownSuggestions.length > 0 && !usedSuggestion) {
+    if (typeof globalThis.suggestionRanker?.addFeedback === 'function') {
+      globalThis.suggestionRanker.addFeedback(
+        lastSuggestionQuery, '', lastShownSuggestions, 0
+      );
+    }
+  }
+
   // Add loading message
   const loadingMsgIndex = messages.length;
   addMessage({ text: 'Thinking...', role: 'loading' });

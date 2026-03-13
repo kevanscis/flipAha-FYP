@@ -551,6 +551,12 @@
     // Since both are in the same array, use a blended lr
     this.ranker.lr = 1.0;
 
+    // Persist the updated model and buffer so learning survives page reloads.
+    try {
+      localStorage.setItem('flipaha_ranker_model', JSON.stringify(this.ranker.toJSON()));
+      localStorage.setItem('flipaha_ranker_buffer', JSON.stringify(this.buffer));
+    } catch (e) { /* storage quota exceeded or private-browsing restriction — safe to ignore */ }
+
     return true;
   };
 
@@ -558,8 +564,20 @@
   // INITIALISE
   // ==========================================================================
 
-  var ranker = GBDTRanker.fromJSON(DEFAULT_MODEL);
+  var ranker;
+  try {
+    var _savedModel = localStorage.getItem('flipaha_ranker_model');
+    ranker = _savedModel
+      ? GBDTRanker.fromJSON(JSON.parse(_savedModel))
+      : GBDTRanker.fromJSON(DEFAULT_MODEL);
+  } catch (e) {
+    ranker = GBDTRanker.fromJSON(DEFAULT_MODEL);
+  }
   var onlineLearner = new OnlineLearner(ranker);
+  try {
+    var _savedBuffer = localStorage.getItem('flipaha_ranker_buffer');
+    if (_savedBuffer) onlineLearner.buffer = JSON.parse(_savedBuffer);
+  } catch (e) { /* ignore */ }
 
   // ==========================================================================
   // PUBLIC API
