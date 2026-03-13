@@ -854,6 +854,70 @@
     }
   });
 
+  // --------------------------------------------------------------------------
+  // Rule 19: Decimal number → fraction equivalents
+  // 0.5 → 1/2, 0.25 → 1/4, 0.333 → 1/3, 0.75 → 3/4, etc.
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'decimal-to-fraction',
+    match(node) {
+      if (node.type !== 'number') return false;
+      // Check if the number contains a decimal point
+      return String(node.value).includes('.');
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const results = [];
+
+      // Keep the original decimal form
+      results.push(node);
+
+      // Convert decimal to fraction
+      const decimalStr = String(node.value);
+      const decimalParts = decimalStr.split('.');
+      
+      if (decimalParts.length === 2) {
+        const integerPart = parseInt(decimalParts[0]) || 0;
+        const decimalPart = decimalParts[1];
+        const decimalLength = decimalPart.length;
+
+        // Convert to fraction: 0.5 → 5/10 → 1/2
+        let numerator = parseInt(decimalStr.replace('.', '')) || 0;
+        let denominator = Math.pow(10, decimalLength);
+
+        // Simplify fraction using GCD
+        const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+        const divisor = gcd(Math.abs(numerator), denominator);
+        numerator = numerator / divisor;
+        denominator = denominator / divisor;
+
+        // Create fraction AST (numerator / denominator)
+        if (numerator !== 0) {
+          const fracAST = ASTNode.frac(ASTNode.number(String(numerator)), ASTNode.number(String(denominator)));
+          results.push(fracAST);
+        }
+
+        // Also suggest common approximate fractions for repeating decimals
+        const commonMap = {
+          '3': { num: 1, den: 3 },     // 0.333... → 1/3
+          '6': { num: 2, den: 3 },     // 0.666... → 2/3
+          '1': { num: 1, den: 9 },     // 0.111... → 1/9
+          '9': { num: 1, den: 11 },    // 0.0909... → 1/11
+          '142857': { num: 1, den: 7 }, // 0.142857... → 1/7
+        };
+
+        for (const [pattern, frac] of Object.entries(commonMap)) {
+          if (decimalPart.startsWith(pattern) && numerator === 0) {
+            const approxFrac = ASTNode.frac(ASTNode.number(String(frac.num)), ASTNode.number(String(frac.den)));
+            results.push(approxFrac);
+          }
+        }
+      }
+
+      return deduplicateASTs(results);
+    }
+  });
+
   // ==========================================================================
   // COMPLETION RULES — suggest common expansions when no structural ambiguity
   // ==========================================================================
