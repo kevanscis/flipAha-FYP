@@ -1039,7 +1039,7 @@ function handleInputChange() {
 
   // Extract the current word/phrase for suggestions
   // Match more characters including backslash for LaTeX commands
-  const mathSymbolRegex = /[A-Za-z0-9_\\^/+\-*(),{}<>=!|√∛∜×·⋅≤≥≠±∞∪∩≈∫∑⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ⃗αβγδΔθλμωΩπ°'"]/;
+  const mathSymbolRegex = /[A-Za-z0-9_\\^/+\-*(),{}<>=!|.√∛∜×·⋅≤≥≠±∞∪∩≈∫∑⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ⃗αβγδΔθλμωΩπ°'"]/;
   const isChar = (ch) => mathSymbolRegex.test(ch);
 
   // Get current word/phrase
