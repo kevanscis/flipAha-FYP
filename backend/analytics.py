@@ -299,6 +299,32 @@ def get_topic_frequency():
 
     return result
 
+def get_image_feedback_stats():
+    """Get thumbs-up / thumbs-down counts for image converter feedback."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT COUNT(*) AS total,
+               SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END) AS useful
+        FROM image_feedback
+        WHERE rating IS NOT NULL
+    """)
+    row = cursor.fetchone()
+    conn.close()
+
+    total = row["total"] or 0
+    useful = row["useful"] or 0
+    not_useful = total - useful
+    rate = round((useful / total) * 100) if total > 0 else None
+
+    return {
+        "total": total,
+        "useful": useful,
+        "not_useful": not_useful,
+        "rate": rate
+    }
+
 if __name__ == "__main__":
     daily, weekly, monthly, inactive = get_active_user_counts()
     print("Number of Active Students:")

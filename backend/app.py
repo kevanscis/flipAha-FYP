@@ -1059,6 +1059,48 @@ def get_images():
             'error': str(e)
         }), 500
 
+@app.route('/api/scan-feedback', methods=['POST'])
+def scan_feedback():
+    """
+    Record thumbs-up (1) / thumbs-down (0) feedback for an inline scan conversion.
+    JSON: {session_id, image_id, rating (0 or 1), original_latex?, edited_latex?}
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        session_id = (data.get('session_id') or '').strip()
+        image_id = (data.get('image_id') or '').strip()
+        rating = data.get('rating')
+
+        if not session_id:
+            return jsonify({'success': False, 'error': 'Missing session_id'}), 400
+
+        if rating is None:
+            return jsonify({'success': False, 'error': 'Missing rating'}), 400
+        try:
+            rating = int(rating)
+            if rating not in (0, 1):
+                return jsonify({'success': False, 'error': 'Rating must be 0 or 1'}), 400
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'Invalid rating value'}), 400
+
+        user_id = session.get('user_id')
+        feedback_id = str(uuid.uuid4())
+        ts = datetime.now(SINGAPORE_TZ).isoformat()
+
+        conn = get_db()
+        with conn:
+            conn.execute("""
+                INSERT INTO image_feedback (feedback_id, user_id, session_id, image_id, rating, confidence, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (feedback_id, user_id, session_id, image_id or '', rating, None, ts))
+        conn.close()
+
+        return jsonify({'success': True, 'message': 'Feedback recorded'}), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/image/<image_id>', methods=['DELETE'])
 def delete_image(image_id):
     """
@@ -1101,6 +1143,19 @@ def topic_frequency():
     
     try:
         data = get_topic_frequency()
+        return jsonify(data), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route("/api/dashboard/image-feedback")
+def image_feedback_dashboard():
+    """Get image converter star-rating stats for the dashboard"""
+    if session.get('role') != 'admin':
+        abort(403)
+
+    try:
+        data = get_image_feedback_stats()
         return jsonify(data), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500

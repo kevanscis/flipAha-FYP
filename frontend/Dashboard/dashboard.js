@@ -822,3 +822,65 @@ function renderSuggestionFeedback(data) {
 
 // load suggestion feedback after other data
 loadSuggestionFeedback();
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Image Converter Feedback (Star Ratings)
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+async function loadImageFeedback() {
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/dashboard/image-feedback`, {
+            credentials: 'include'
+        });
+        if (!res.ok) {
+            console.warn('Failed to load image feedback', res.status);
+            return;
+        }
+        const data = await res.json();
+        renderImageFeedback(data);
+    } catch (e) {
+        console.error('Error loading image feedback', e);
+    }
+}
+
+function renderImageFeedback(data) {
+    const total = data.total || 0;
+    const useful = data.useful || 0;
+    const notUseful = data.not_useful || 0;
+    const rate = data.rate;
+
+    // Determine sentiment
+    let emoji, sentiment, color;
+    if (rate === null || rate === undefined) {
+        emoji = '😐'; sentiment = '–'; color = '#999';
+    } else if (rate < 20) {
+        emoji = '😠'; sentiment = 'Poor'; color = '#dc3545';
+    } else if (rate < 40) {
+        emoji = '😕'; sentiment = 'Fair'; color = '#fd7e14';
+    } else if (rate < 60) {
+        emoji = '😐'; sentiment = 'Neutral'; color = '#ffc107';
+    } else if (rate < 80) {
+        emoji = '🙂'; sentiment = 'Good'; color = '#17a2b8';
+    } else {
+        emoji = '😄'; sentiment = 'Excellent'; color = '#198754';
+    }
+
+    const emojiEl = document.getElementById('ifEmoji');
+    if (emojiEl) { emojiEl.textContent = emoji; }
+
+    const sentEl = document.getElementById('ifSentiment');
+    if (sentEl) { sentEl.textContent = sentiment; sentEl.style.color = color; }
+
+    const rateEl = document.getElementById('ifRate');
+    if (rateEl) { rateEl.textContent = rate !== null && rate !== undefined ? rate + '%' : '–'; rateEl.style.color = color; }
+
+    const totalEl = document.getElementById('ifTotal');
+    if (totalEl) totalEl.textContent = total;
+
+    const usefulEl = document.getElementById('ifUseful');
+    if (usefulEl) usefulEl.textContent = useful;
+
+    const notUsefulEl = document.getElementById('ifNotUseful');
+    if (notUsefulEl) notUsefulEl.textContent = notUseful;
+}
+
+loadImageFeedback();

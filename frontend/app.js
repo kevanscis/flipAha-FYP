@@ -1877,21 +1877,30 @@ document.addEventListener('click', (e) => {
     closeScanner();
   }
 
-  // ---------- Scan rating feedback (frontend-only for now) ----------
-  function handleScanRating(rating) {
+  // ---------- Scan rating feedback ----------
+  async function handleScanRating(rating) {
     rateUpBtn.disabled = true;
     rateDownBtn.disabled = true;
     if (rating === 1) rateUpBtn.classList.add('selected');
     else rateDownBtn.classList.add('selected');
 
-    // TODO: send to POST /api/scan-feedback when backend is ready
-    console.log('Scan feedback:', {
-      original_latex: originalLatex,
-      edited_latex: (latexInput.value || '').trim(),
-      rating: rating
-    });
-
     ratingStatus.textContent = 'Thanks for your feedback!';
+
+    const sessionId = localStorage.getItem('flipaha_session_id') || '';
+    try {
+      await fetch(`${API_BASE_URL}/api/scan-feedback`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          image_id: scanner.imageId || '',
+          rating: rating,
+          original_latex: originalLatex,
+          edited_latex: (latexInput.value || '').trim()
+        })
+      });
+    } catch (_) { /* non-critical, ignore */ }
   }
 
   // ---------- LaTeX preview ----------
