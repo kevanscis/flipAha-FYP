@@ -1043,9 +1043,16 @@ function handleInputChange() {
           queryTermText = latexToSmartText(queryTerm);
         } else {
           // Trailing operator (e.g. "10x +") — use the term before the operator
-          queryTerm = query.substring(0, lastTopLevelOperatorIndex).trim();
-          termStartOffset = 0;
-          queryTermText = latexToSmartText(queryTerm);
+          // but only if it isn't already resolved as a math chip in the input
+          const termBefore = query.substring(0, lastTopLevelOperatorIndex).trim();
+          const isResolvedChip = Array.from(questionInput.childNodes).some(
+            n => n.classList && n.classList.contains('math-chip') && (n.dataset.text || '') === termBefore
+          );
+          if (!isResolvedChip) {
+            queryTerm = termBefore;
+            termStartOffset = 0;
+            queryTermText = latexToSmartText(queryTerm);
+          }
         }
       }
     }
