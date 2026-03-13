@@ -855,7 +855,44 @@
   });
 
   // --------------------------------------------------------------------------
-  // Rule 19: Decimal number → fraction equivalents
+  // Rule 19: Letter 'o' after number → degree symbol
+  // "30o" parses as implicit_mul(30, o)
+  // Alternative: 30° (degree notation)
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'o-to-degree',
+    match(node) {
+      if (node.type !== 'implicit_multiply' || node.factors.length < 2) return false;
+      // First factor should be a number, second factor should be the variable 'o'
+      const first = node.factors[0];
+      const second = node.factors[1];
+      return first.type === 'number' && second.type === 'variable' && second.name === 'o';
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const results = [];
+
+      // Interpretation A: Original — 30 * o (implicit multiply)
+      results.push(node);
+
+      // Interpretation B: 'o' is degree symbol — 30°
+      const numberValue = node.factors[0];
+      const degreeAST = ASTNode.degree(numberValue);
+      
+      // If there are more factors after 'o' (e.g., "30oC"), keep them
+      if (node.factors.length > 2) {
+        const afterO = node.factors.slice(2);
+        results.push(ASTNode.implicitMul([degreeAST, ...afterO]));
+      } else {
+        results.push(degreeAST);
+      }
+
+      return deduplicateASTs(results);
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Rule 20: Decimal number → fraction equivalents
   // 0.5 → 1/2, 0.25 → 1/4, 0.333 → 1/3, 0.75 → 3/4, etc.
   // --------------------------------------------------------------------------
   ambiguityRules.push({
