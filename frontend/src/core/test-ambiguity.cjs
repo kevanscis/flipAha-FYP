@@ -66,6 +66,11 @@
       desc: 'Explicit power+parens → no ambiguity',
       expectAtLeast: ['\\sin^{2}(x)'],
     },
+    {
+      input: 'x^-2',
+      desc: 'Negative exponent → x^{-2}',
+      expectAtLeast: ['x^{-2}'],
+    },
   ];
 
   let passed = 0;

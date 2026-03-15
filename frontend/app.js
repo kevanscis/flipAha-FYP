@@ -1096,7 +1096,7 @@ function handleInputChange() {
               prevIndex -= 1;
             }
             const prevNonSpace = prevIndex >= 0 ? expr[prevIndex] : '';
-            const isUnarySign = prevIndex < 0 || /[+\-*/=,(]/.test(prevNonSpace);
+            const isUnarySign = prevIndex < 0 || /[+\-*/=,(^{]/.test(prevNonSpace);
             if (isUnarySign) {
               continue;
             }
