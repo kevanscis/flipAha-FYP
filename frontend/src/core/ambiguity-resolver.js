@@ -299,7 +299,7 @@
       if (factors.length < 2) return false;
       const last = factors[factors.length - 1];
       const secondLast = factors[factors.length - 2];
-      return secondLast.type === 'variable' && last.type === 'number' && /^[0-9]$/.test(last.value);
+      return secondLast.type === 'variable' && last.type === 'number' && /^[0-9]+$/.test(last.value);
     },
     expand(node) {
       const { ASTNode } = getParser();
@@ -324,6 +324,33 @@
       results.push(node);
 
       return results;
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Rule 7b: Fraction denominator split — a/(bc) ↔ (a/b)c
+  // Helps with inputs like (-1/2x) where users often mean (-1/2)x.
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'fraction-denominator-split',
+    match(node) {
+      return node.type === 'binary' && node.op === '/' && node.right && node.right.type === 'implicit_multiply' && node.right.factors.length > 1;
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const results = [node];
+      const denomFactors = node.right.factors;
+      const head = denomFactors[0];
+      const tail = denomFactors.slice(1);
+
+      const headFrac = ASTNode.binary('/', node.left, head);
+      if (tail.length === 0) {
+        results.push(headFrac);
+      } else {
+        results.push(ASTNode.implicitMul([headFrac, ...tail]));
+      }
+
+      return deduplicateASTs(results);
     }
   });
 
@@ -408,6 +435,41 @@
         } else if (den === '3') {
           results.push(ASTNode.sqrt(base, ASTNode.number('3')));
         }
+      }
+
+      return deduplicateASTs(results);
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Rule 9b: Power-over-number fraction — x^1/2 → x^(1/2), √x
+  // Matches binary('/', power(base, 1), n)
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'power-fractional-exponent',
+    match(node) {
+      if (node.type !== 'binary' || node.op !== '/') return false;
+      if (!node.left || node.left.type !== 'power') return false;
+      if (!node.right || node.right.type !== 'number') return false;
+      const exp = node.left.exponent;
+      return exp && exp.type === 'number' && exp.value === '1';
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const results = [node];
+
+      const base = node.left.base;
+      const den = node.right.value;
+
+      // Interpretation: base^(1/n)
+      const fracExp = ASTNode.binary('/', ASTNode.number('1'), ASTNode.number(den));
+      results.push(ASTNode.power(base, fracExp));
+
+      // Root forms for common indices
+      if (den === '2') {
+        results.push(ASTNode.sqrt(base));
+      } else if (den === '3') {
+        results.push(ASTNode.sqrt(base, ASTNode.number('3')));
       }
 
       return deduplicateASTs(results);
@@ -855,6 +917,27 @@
   });
 
   // --------------------------------------------------------------------------
+  // Rule 18b: Compact trig + trailing number — sinx2 ↔ sin(x^2)
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'compact-trig-trailing-power',
+    match(node) {
+      if (node.type !== 'implicit_multiply' || node.factors.length !== 2) return false;
+      const [first, second] = node.factors;
+      return first.type === 'function' && first.args.length === 1 && second.type === 'number' && /^[0-9]+$/.test(second.value);
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const [fn, trailing] = node.factors;
+      const results = [node];
+      const baseArg = fn.args[0];
+      const poweredArg = ASTNode.power(baseArg, trailing);
+      results.push(ASTNode.func(fn.name, [poweredArg], fn.modifier, true));
+      return deduplicateASTs(results);
+    }
+  });
+
+  // --------------------------------------------------------------------------
   // Rule 19: Letter 'o' after number → degree symbol
   // "30o" parses as implicit_mul(30, o)
   // Alternative: 30° (degree notation)
@@ -1220,16 +1303,16 @@
     const alternatives = [ast];
     collectAlternatives(ast, alternatives);
 
-    // Step 2b: If no ambiguity was found, apply completion rules
-    if (alternatives.length <= 1) {
-      for (const rule of completionRules) {
-        if (rule.match(ast)) {
-          const completions = rule.expand(ast);
-          for (const c of completions) {
-            if (c && c !== ast) alternatives.push(c);
-          }
-          break; // Only apply the first matching completion rule
+    // Step 2b: Apply completion rules on the root parse as well.
+    // This keeps intent completions (e.g., arccos -> cos^{-1}) available
+    // even when other ambiguity rules also generate alternatives.
+    for (const rule of completionRules) {
+      if (rule.match(ast)) {
+        const completions = rule.expand(ast);
+        for (const c of completions) {
+          if (c && c !== ast) alternatives.push(c);
         }
+        break; // keep completion signal focused
       }
     }
 

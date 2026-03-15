@@ -66,7 +66,6 @@ def _normalize_response_text(text):
     normalized = normalized.replace("\r\n", "\n").replace("\r", "\n")
     normalized = re.sub(r"[\t\x0b\x0c]+", " ", normalized)
     normalized = re.sub(r"\n{3,}", "\n\n", normalized)
-    normalized = re.sub(r"[ ]{2,}", " ", normalized)
     return normalized.strip()
 
 
@@ -77,6 +76,30 @@ def format_llm_answer_for_chat(text):
     s = re.sub(r"^#{1,6}\s*", "", s, flags=re.MULTILINE)
     s = s.replace("\\[", "").replace("\\]", "")
     s = s.replace("\\(", "").replace("\\)", "")
+
+    # Convert common LaTeX operators/symbols so math is readable in plain chat.
+    latex_symbol_map = {
+        r"\\leq": "≤",
+        r"\\geq": "≥",
+        r"\\neq": "≠",
+        r"\\pm": "±",
+        r"\\times": "×",
+        r"\\cdot": "·",
+        r"\\infty": "∞",
+        r"\\sum": "∑",
+        r"\\int": "∫",
+        r"\\theta": "θ",
+        r"\\pi": "π",
+        r"\\alpha": "α",
+        r"\\beta": "β",
+        r"\\gamma": "γ",
+        r"\\Delta": "Δ",
+        r"\\sqrt": "√",
+        r"\\angle": "∠",
+    }
+    for pattern, symbol in latex_symbol_map.items():
+        s = re.sub(pattern, symbol, s)
+
     s = re.sub(r"\n{3,}", "\n\n", s)
     return s.strip()
 

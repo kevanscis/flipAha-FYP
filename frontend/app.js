@@ -417,6 +417,59 @@ function normalizeSuggestionLatex(value) {
   return normalizeToLatex(raw);
 }
 
+function getCustomSuggestionLatex(queryTerm, queryTermText) {
+  const raw = String(queryTerm || '').trim();
+  const text = String(queryTermText || raw).trim();
+  if (!raw && !text) return [];
+
+  const compact = text.toLowerCase().replace(/\s+/g, '');
+  const out = [];
+
+  const normalizeHatBase = (value) => {
+    const v = String(value || '').trim().toLowerCase();
+    if (!v) return 'x';
+    if (v === 'pi' || v === 'π') return '\\pi';
+    if (v === 'theta' || v === 'θ') return '\\theta';
+    return v;
+  };
+
+  if (compact === '<=' || compact === '≤') out.push('\\leq');
+  if (compact === '>=' || compact === '≥') out.push('\\geq');
+  if (compact === '!=' || compact === '≠') out.push('\\neq');
+
+  if (/^root(?:\(|\b)|^sqrt$/.test(compact)) out.push('\\sqrt{x}');
+
+  if (/^hat$|^\^$/.test(compact)) out.push('\\hat{x}');
+
+  const hatSuffixMatch = compact.match(/^([a-zα-ωπθ]+)hat$/i);
+  if (hatSuffixMatch) {
+    out.push(`\\hat{${normalizeHatBase(hatSuffixMatch[1])}}`);
+  }
+
+  const hatCaretMatch = compact.match(/^([a-zα-ωπθ]+)\^$/i);
+  if (hatCaretMatch) {
+    out.push(`\\hat{${normalizeHatBase(hatCaretMatch[1])}}`);
+  }
+
+  if (/^absolute$|^abs$|^\|[^|]*\|$/.test(compact)) out.push('\\left|x\\right|');
+
+  if (/^summation$|^sum$|^∑$/.test(compact)) {
+    out.push('\\sum');
+    out.push('\\sum_{i=1}^{n}');
+  }
+
+  const angleMatch = compact.match(/^angle([a-z]{3,})$/i);
+  if (compact === 'angle') out.push('\\angle');
+  if (angleMatch) out.push(`\\angle ${angleMatch[1].toUpperCase()}`);
+
+  const logBaseCompact = compact.match(/^log(\d)(\d+)$/);
+  if (logBaseCompact) {
+    out.push(`\\log_{${logBaseCompact[1]}}(${logBaseCompact[2]})`);
+  }
+
+  return out;
+}
+
 function insertLatexChipIntoInput(latex, sourceMethod) {
   const normalizedLatex = String(latex || '').trim();
   if (!normalizedLatex || !questionInput || !mathFieldReady) return false;
@@ -1059,7 +1112,7 @@ function handleInputChange() {
   
   // Clean query from empty groups
   query = query.replace(/\{\}/g, '')
-               .replace(/[_^]$/, '');
+               .replace(/_$/, '');
                
   // If query became empty, just backslash, or a bare operator, treat as empty
   if (query === '\\' || query === '' || /^[+\-*/=,\s]+$/.test(query)) {
@@ -1179,6 +1232,13 @@ function handleInputChange() {
     };
     
     const compactTrigExpression = /^(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)(?!\s*\().+/i.test(query);
+    const fullQueryCompactForRatio = String(queryText || query || '')
+      .replace(/\\/g, '')
+      .replace(/\s+/g, '')
+      .toLowerCase();
+    const fullSimpleTrigRatioMatch = fullQueryCompactForRatio.match(/^sin([a-z0-9πθ]+)\/cos\1$/i);
+    const fullParenTrigRatioMatch = fullQueryCompactForRatio.match(/^sin\(([^)]+)\)\/cos\(\1\)$/i);
+    const hasFullTrigRatioIntent = Boolean(fullSimpleTrigRatioMatch || fullParenTrigRatioMatch);
     const lastTopLevelOperatorIndex = findLastTopLevelOperatorIndex(query);
     const hasTopLevelPlusMinus = lastTopLevelOperatorIndex !== -1;
 
@@ -1212,7 +1272,7 @@ function handleInputChange() {
       const isCompactTrigAmbiguity = /^(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)\s*\d*[a-zα-ω\\()]+\s*[+\-].+/i.test(trailingTrigTerm);
       const leadingSegment = query.substring(termStartOffset, trailingTrigStart).trim();
       const hasLeadingNumericFactor = /^[-+]?\d+(?:\.\d+)?(?:\s*\/\s*[-+]?\d+(?:\.\d+)?)?$/.test(leadingSegment);
-      const shouldPreferTrailingTrig = (trailingTrigStart > termStartOffset && !hasLeadingNumericFactor) || isCompactTrigAmbiguity;
+      const shouldPreferTrailingTrig = !hasFullTrigRatioIntent && ((trailingTrigStart > termStartOffset && !hasLeadingNumericFactor) || isCompactTrigAmbiguity);
 
       if (shouldPreferTrailingTrig) {
         queryTerm = trailingTrigTerm;
@@ -1233,8 +1293,40 @@ function handleInputChange() {
       }
     }
 
+    const intentCompact = String(queryTermText || queryTerm || '')
+      .toLowerCase()
+      .replace(/\s+/g, '');
+    const strictSymbolIntent = ['<=', '≤', '>=', '≥', '!=', '≠'].includes(intentCompact);
+    const strictHatIntent = /^hat$|^\^$|^[a-zα-ωπθ]+hat$|^[a-zα-ωπθ]+\^$/i.test(intentCompact);
+
     // Filter out suggestions containing placeholder '?' (incomplete parse artifacts)
     let suggestions = grammarSuggestions.filter(s => !s.includes('?'));
+    const customSuggestions = getCustomSuggestionLatex(queryTerm, queryTermText);
+    if (customSuggestions.length) {
+      suggestions = [...customSuggestions, ...suggestions];
+    }
+
+    if ((strictSymbolIntent || strictHatIntent) && customSuggestions.length) {
+      suggestions = customSuggestions.slice();
+    }
+
+    const trigRatioCompact = String(queryTermText || queryTerm || '')
+      .replace(/\\/g, '')
+      .replace(/\s+/g, '')
+      .toLowerCase();
+    const simpleTrigRatioMatch = trigRatioCompact.match(/^sin([a-z0-9πθ]+)\/cos\1$/i);
+    const parenTrigRatioMatch = trigRatioCompact.match(/^sin\(([^)]+)\)\/cos\(\1\)$/i);
+    const trigRatioArg = simpleTrigRatioMatch?.[1] || parenTrigRatioMatch?.[1] || fullSimpleTrigRatioMatch?.[1] || fullParenTrigRatioMatch?.[1] || '';
+    const hasTrigRatioIntent = Boolean(simpleTrigRatioMatch || parenTrigRatioMatch || hasFullTrigRatioIntent);
+    if (hasTrigRatioIntent) {
+      const normalizedArg = String(trigRatioArg || 'x')
+        .replace(/π/g, '\\pi')
+        .replace(/θ/g, '\\theta')
+        .replace(/\bpi\b/gi, '\\pi')
+        .replace(/\btheta\b/gi, '\\theta');
+      const tanIdentity = `\\tan(${normalizedArg || 'x'})`;
+      suggestions = [tanIdentity, ...suggestions.filter(s => String(s) !== tanIdentity)];
+    }
 
     const normalizeInverseIntentSource = (value) => String(value || '')
       .toLowerCase()
@@ -1259,8 +1351,13 @@ function handleInputChange() {
         return /\^\{\s*[−-]?1\s*\}|\^[−-]?1|⁻¹/.test(text);
       });
 
+      const normalizedArg = String(rawArg || '')
+        .replace(/sqrt\s*\(?\s*([A-Za-z0-9]+)\s*\)?/gi, '\\sqrt{$1}')
+        .replace(/\btheta\b/gi, '\\theta')
+        .replace(/\bpi\b/gi, '\\pi');
+
       const fallbackInverse = hasTypedArg
-        ? `\\${normalizedFunc}^{-1}(${rawArg})`
+        ? `\\${normalizedFunc}^{-1}(${normalizedArg})`
         : `\\${normalizedFunc}^{-1}(x)`;
 
       if (!suggestions.includes(fallbackInverse)) {
@@ -1295,6 +1392,7 @@ function handleInputChange() {
       suggestions = suggestions.filter(s => /(?:^|\\)(sin|cos|tan|sec|csc|cot|cosec)\b/i.test(String(s)));
     }
 
+    suggestions = Array.from(new Set(suggestions));
     console.log('Suggestions found:', suggestions); // Debug
 
     if (suggestions.length > 0) {
@@ -1332,8 +1430,10 @@ function handleInputChange() {
         queryTerm,
         queryTermText
       };
-      // Re-rank suggestions using XGBoost-style GBDT model
-      if (typeof globalThis.suggestionRanker?.rankSuggestions === 'function') {
+      // Re-rank suggestions using XGBoost-style GBDT model,
+      // but preserve strict symbol and trig-identity intent ordering.
+      const bypassRanking = strictSymbolIntent || strictHatIntent || hasTrigRatioIntent;
+      if (!bypassRanking && typeof globalThis.suggestionRanker?.rankSuggestions === 'function') {
         try {
           suggestions = globalThis.suggestionRanker.rankSuggestions(queryTerm, suggestions);
         } catch (e) {

@@ -77,6 +77,11 @@
     'cong':     '\\cong',
     'sim':      '\\sim',
     'therefore':'\\therefore',
+    'summation':'\\sum',
+    'sigma_sum':'\\sum',
+    'leq':'\\leq',
+    'geq':'\\geq',
+    'neq':'\\neq',
   };
 
   // LaTeX-prefixed function names we should also recognize
@@ -128,7 +133,11 @@
    * Each token: { type, value, pos }
    */
   function tokenize(input) {
-    const src = String(input || '').trim();
+    const src = String(input || '')
+      .trim()
+      .replace(/½/g, '(1/2)')
+      .replace(/¼/g, '(1/4)')
+      .replace(/¾/g, '(3/4)');
     const tokens = [];
     let i = 0;
 
@@ -177,6 +186,22 @@
       }
       if (src[i] === '∴') {
         tokens.push({ type: TokenType.CONSTANT, value: 'therefore', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '≤') {
+        tokens.push({ type: TokenType.OPERATOR, value: '<=', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '≥') {
+        tokens.push({ type: TokenType.OPERATOR, value: '>=', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '≠') {
+        tokens.push({ type: TokenType.OPERATOR, value: '!=', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '∑') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'summation', pos: i });
         i++; continue;
       }
 
@@ -274,6 +299,20 @@
         }
         const lower = word.toLowerCase();
 
+        // Alias words that should not be split by greedy function matching.
+        if (lower === 'root') {
+          tokens.push({ type: TokenType.FUNCTION, value: 'sqrt', pos: wordStart });
+          continue;
+        }
+        if (lower === 'absolute') {
+          tokens.push({ type: TokenType.FUNCTION, value: 'abs', pos: wordStart });
+          continue;
+        }
+        if (lower === 'summation') {
+          tokens.push({ type: TokenType.CONSTANT, value: 'summation', pos: wordStart });
+          continue;
+        }
+
         // Check for known functions (greedy: prefer longer matches)
         let fnMatch = null;
         for (const fn of KNOWN_FUNCTIONS) {
@@ -343,8 +382,23 @@
       }
 
       // --- Simple single-character tokens ---
+      if (src[i] === '<' && i + 1 < src.length && src[i + 1] === '=') {
+        tokens.push({ type: TokenType.OPERATOR, value: '<=', pos: i });
+        i += 2;
+        continue;
+      }
+      if (src[i] === '>' && i + 1 < src.length && src[i + 1] === '=') {
+        tokens.push({ type: TokenType.OPERATOR, value: '>=', pos: i });
+        i += 2;
+        continue;
+      }
+      if (src[i] === '!' && i + 1 < src.length && src[i + 1] === '=') {
+        tokens.push({ type: TokenType.OPERATOR, value: '!=', pos: i });
+        i += 2;
+        continue;
+      }
       switch (src[i]) {
-        case '+': case '-': case '*': case '/': case '=':
+        case '+': case '-': case '*': case '/': case '=': case '<': case '>':
           tokens.push({ type: TokenType.OPERATOR, value: src[i], pos: i }); break;
         case '^':
           tokens.push({ type: TokenType.POWER, value: '^', pos: i }); break;
@@ -435,7 +489,7 @@
     // --- Expression (top level): handles = for equations ---
     function parseExpression() {
       let left = parseAdditive();
-      while (!isAtEnd() && current().type === TokenType.OPERATOR && current().value === '=') {
+      while (!isAtEnd() && current().type === TokenType.OPERATOR && ['=', '<=', '>=', '!=', '<', '>'].includes(current().value)) {
         const op = advance().value;
         const right = parseAdditive();
         left = ASTNode.binary(op, left, right);
@@ -579,6 +633,18 @@
         return ASTNode.variable(tok.value);
       }
 
+      // Standalone relation operators can appear as direct symbol queries.
+      if (tok.type === TokenType.OPERATOR && ['<=', '>=', '!='].includes(tok.value)) {
+        advance();
+        const symbolMap = {
+          '<=': ['leq', '\\leq'],
+          '>=': ['geq', '\\geq'],
+          '!=': ['neq', '\\neq'],
+        };
+        const [name, latex] = symbolMap[tok.value] || ['rel', tok.value];
+        return ASTNode.constant(name, latex);
+      }
+
       // Parenthesized expression
       if (tok.type === TokenType.LPAREN) {
         advance(); // consume '('
@@ -634,9 +700,8 @@
         // Also: log10, log2 — number immediately after 'log' when no parens follow
         if (!subscript && !isAtEnd() && current().type === TokenType.NUMBER) {
           const nextTok = tokens[pos + 1];
-          // If there's a paren after the number, this number is the argument, not subscript
-          // log2(x) → log_2(x), but log(2) → log(2)
-          if (nextTok && (nextTok.type === TokenType.LPAREN || nextTok.type === TokenType.IDENTIFIER || nextTok.type === TokenType.CONSTANT || nextTok.type === TokenType.FUNCTION)) {
+          // log2(x), log2x, log2 34 -> base 2 with following argument
+          if (nextTok && (nextTok.type === TokenType.LPAREN || nextTok.type === TokenType.IDENTIFIER || nextTok.type === TokenType.CONSTANT || nextTok.type === TokenType.FUNCTION || nextTok.type === TokenType.NUMBER)) {
             subscript = ASTNode.number(advance().value);
           }
         }
@@ -652,6 +717,14 @@
           if (current().type === TokenType.RBRACE) advance();
         } else {
           modifier = parseUnary();
+        }
+      } else if (!isAtEnd() && current().type === TokenType.OPERATOR && current().value === '-') {
+        // Support inverse-trig shorthand without caret: sin-1(x), cos-1x
+        const nextTok = tokens[pos + 1];
+        if (nextTok && nextTok.type === TokenType.NUMBER && nextTok.value === '1') {
+          advance(); // '-'
+          advance(); // '1'
+          modifier = ASTNode.unary('-', ASTNode.number('1'));
         }
       }
 
@@ -767,6 +840,16 @@
           // Use \cdot for explicit multiplication
           return `${wrapIfNeeded(node.left, left)} \\cdot ${wrapIfNeeded(node.right, right)}`;
         }
+        if (node.op === '<=' || node.op === '>=' || node.op === '!=' || node.op === '<' || node.op === '>') {
+          const relationMap = {
+            '<=': '\\leq',
+            '>=': '\\geq',
+            '!=': '\\neq',
+            '<': '<',
+            '>': '>',
+          };
+          return `${left} ${relationMap[node.op] || node.op} ${right}`;
+        }
         // + and -
         const rightStr = node.op === '-' ? wrapIfNeeded(node.right, right) : right;
         return `${left} ${node.op} ${rightStr}`;
@@ -779,6 +862,10 @@
         const name = node.name;
         const args = node.args.map(astToLatex);
         const argStr = args.length > 0 ? args.join(', ') : '';
+
+        if (name === 'abs' && args.length > 0) {
+          return `\\left|${argStr}\\right|`;
+        }
 
         // Functions that use LaTeX command style
         const latexFuncNames = ['sin','cos','tan','sec','csc','cot','cosec',
