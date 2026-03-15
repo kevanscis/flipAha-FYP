@@ -955,6 +955,36 @@
     }
   });
 
+  // --------------------------------------------------------------------------
+  // Rule 21: Unary minus with power — -x^2
+  // "-x^2" parses as -(x^2) but may mean (-x)^2
+  // Alternatives: -(x^2), (-x)^2
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'unary-minus-power',
+    match(node) {
+      if (node.type !== 'unary') return false;
+      if (node.op !== '-') return false;
+      if (!node.operand) return false;
+      return node.operand.type === 'power';
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const results = [];
+
+      // Interpretation A: original — -(x^n)
+      results.push(node);
+
+      // Interpretation B: (-x)^n
+      const powerNode = node.operand;
+      const negBase = ASTNode.unary('-', powerNode.base);
+      const groupedNegBase = ASTNode.group(negBase);
+      results.push(ASTNode.power(groupedNegBase, powerNode.exponent));
+
+      return deduplicateASTs(results);
+    }
+  });
+
   // ==========================================================================
   // COMPLETION RULES — suggest common expansions when no structural ambiguity
   // ==========================================================================
