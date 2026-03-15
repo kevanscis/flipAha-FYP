@@ -191,6 +191,7 @@
     constructor(config) {
       config = config || {};
       this.trees = [];
+      this.treeWeights = [];
       this.bias = 0;
       this.lr = config.learningRate != null ? config.learningRate : 0.1;
       this.nTrees = config.nTrees || 50;
@@ -203,7 +204,8 @@
     predict(features) {
       var score = this.bias;
       for (var i = 0; i < this.trees.length; i++) {
-        score += this.lr * predictTree(this.trees[i], features);
+        var w = (this.treeWeights && this.treeWeights[i] != null) ? this.treeWeights[i] : this.lr;
+        score += w * predictTree(this.trees[i], features);
       }
       return score;
     }
@@ -255,6 +257,7 @@
       for (var i = 0; i < n; i++) predictions[i] = this.bias;
 
       this.trees = [];
+      this.treeWeights = [];
 
       for (var t = 0; t < this.nTrees; t++) {
         // Negative gradient (residuals for MSE)
@@ -263,6 +266,7 @@
 
         var tree = this._buildTree(X, residuals, 0);
         this.trees.push(tree);
+        this.treeWeights.push(this.lr);
 
         // Update predictions
         for (var i = 0; i < n; i++) {
@@ -361,12 +365,43 @@
     // =====================================================================
 
     toJSON() {
-      return { trees: this.trees, bias: this.bias, lr: this.lr, featureNames: FEATURE_NAMES };
+      return {
+        trees: this.trees,
+        treeWeights: this.treeWeights,
+        bias: this.bias,
+        lr: this.lr,
+        featureNames: FEATURE_NAMES
+      };
     }
 
     static fromJSON(json) {
       var r = new GBDTRanker();
       r.trees = json.trees || [];
+      if (Array.isArray(json.treeWeights) && json.treeWeights.length === r.trees.length) {
+        r.treeWeights = json.treeWeights.slice();
+      } else {
+        // Backward compatibility for older saved models that only had global `lr`.
+        var fallbackLr = json.lr != null ? json.lr : 0.1;
+        r.treeWeights = new Array(r.trees.length).fill(fallbackLr);
+
+        // Migration for legacy blended online models:
+        // old code concatenated default+learned trees but persisted only global lr=1.0,
+        // which over-weighted learned trees. Reconstruct split weights when detectable.
+        var hasDefaultModel = typeof DEFAULT_MODEL !== 'undefined'
+          && Array.isArray(DEFAULT_MODEL.trees);
+        var defaultCount = hasDefaultModel ? DEFAULT_MODEL.trees.length : 0;
+        var likelyLegacyBlend = hasDefaultModel
+          && !Array.isArray(json.treeWeights)
+          && fallbackLr === 1.0
+          && r.trees.length > defaultCount;
+
+        if (likelyLegacyBlend) {
+          var learnedCount = r.trees.length - defaultCount;
+          var migratedWeights = new Array(defaultCount).fill(1.0)
+            .concat(new Array(learnedCount).fill(0.08));
+          r.treeWeights = migratedWeights;
+        }
+      }
       r.bias = json.bias || 0;
       r.lr = json.lr != null ? json.lr : 0.1;
       return r;
@@ -546,9 +581,15 @@
 
     // Blend: default trees + learned trees
     this.ranker.trees = DEFAULT_MODEL.trees.concat(this.learnedTrees);
+    // Keep separate weights for each block:
+    // - default hand-tuned trees are calibrated at weight 1.0
+    // - learned trees keep learner shrinkage (`learner.lr`)
+    this.ranker.treeWeights =
+      new Array(DEFAULT_MODEL.trees.length).fill(1.0)
+        .concat(new Array(this.learnedTrees.length).fill(learner.lr));
     this.ranker.bias = (DEFAULT_MODEL.bias + learner.bias) / 2;
-    // Learned trees use the learner's lr; default trees use 1.0
-    // Since both are in the same array, use a blended lr
+    // Legacy global lr kept for backward compatibility; prediction now uses
+    // per-tree weights when available.
     this.ranker.lr = 1.0;
 
     // Persist the updated model and buffer so learning survives page reloads.
@@ -618,6 +659,7 @@
     loadModel: function (json) {
       var loaded = GBDTRanker.fromJSON(json);
       ranker.trees = loaded.trees;
+      ranker.treeWeights = loaded.treeWeights;
       ranker.bias = loaded.bias;
       ranker.lr = loaded.lr;
     },
