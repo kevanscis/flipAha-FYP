@@ -1015,6 +1015,21 @@
         if (numerator !== 0) {
           const fracAST = ASTNode.frac(ASTNode.number(String(numerator)), ASTNode.number(String(denominator)));
           results.push(fracAST);
+
+          // For mixed numbers (when integer part > 0), suggest mixed form too
+          if (integerPart > 0 && numerator > denominator) {
+            // Extract whole and fractional parts: 3/2 → 1 1/2
+            const wholeFromFrac = Math.floor(numerator / denominator);
+            const fractionalNumerator = numerator % denominator;
+            if (fractionalNumerator > 0) {
+              // Mixed number: wholeFromFrac + fractionalNumerator/denominator
+              const mixedAST = ASTNode.implicitMul([
+                ASTNode.number(String(wholeFromFrac)),
+                ASTNode.frac(ASTNode.number(String(fractionalNumerator)), ASTNode.number(String(denominator)))
+              ]);
+              results.push(mixedAST);
+            }
+          }
         }
 
         // Also suggest common approximate fractions for repeating decimals
@@ -1027,9 +1042,31 @@
         };
 
         for (const [pattern, frac] of Object.entries(commonMap)) {
-          if (decimalPart.startsWith(pattern) && numerator === 0) {
-            const approxFrac = ASTNode.frac(ASTNode.number(String(frac.num)), ASTNode.number(String(frac.den)));
+          if (decimalPart.startsWith(pattern)) {
+            // Create approximate fraction
+            let approxNum = integerPart * frac.den + frac.num;
+            let approxDen = frac.den;
+            
+            // Simplify if needed
+            const approxGcd = gcd(approxNum, approxDen);
+            approxNum = approxNum / approxGcd;
+            approxDen = approxDen / approxGcd;
+            
+            const approxFrac = ASTNode.frac(ASTNode.number(String(approxNum)), ASTNode.number(String(approxDen)));
             results.push(approxFrac);
+
+            // Also suggest mixed form for approximate fraction
+            if (integerPart > 0 && approxNum > approxDen) {
+              const approxWhole = Math.floor(approxNum / approxDen);
+              const approxFractional = approxNum % approxDen;
+              if (approxFractional > 0) {
+                const approxMixed = ASTNode.implicitMul([
+                  ASTNode.number(String(approxWhole)),
+                  ASTNode.frac(ASTNode.number(String(approxFractional)), ASTNode.number(String(approxDen)))
+                ]);
+                results.push(approxMixed);
+              }
+            }
           }
         }
       }
@@ -1215,6 +1252,80 @@
             results.push(ASTNode.binary('-', leftPart, rightPart));
           }
           break;
+        }
+      }
+
+      return deduplicateASTs(results);
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Rule 21: Improper/Mixed fraction conversion
+  // 11/2 ↔ 1 1/2 (both improper and mixed forms)
+  // 1 1/2 ↔ 3/2
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'improper-mixed-fraction',
+    match(node) {
+      // Case 1: Binary division with numbers (improper fraction like 11/2)
+      if (node.type === 'binary' && node.op === '/') {
+        if (node.left.type === 'number' && node.right.type === 'number') {
+          const num = parseInt(node.left.value);
+          const den = parseInt(node.right.value);
+          return !isNaN(num) && !isNaN(den) && num > den;
+        }
+      }
+      
+      // Case 2: Implicit multiply with number and fraction (mixed number like 1 1/2)
+      if (node.type === 'implicit_multiply' && node.factors.length === 2) {
+        const [first, second] = node.factors;
+        return first.type === 'number' && second.type === 'frac';
+      }
+      
+      return false;
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const results = [];
+
+      // Case 1: Improper fraction → mixed form
+      if (node.type === 'binary' && node.op === '/') {
+        const num = parseInt(node.left.value);
+        const den = parseInt(node.right.value);
+
+        // Original form (improper fraction)
+        results.push(node);
+
+        // Mixed form: whole + numerator/denominator
+        const whole = Math.floor(num / den);
+        const remainder = num % den;
+
+        if (whole > 0 && remainder > 0) {
+          const mixedAST = ASTNode.implicitMul([
+            ASTNode.number(String(whole)),
+            ASTNode.frac(ASTNode.number(String(remainder)), ASTNode.number(String(den)))
+          ]);
+          results.push(mixedAST);
+        }
+      }
+      
+      // Case 2: Mixed number → improper fraction form
+      if (node.type === 'implicit_multiply' && node.factors.length === 2) {
+        const [wholePart, fracPart] = node.factors;
+        if (fracPart.type === 'frac') {
+          // Original mixed form
+          results.push(node);
+
+          // Convert to improper fraction
+          const whole = parseInt(wholePart.value);
+          const fracNum = parseInt(fracPart.numerator.value);
+          const fracDen = parseInt(fracPart.denominator.value);
+
+          if (!isNaN(whole) && !isNaN(fracNum) && !isNaN(fracDen)) {
+            const improperNum = whole * fracDen + fracNum;
+            const improperAST = ASTNode.binary('/', ASTNode.number(String(improperNum)), ASTNode.number(String(fracDen)));
+            results.push(improperAST);
+          }
         }
       }
 
