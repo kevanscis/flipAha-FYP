@@ -1068,6 +1068,160 @@
     }
   });
 
+  // --------------------------------------------------------------------------
+  // Rule 22: nCr pattern — implicit_mul containing variable "C" between operands
+  // "5C3" parses as implicit_mul(5, C, 3).
+  // Alternatives: ⁵C₃ (combination), \binom{5}{3}
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'nCr-pattern',
+    match(node) {
+      if (node.type !== 'implicit_multiply') return false;
+      const factors = node.factors;
+      if (factors.length < 3) return false;
+      for (let i = 1; i < factors.length - 1; i++) {
+        if (factors[i].type === 'variable' &&
+            (factors[i].name === 'C' || factors[i].name === 'c')) {
+          const prev = factors[i - 1];
+          const next = factors[i + 1];
+          if ((prev.type === 'number' || prev.type === 'variable') &&
+              (next.type === 'number' || next.type === 'variable')) {
+            return true;
+          }
+        }
+      }
+      return false;
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const factors = node.factors;
+      const results = [];
+
+      // Original: n * C * r
+      results.push(node);
+
+      for (let i = 1; i < factors.length - 1; i++) {
+        if (factors[i].type === 'variable' &&
+            (factors[i].name === 'C' || factors[i].name === 'c')) {
+          const n = factors[i - 1];
+          const r = factors[i + 1];
+          if ((n.type === 'number' || n.type === 'variable') &&
+              (r.type === 'number' || r.type === 'variable')) {
+            const before = factors.slice(0, i - 1);
+            const after = factors.slice(i + 2);
+
+            // Interpretation: binomial coefficient \binom{n}{r}
+            const binomNode = ASTNode.func('binom', [n, r], null, true);
+            const allParts = [...before, binomNode, ...after];
+            results.push(allParts.length === 1 ? allParts[0] : ASTNode.implicitMul(allParts));
+
+            // Interpretation: ^nC_r notation
+            const ncrNode = ASTNode.func('nCr', [n, r], null, true);
+            const allParts2 = [...before, ncrNode, ...after];
+            results.push(allParts2.length === 1 ? allParts2[0] : ASTNode.implicitMul(allParts2));
+            break;
+          }
+        }
+      }
+
+      return deduplicateASTs(results);
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Rule 23: nPr pattern — implicit_mul containing variable "P" between operands
+  // "5P3" parses as implicit_mul(5, P, 3).
+  // Alternatives: ⁵P₃ (permutation)
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'nPr-pattern',
+    match(node) {
+      if (node.type !== 'implicit_multiply') return false;
+      const factors = node.factors;
+      if (factors.length < 3) return false;
+      for (let i = 1; i < factors.length - 1; i++) {
+        if (factors[i].type === 'variable' &&
+            (factors[i].name === 'P' || factors[i].name === 'p')) {
+          const prev = factors[i - 1];
+          const next = factors[i + 1];
+          if ((prev.type === 'number' || prev.type === 'variable') &&
+              (next.type === 'number' || next.type === 'variable')) {
+            return true;
+          }
+        }
+      }
+      return false;
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const factors = node.factors;
+      const results = [];
+
+      results.push(node);
+
+      for (let i = 1; i < factors.length - 1; i++) {
+        if (factors[i].type === 'variable' &&
+            (factors[i].name === 'P' || factors[i].name === 'p')) {
+          const n = factors[i - 1];
+          const r = factors[i + 1];
+          if ((n.type === 'number' || n.type === 'variable') &&
+              (r.type === 'number' || r.type === 'variable')) {
+            const before = factors.slice(0, i - 1);
+            const after = factors.slice(i + 2);
+
+            // Interpretation: ^nP_r notation
+            const nprNode = ASTNode.func('nPr', [n, r], null, true);
+            const allParts = [...before, nprNode, ...after];
+            results.push(allParts.length === 1 ? allParts[0] : ASTNode.implicitMul(allParts));
+            break;
+          }
+        }
+      }
+
+      return deduplicateASTs(results);
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Rule 24: Plus-minus ambiguity — x ± y
+  // When ± appears, offer both x + y and x - y as alternatives
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'plus-minus-split',
+    match(node) {
+      if (node.type !== 'implicit_multiply') return false;
+      return node.factors.some(f =>
+        f.type === 'constant' && (f.name === 'pm' || f.name === 'mp')
+      );
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const results = [node]; // original with ±
+
+      const factors = node.factors;
+      for (let i = 0; i < factors.length; i++) {
+        if (factors[i].type === 'constant' && (factors[i].name === 'pm' || factors[i].name === 'mp')) {
+          const before = factors.slice(0, i);
+          const after = factors.slice(i + 1);
+
+          // Build left side and right side
+          const leftPart = before.length === 0 ? null :
+                           before.length === 1 ? before[0] : ASTNode.implicitMul(before);
+          const rightPart = after.length === 0 ? null :
+                            after.length === 1 ? after[0] : ASTNode.implicitMul(after);
+
+          if (leftPart && rightPart) {
+            results.push(ASTNode.binary('+', leftPart, rightPart));
+            results.push(ASTNode.binary('-', leftPart, rightPart));
+          }
+          break;
+        }
+      }
+
+      return deduplicateASTs(results);
+    }
+  });
+
   // ==========================================================================
   // COMPLETION RULES — suggest common expansions when no structural ambiguity
   // ==========================================================================
@@ -1270,6 +1424,124 @@
 
       // sin³(x) — cubic (less common but useful)
       results.push(ASTNode.func(node.name, [arg], ASTNode.number('3'), true));
+
+      return results;
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Completion 7: Set notation — suggest related set operations
+  // A ∪ B → A ∩ B, A ⊂ B, A \ B
+  // --------------------------------------------------------------------------
+  completionRules.push({
+    name: 'set-operation-completions',
+    match(node) {
+      if (node.type !== 'implicit_multiply') return false;
+      // Check if any factor is a set operation symbol
+      const setOps = ['\\cup', '\\cap', '\\subset', '\\supset', '\\subseteq',
+                       '\\supseteq', '\\in', '\\setminus'];
+      return node.factors.some(f =>
+        f.type === 'constant' && setOps.includes(f.latex)
+      );
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const results = [];
+      const factors = node.factors;
+
+      // Find the set op and the operands around it
+      for (let i = 0; i < factors.length; i++) {
+        if (factors[i].type !== 'constant') continue;
+        const opLatex = factors[i].latex;
+        if (opLatex === '\\cup' || opLatex === '\\cap') {
+          const before = factors.slice(0, i);
+          const after = factors.slice(i + 1);
+          // Offer the complementary operation
+          const altOp = opLatex === '\\cup' ? 'cap' : 'cup';
+          const altLatex = opLatex === '\\cup' ? '\\cap' : '\\cup';
+          const altConst = ASTNode.constant(altOp, altLatex);
+          results.push(ASTNode.implicitMul([...before, altConst, ...after]));
+        }
+      }
+
+      return results;
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Completion 8: Vector notation — variable → vec, bar, hat
+  // a → \vec{a}, \hat{a}, \bar{a}
+  // --------------------------------------------------------------------------
+  completionRules.push({
+    name: 'vector-completions',
+    match(node) {
+      return node.type === 'variable' && /^[a-zA-Z]$/.test(node.name);
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      return [
+        ASTNode.func('vec', [node], null, true),        // \vec{a}
+        ASTNode.func('hat', [node], null, true),        // \hat{a}
+        ASTNode.func('bar', [node], null, true),        // \bar{a}
+      ];
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Completion 9: Derivative notation
+  // f → f'(x), f''(x)
+  // --------------------------------------------------------------------------
+  completionRules.push({
+    name: 'derivative-completions',
+    match(node) {
+      // Match single-letter variables commonly used for functions: f, g, h, y
+      return node.type === 'variable' && /^[fghy]$/.test(node.name);
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const xVar = ASTNode.variable('x');
+      const results = [];
+
+      // f(x)
+      results.push(ASTNode.func(node.name, [xVar], null, true));
+
+      // f'(x) — first derivative (represented as variable "f'" implicitly multiplied with (x))
+      const fPrime = ASTNode.variable(node.name + "'");
+      results.push(ASTNode.implicitMul([fPrime, ASTNode.group(xVar)]));
+
+      return results;
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Completion 10: Quadratic formula components
+  // ax^2+bx+c → suggest discriminant b²-4ac
+  // --------------------------------------------------------------------------
+  completionRules.push({
+    name: 'quadratic-completions',
+    match(node) {
+      // Match pattern: something + something + something (3-term sum)
+      if (node.type !== 'binary' || node.op !== '+') return false;
+      if (node.left.type !== 'binary' || node.left.op !== '+') return false;
+      // Check if first term contains x²
+      const firstTerm = node.left.left;
+      return firstTerm.type === 'power' ||
+             (firstTerm.type === 'implicit_multiply' &&
+              firstTerm.factors.some(f => f.type === 'power'));
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const results = [];
+
+      // Suggest discriminant: b² - 4ac
+      const b = ASTNode.variable('b');
+      const a = ASTNode.variable('a');
+      const c = ASTNode.variable('c');
+      const disc = ASTNode.binary('-',
+        ASTNode.power(b, ASTNode.number('2')),
+        ASTNode.implicitMul([ASTNode.number('4'), a, c])
+      );
+      results.push(disc);
 
       return results;
     }

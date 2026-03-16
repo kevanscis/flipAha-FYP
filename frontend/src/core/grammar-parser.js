@@ -48,6 +48,10 @@
     'lim', 'sum', 'prod', 'int',
     'floor', 'ceil', 'round',
     'det', 'mod',
+    // Decorator functions (vectors, statistics, etc.)
+    'vec', 'bar', 'overline', 'hat', 'dot', 'ddot', 'tilde', 'underline',
+    // Combinatorics
+    'binom', 'nCr', 'nPr',
   ].sort((a, b) => b.length - a.length);
 
   const KNOWN_CONSTANTS = {
@@ -82,6 +86,39 @@
     'leq':'\\leq',
     'geq':'\\geq',
     'neq':'\\neq',
+    // Set theory
+    'emptyset':     '\\emptyset',
+    'varnothing':   '\\varnothing',
+    'cup':          '\\cup',
+    'cap':          '\\cap',
+    'subset':       '\\subset',
+    'supset':       '\\supset',
+    'subseteq':     '\\subseteq',
+    'supseteq':     '\\supseteq',
+    'setminus':     '\\setminus',
+    'forall':       '\\forall',
+    'exists':       '\\exists',
+    'notin':        '\\notin',
+    'ni':           '\\ni',
+    'in':           '\\in',
+    'lbrace':       '\\{',
+    'rbrace':       '\\}',
+    // Logic & arrows
+    'implies':      '\\implies',
+    'iff':          '\\iff',
+    'rightarrow':   '\\rightarrow',
+    'leftarrow':    '\\leftarrow',
+    'mapsto':       '\\mapsto',
+    // Calculus
+    'partial':      '\\partial',
+    // Additional symbols
+    'pm':           '\\pm',
+    'mp':           '\\mp',
+    'approx':       '\\approx',
+    'propto':       '\\propto',
+    'cdots':        '\\cdots',
+    'ldots':        '\\ldots',
+    'dots':         '\\dots',
   };
 
   // LaTeX-prefixed function names we should also recognize
@@ -94,6 +131,11 @@
     '\\sqrt', '\\cbrt',
     '\\lim', '\\sum', '\\prod', '\\int',
     '\\det', '\\mod', '\\abs',
+    // Decorator functions
+    '\\vec', '\\bar', '\\overline', '\\hat', '\\dot', '\\ddot',
+    '\\tilde', '\\underline',
+    // Combinatorics
+    '\\binom',
   ].sort((a, b) => b.length - a.length);
 
   const LATEX_CONSTANTS = {
@@ -122,6 +164,36 @@
     '\\cong':     '\\cong',
     '\\sim':      '\\sim',
     '\\therefore':'\\therefore',
+    // Set theory
+    '\\emptyset':  '\\emptyset',
+    '\\varnothing':'\\varnothing',
+    '\\cup':       '\\cup',
+    '\\cap':       '\\cap',
+    '\\subset':    '\\subset',
+    '\\supset':    '\\supset',
+    '\\subseteq':  '\\subseteq',
+    '\\supseteq':  '\\supseteq',
+    '\\setminus':  '\\setminus',
+    '\\in':        '\\in',
+    '\\notin':     '\\notin',
+    '\\ni':        '\\ni',
+    '\\forall':    '\\forall',
+    '\\exists':    '\\exists',
+    // Logic & arrows
+    '\\implies':   '\\implies',
+    '\\iff':       '\\iff',
+    '\\rightarrow':'\\rightarrow',
+    '\\leftarrow': '\\leftarrow',
+    '\\mapsto':    '\\mapsto',
+    // Calculus
+    '\\partial':   '\\partial',
+    // Additional symbols
+    '\\pm':        '\\pm',
+    '\\mp':        '\\mp',
+    '\\approx':    '\\approx',
+    '\\propto':    '\\propto',
+    '\\cdots':     '\\cdots',
+    '\\ldots':     '\\ldots',
   };
 
   // ==========================================================================
@@ -202,6 +274,117 @@
       }
       if (src[i] === '∑') {
         tokens.push({ type: TokenType.CONSTANT, value: 'summation', pos: i });
+        i++; continue;
+      }
+
+      // Set theory Unicode symbols
+      if (src[i] === '∅') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'emptyset', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '∪') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'cup', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '∩') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'cap', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '∈') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'in', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '∉') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'notin', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '⊂') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'subset', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '⊆') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'subseteq', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '⊃') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'supset', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '⊇') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'supseteq', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '\\' && src[i+1] === '{') {
+        // \{ → set brace
+        tokens.push({ type: TokenType.CONSTANT, value: 'lbrace', pos: i });
+        i += 2; continue;
+      }
+      if (src[i] === '\\' && src[i+1] === '}') {
+        // \} → set brace
+        tokens.push({ type: TokenType.CONSTANT, value: 'rbrace', pos: i });
+        i += 2; continue;
+      }
+
+      // Calculus Unicode symbols
+      if (src[i] === '∂') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'partial', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '∫') {
+        tokens.push({ type: TokenType.FUNCTION, value: 'int', pos: i });
+        i++; continue;
+      }
+
+      // Logic & arrow Unicode symbols
+      if (src[i] === '⇒') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'implies', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '⇔') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'iff', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '→') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'rightarrow', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '←') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'leftarrow', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '↔') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'iff', pos: i });
+        i++; continue;
+      }
+
+      // Additional math Unicode symbols
+      if (src[i] === '±') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'pm', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '∓') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'mp', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '≈') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'approx', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '∝') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'propto', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '∀') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'forall', pos: i });
+        i++; continue;
+      }
+      if (src[i] === '∃') {
+        tokens.push({ type: TokenType.CONSTANT, value: 'exists', pos: i });
+        i++; continue;
+      }
+      // Prime symbol (for derivatives: f′(x))
+      if (src[i] === '′' || src[i] === '\'') {
+        tokens.push({ type: TokenType.OPERATOR, value: "'", pos: i });
         i++; continue;
       }
 
@@ -310,6 +493,55 @@
         }
         if (lower === 'summation') {
           tokens.push({ type: TokenType.CONSTANT, value: 'summation', pos: wordStart });
+          continue;
+        }
+        // Fix: "infinity" contains "int" prefix — prioritize constant match
+        if (lower === 'infinity') {
+          tokens.push({ type: TokenType.CONSTANT, value: 'infinity', pos: wordStart });
+          continue;
+        }
+        // Set theory keyword aliases (contain function-name prefixes like "int")
+        if (lower === 'intersection' || lower === 'intersect') {
+          tokens.push({ type: TokenType.CONSTANT, value: 'cap', pos: wordStart });
+          continue;
+        }
+        if (lower === 'union') {
+          tokens.push({ type: TokenType.CONSTANT, value: 'cup', pos: wordStart });
+          continue;
+        }
+        if (lower === 'element') {
+          tokens.push({ type: TokenType.CONSTANT, value: 'in', pos: wordStart });
+          continue;
+        }
+        if (lower === 'complement') {
+          tokens.push({ type: TokenType.CONSTANT, value: 'setminus', pos: wordStart });
+          continue;
+        }
+        // Calculus keyword aliases
+        if (lower === 'integral') {
+          tokens.push({ type: TokenType.FUNCTION, value: 'int', pos: wordStart });
+          continue;
+        }
+        if (lower === 'derivative') {
+          tokens.push({ type: TokenType.IDENTIFIER, value: 'd', pos: wordStart });
+          continue;
+        }
+        // Vector/statistics keyword aliases
+        if (lower === 'vector') {
+          tokens.push({ type: TokenType.FUNCTION, value: 'vec', pos: wordStart });
+          continue;
+        }
+        if (lower === 'mean' || lower === 'average') {
+          tokens.push({ type: TokenType.FUNCTION, value: 'bar', pos: wordStart });
+          continue;
+        }
+        // Misc keyword aliases
+        if (lower === 'plusminus') {
+          tokens.push({ type: TokenType.CONSTANT, value: 'pm', pos: wordStart });
+          continue;
+        }
+        if (lower === 'proportional') {
+          tokens.push({ type: TokenType.CONSTANT, value: 'propto', pos: wordStart });
           continue;
         }
 
@@ -586,7 +818,7 @@
       return base;
     }
 
-    // --- Postfix: x°, n! ---
+    // --- Postfix: x°, n!, f' (prime/derivative notation) ---
     function parsePostfix() {
       let expr = parsePrimary();
 
@@ -597,6 +829,21 @@
         } else if (current().type === TokenType.FACTORIAL) {
           advance();
           expr = ASTNode.factorial(expr);
+        } else if (current().type === TokenType.OPERATOR && current().value === "'") {
+          // Prime notation: f' → f', f'' → f'', etc.
+          let primeCount = 0;
+          while (!isAtEnd() && current().type === TokenType.OPERATOR && current().value === "'") {
+            advance();
+            primeCount++;
+          }
+          const primeStr = "'".repeat(primeCount);
+          // If the expression is a variable like f, g, y — make it f', f'', etc.
+          if (expr.type === 'variable') {
+            expr = ASTNode.variable(expr.name + primeStr);
+          } else {
+            // For other expressions, wrap as a power-like notation
+            expr = ASTNode.variable(String(expr.name || expr.value || '') + primeStr);
+          }
         } else {
           break;
         }
@@ -867,10 +1114,32 @@
           return `\\left|${argStr}\\right|`;
         }
 
+        // Decorator functions: \vec{x}, \bar{x}, \hat{i}, \overline{AB}, etc.
+        const decoratorFuncs = {
+          'vec': '\\vec', 'bar': '\\bar', 'overline': '\\overline',
+          'hat': '\\hat', 'dot': '\\dot', 'ddot': '\\ddot',
+          'tilde': '\\tilde', 'underline': '\\underline',
+        };
+        if (decoratorFuncs[name] && args.length > 0) {
+          return `${decoratorFuncs[name]}{${argStr}}`;
+        }
+
+        // Binomial coefficient: binom(n, r) → \binom{n}{r}
+        if (name === 'binom' && args.length >= 2) {
+          return `\\binom{${args[0]}}{${args[1]}}`;
+        }
+
+        // nCr / nPr: render as ^nC_r or ^nP_r style
+        if ((name === 'nCr' || name === 'nPr') && args.length >= 2) {
+          const letter = name === 'nCr' ? 'C' : 'P';
+          return `^{${args[0]}}${letter}_{${args[1]}}`;
+        }
+
         // Functions that use LaTeX command style
         const latexFuncNames = ['sin','cos','tan','sec','csc','cot','cosec',
                                 'arcsin','arccos','arctan','sinh','cosh','tanh',
-                                'log','ln','lg','exp','lim','det','mod'];
+                                'log','ln','lg','exp','lim','det','mod',
+                                'int','sum','prod'];
         const isLatexFunc = latexFuncNames.includes(name);
 
         let result = isLatexFunc ? `\\${name}` : name;
@@ -942,12 +1211,24 @@
       case 'implicit_multiply': {
         // Relation/geometry symbols that need spaces on both sides
         const relationSymbols = new Set([
-          '\\perp', '\\parallel', '\\cong', '\\sim', '\\therefore'
+          '\\perp', '\\parallel', '\\cong', '\\sim', '\\therefore',
+          // Set theory operators
+          '\\cup', '\\cap', '\\subset', '\\supset', '\\subseteq', '\\supseteq',
+          '\\in', '\\notin', '\\ni', '\\setminus',
+          // Logic & arrows
+          '\\implies', '\\iff', '\\rightarrow', '\\leftarrow', '\\mapsto',
+          '\\forall', '\\exists',
+          // Additional relation symbols
+          '\\pm', '\\mp', '\\approx', '\\propto',
         ]);
         const parts = node.factors.map((f, idx) => {
           const latex = astToLatex(f);
           // Wrap binary operations in parens for clarity
           if (f.type === 'binary' && (f.op === '+' || f.op === '-')) {
+            return { text: `(${latex})`, isRelation: false, node: f };
+          }
+          // Preserve explicit parentheses on group nodes (user typed parens)
+          if (f.type === 'group') {
             return { text: `(${latex})`, isRelation: false, node: f };
           }
           const isRel = f.type === 'constant' && relationSymbols.has(latex);
