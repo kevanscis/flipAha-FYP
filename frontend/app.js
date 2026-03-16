@@ -503,6 +503,12 @@ function getCustomSuggestionLatex(queryTerm, queryTermText) {
   if (compact === '>=' || compact === '≥') out.push('\\geq');
   if (compact === '!=' || compact === '≠') out.push('\\neq');
 
+  // Short words that double as math symbols — offer the symbol as a suggestion
+  if (compact === 'in')  out.push('\\in');
+  if (compact === 'or')  out.push('\\cup');   // set union (A or B)
+  if (compact === 'and') out.push('\\cap');    // set intersection (A and B)
+  if (compact === 'not') out.push('\\neg');
+
   if (/^root(?:\(|\b)|^sqrt$/.test(compact)) out.push('\\sqrt{x}');
 
   if (/^hat$|^\^$/.test(compact)) out.push('\\hat{x}');
@@ -661,6 +667,157 @@ async function submitEquationDraftFromModal() {
   }
 }
 
+/**
+ * Math keywords — tokens that should always be treated as math, not English.
+ */
+const MATH_KEYWORDS = new Set([
+  'sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'cosec',
+  'asin', 'acos', 'atan', 'arcsin', 'arccos', 'arctan',
+  'sinh', 'cosh', 'tanh',
+  'log', 'ln', 'lg', 'exp', 'sqrt', 'cbrt', 'root', 'abs',
+  'lim', 'sum', 'prod', 'int', 'mod', 'det',
+  'pi', 'theta', 'phi', 'psi', 'rho', 'tau', 'eta',
+  'alpha', 'beta', 'gamma', 'delta', 'lambda', 'mu', 'sigma', 'omega', 'epsilon',
+  'cup', 'cap', 'subset', 'supset', 'subseteq', 'supseteq',
+  'emptyset', 'varnothing', 'notin', 'ni', 'setminus',
+  'union', 'intersection', 'intersect', 'element', 'complement',
+  'forall', 'exists', 'implies', 'iff',
+  'rightarrow', 'leftarrow', 'mapsto',
+  'vec', 'bar', 'hat', 'dot', 'ddot', 'tilde', 'overline', 'underline',
+  'vector', 'mean', 'average',
+  'binom', 'nCr', 'nPr',
+  'partial', 'integral', 'derivative',
+  'pm', 'mp', 'approx', 'propto', 'cdots', 'ldots', 'dots',
+  'plusminus', 'proportional',
+  'perp', 'parallel', 'cong', 'sim',
+  'leq', 'geq', 'neq', 'infinity', 'inf',
+]);
+
+/**
+ * Returns true when `text` looks like a natural-language sentence rather than
+ * a pure math expression.  Instead of maintaining a big word-list, we count
+ * how many multi-letter tokens are NOT recognisable as math.  If there are 2+
+ * such "unknown" words the input is almost certainly a sentence.
+ */
+function looksLikeSentence(text) {
+  const tokens = text.split(/\s+/);
+  let unknownWordCount = 0;
+  for (const t of tokens) {
+    const clean = t.replace(/[.,!?;:]+$/g, '');
+    const lower = clean.toLowerCase();
+    if (clean.length <= 1) continue;                       // single char → variable
+    if (/[0-9]/.test(clean)) continue;                     // contains digits → math
+    if (clean.startsWith('\\')) continue;                   // LaTeX command
+    if (/[+\-*/=^_(){}[\]<>|°±∓≈≠≤≥∞∫∑∏∂∅∪∩∈∉⊂⊆⊃⊇⇒⇔→←↔∀∃∝′π]/.test(clean)) continue;
+    if (MATH_KEYWORDS.has(lower)) continue;                // known math keyword
+    unknownWordCount++;
+  }
+  return unknownWordCount >= 2;
+}
+
+/**
+ * Classify a whitespace-delimited token as 'math' or 'text'.
+ */
+function classifyToken(token) {
+  const clean = token.replace(/[.,!?;:]+$/g, '');
+  const lower = clean.toLowerCase();
+
+  // Single character → math (variable)
+  if (clean.length === 1 && /[A-Za-z]/.test(clean)) return 'math';
+  // Starts with digit or contains digits mixed with symbols → math
+  if (/[0-9]/.test(clean)) return 'math';
+  // Contains math operator / bracket / Unicode math symbol
+  if (/[+\-*/=^_(){}[\]<>|°±∓≈≠≤≥∞∫∑∏∂∅∪∩∈∉⊂⊆⊃⊇⇒⇔→←↔∀∃∝′π]/.test(clean)) return 'math';
+  // Starts with backslash → LaTeX command
+  if (clean.startsWith('\\')) return 'math';
+  // Known math keyword
+  if (MATH_KEYWORDS.has(lower)) return 'math';
+  // Everything else is text
+  return 'text';
+}
+
+/**
+ * Render a math segment (one or more consecutive math tokens) via KaTeX.
+ * Falls back to plain text on error.
+ */
+function renderMathSegment(mathText, parent) {
+  const span = document.createElement('span');
+  span.style.display = 'inline';
+
+  // If the text already contains LaTeX commands (backslash + letter, e.g.
+  // \circ, \sin, \frac) it came from smartTextToLatex / a math-chip and is
+  // already valid LaTeX — pass it straight to KaTeX.  Otherwise convert
+  // raw human text via the grammar parser first.
+  const alreadyLatex = /\\[a-zA-Z]/.test(mathText);
+
+  let latex = '';
+  if (alreadyLatex) {
+    latex = mathText;                       // use as-is
+  } else if (typeof globalThis.grammarParser?.mathToLatexGrammar === 'function') {
+    try { latex = globalThis.grammarParser.mathToLatexGrammar(mathText); } catch { latex = ''; }
+  }
+  if (!latex) {
+    latex = normalizeToLatex(mathText);
+  }
+
+  try {
+    katex.render(latex, span, { throwOnError: false, displayMode: false });
+    if (span.querySelector('.katex-error')) {
+      // Fallback: try regex normalizer only
+      const fallback = normalizeToLatex(mathText);
+      try {
+        katex.render(fallback, span, { throwOnError: false, displayMode: false });
+        if (span.querySelector('.katex-error')) {
+          span.textContent = mathText;
+        }
+      } catch { span.textContent = mathText; }
+    }
+  } catch {
+    span.textContent = mathText;
+  }
+
+  parent.appendChild(span);
+}
+
+/**
+ * Render a sentence that contains inline math.  English words are kept as
+ * plain text nodes; math tokens are grouped and rendered with KaTeX.
+ */
+function renderSentenceWithInlineMath(text, container) {
+  container.innerHTML = '';
+
+  // Tokenise preserving whitespace boundaries
+  const parts = text.split(/(\s+)/);
+  let mathBuf = '';
+
+  function flushMath() {
+    if (!mathBuf) return;
+    renderMathSegment(mathBuf.trim(), container);
+    mathBuf = '';
+  }
+
+  for (const part of parts) {
+    // Whitespace – belongs to whichever segment is active
+    if (/^\s+$/.test(part)) {
+      if (mathBuf) {
+        mathBuf += part;         // keep space inside math group
+      } else {
+        container.appendChild(document.createTextNode(part));
+      }
+      continue;
+    }
+
+    const type = classifyToken(part);
+    if (type === 'math') {
+      mathBuf += (mathBuf ? ' ' : '') + part;
+    } else {
+      flushMath();
+      container.appendChild(document.createTextNode(part));
+    }
+  }
+  flushMath();  // flush any trailing math
+}
+
 function renderMixedTextMath(rawText, bubbleDiv) {
   const raw = normalizeMathLiveArtifacts(rawText);
   const trimmed = raw.trim();
@@ -675,7 +832,13 @@ function renderMixedTextMath(rawText, bubbleDiv) {
     .replace(/\s+/g, ' ')
     .trim();
 
-  // Try the grammar parser first — it handles all O-Level topics properly
+  // ── Sentence mode: mix plain-text nodes with inline KaTeX spans ──
+  if (looksLikeSentence(cleaned)) {
+    renderSentenceWithInlineMath(cleaned, bubbleDiv);
+    return;
+  }
+
+  // ── Pure math mode: render entirely with KaTeX ──
   let normalized = '';
   if (typeof globalThis.grammarParser?.mathToLatexGrammar === 'function') {
     try {
@@ -684,7 +847,6 @@ function renderMixedTextMath(rawText, bubbleDiv) {
       normalized = '';
     }
   }
-  // Fall back to the regex-based normalizer if grammar parser isn't available
   if (!normalized) {
     normalized = normalizeToLatex(preservePlainTextSegments(cleaned));
   }
@@ -696,8 +858,6 @@ function renderMixedTextMath(rawText, bubbleDiv) {
     });
 
     if (bubbleDiv.querySelector('.katex-error')) {
-      // Grammar parser output may contain commands KaTeX doesn't support;
-      // fall back to regex normalizer, then plain text.
       const fallback = normalizeToLatex(preservePlainTextSegments(cleaned));
       try {
         katex.render(fallback, bubbleDiv, { throwOnError: false, displayMode: false });
@@ -941,18 +1101,19 @@ function openChipEditor(chip) {
 // Get the current LaTeX representation of the input
 function getInputLatex() {
   if (!questionInput) return '';
-  let latex = '';
+  const parts = [];
   questionInput.childNodes.forEach(node => {
     if (node.nodeType === Node.TEXT_NODE) {
-      const t = (node.textContent || '').replace(/\u200B/g, '').trim();
-      if (t) {
-        try { latex += smartTextToLatex(t); } catch { latex += t; }
+      const t = (node.textContent || '').replace(/\u200B/g, '');
+      if (t.trim()) {
+        try { parts.push(smartTextToLatex(t)); } catch { parts.push(t); }
       }
     } else if (node.classList && node.classList.contains('math-chip')) {
-      latex += node.dataset.latex || '';
+      const chipLatex = node.dataset.latex || '';
+      if (chipLatex) parts.push(chipLatex);
     }
   });
-  return latex.trim();
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
 }
 
 // Get caret offset in logical text coordinates
@@ -1594,7 +1755,7 @@ function preservePlainTextSegments(value) {
     'x', 'y', 'z', 'n', 'r', 'k', 'i', 'j', 'a', 'b', 'c', 'd', 'e', 'f',
     // Set theory
     'cup', 'cap', 'subset', 'supset', 'subseteq', 'supseteq',
-    'emptyset', 'varnothing', 'in', 'notin', 'ni', 'setminus',
+    'emptyset', 'varnothing', 'notin', 'ni', 'setminus',
     'union', 'intersection', 'intersect', 'element', 'complement',
     // Logic & arrows
     'forall', 'exists', 'implies', 'iff',

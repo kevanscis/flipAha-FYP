@@ -100,7 +100,6 @@
     'exists':       '\\exists',
     'notin':        '\\notin',
     'ni':           '\\ni',
-    'in':           '\\in',
     'lbrace':       '\\{',
     'rbrace':       '\\}',
     // Logic & arrows
