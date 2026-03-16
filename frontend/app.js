@@ -382,6 +382,72 @@ function normalizeToLatex(input) {
     .replace(/π/g, '\\pi')
     .replace(/(^|[^A-Za-z\\])pi(?=[^A-Za-z]|$)/gi, '$1\\pi');
 
+  // Set theory Unicode symbols
+  s = s
+    .replace(/∅/g, '\\emptyset')
+    .replace(/∪/g, '\\cup ')
+    .replace(/∩/g, '\\cap ')
+    .replace(/∈/g, '\\in ')
+    .replace(/∉/g, '\\notin ')
+    .replace(/⊂/g, '\\subset ')
+    .replace(/⊆/g, '\\subseteq ')
+    .replace(/⊃/g, '\\supset ')
+    .replace(/⊇/g, '\\supseteq ');
+
+  // Set theory keyword aliases
+  s = s.replace(/(^|[^A-Za-z\\])union(?=[^A-Za-z]|$)/gi, '$1\\cup ');
+  s = s.replace(/(^|[^A-Za-z\\])intersect(?:ion)?(?=[^A-Za-z]|$)/gi, '$1\\cap ');
+  s = s.replace(/(^|[^A-Za-z\\])emptyset(?=[^A-Za-z]|$)/gi, '$1\\emptyset ');
+  s = s.replace(/(^|[^A-Za-z\\])subset(?=[^A-Za-z]|$)/gi, '$1\\subset ');
+  s = s.replace(/(^|[^A-Za-z\\])subseteq(?=[^A-Za-z]|$)/gi, '$1\\subseteq ');
+  s = s.replace(/(^|[^A-Za-z\\])supset(?=[^A-Za-z]|$)/gi, '$1\\supset ');
+  s = s.replace(/(^|[^A-Za-z\\])supseteq(?=[^A-Za-z]|$)/gi, '$1\\supseteq ');
+
+  // Logic & arrow Unicode symbols
+  s = s
+    .replace(/⇒/g, '\\implies ')
+    .replace(/⇔/g, '\\iff ')
+    .replace(/→/g, '\\rightarrow ')
+    .replace(/←/g, '\\leftarrow ')
+    .replace(/↔/g, '\\iff ');
+
+  // Logic keyword aliases
+  s = s.replace(/(^|[^A-Za-z\\])forall(?=[^A-Za-z]|$)/gi, '$1\\forall ');
+  s = s.replace(/(^|[^A-Za-z\\])exists(?=[^A-Za-z]|$)/gi, '$1\\exists ');
+  s = s.replace(/(^|[^A-Za-z\\])implies(?=[^A-Za-z]|$)/gi, '$1\\implies ');
+
+  // Additional math Unicode symbols
+  s = s
+    .replace(/±/g, '\\pm ')
+    .replace(/∓/g, '\\mp ')
+    .replace(/≈/g, '\\approx ')
+    .replace(/∝/g, '\\propto ')
+    .replace(/∀/g, '\\forall ')
+    .replace(/∃/g, '\\exists ')
+    .replace(/∂/g, '\\partial ')
+    .replace(/∫/g, '\\int ');
+
+  // Additional keyword aliases
+  s = s.replace(/(^|[^A-Za-z\\])approx(?=[^A-Za-z]|$)/gi, '$1\\approx ');
+  s = s.replace(/(^|[^A-Za-z\\])propto(?=[^A-Za-z]|$)/gi, '$1\\propto ');
+  s = s.replace(/(^|[^A-Za-z\\])partial(?=[^A-Za-z]|$)/gi, '$1\\partial ');
+
+  // Decorator functions: vec(x) → \vec{x}, bar(x) → \bar{x}, etc.
+  s = s.replace(/(^|[^A-Za-z\\])(vec|bar|hat|overline|underline|tilde|dot|ddot)\s*\(([^)]+)\)/gi,
+    (m, pre, func, arg) => `${pre}\\${func.toLowerCase()}{${arg.trim()}}`);
+  s = s.replace(/(^|[^A-Za-z\\])(vec|bar|hat|overline|underline|tilde|dot|ddot)\s+([A-Za-z])/gi,
+    (m, pre, func, arg) => `${pre}\\${func.toLowerCase()}{${arg}}`);
+
+  // Keyword aliases for decorators
+  s = s.replace(/(^|[^A-Za-z\\])vector\s*\(([^)]+)\)/gi, '$1\\vec{$2}');
+  s = s.replace(/(^|[^A-Za-z\\])vector\s+([A-Za-z])/gi, '$1\\vec{$2}');
+  s = s.replace(/(^|[^A-Za-z\\])mean\s*\(([^)]+)\)/gi, '$1\\bar{$2}');
+  s = s.replace(/(^|[^A-Za-z\\])mean\s+([A-Za-z])/gi, '$1\\bar{$2}');
+
+  // Combinatorics: binom(n,r) → \binom{n}{r}
+  s = s.replace(/(^|[^A-Za-z\\])binom\s*\(([^,]+),\s*([^)]+)\)/gi,
+    '$1\\binom{$2}{$3}');
+
   // Logs
   s = s.replace(/\blog\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/g, '\\log_{$1}($2)');
   s = s.replace(/\blog_([A-Za-z0-9]+)\s*\(\s*([^)]+)\s*\)/g, '\\log_{$1}($2)');
@@ -609,7 +675,19 @@ function renderMixedTextMath(rawText, bubbleDiv) {
     .replace(/\s+/g, ' ')
     .trim();
 
-  const normalized = normalizeToLatex(preservePlainTextSegments(cleaned));
+  // Try the grammar parser first — it handles all O-Level topics properly
+  let normalized = '';
+  if (typeof globalThis.grammarParser?.mathToLatexGrammar === 'function') {
+    try {
+      normalized = globalThis.grammarParser.mathToLatexGrammar(cleaned);
+    } catch {
+      normalized = '';
+    }
+  }
+  // Fall back to the regex-based normalizer if grammar parser isn't available
+  if (!normalized) {
+    normalized = normalizeToLatex(preservePlainTextSegments(cleaned));
+  }
 
   try {
     katex.render(normalized, bubbleDiv, {
@@ -618,7 +696,17 @@ function renderMixedTextMath(rawText, bubbleDiv) {
     });
 
     if (bubbleDiv.querySelector('.katex-error')) {
-      bubbleDiv.textContent = cleaned || raw;
+      // Grammar parser output may contain commands KaTeX doesn't support;
+      // fall back to regex normalizer, then plain text.
+      const fallback = normalizeToLatex(preservePlainTextSegments(cleaned));
+      try {
+        katex.render(fallback, bubbleDiv, { throwOnError: false, displayMode: false });
+        if (bubbleDiv.querySelector('.katex-error')) {
+          bubbleDiv.textContent = cleaned || raw;
+        }
+      } catch {
+        bubbleDiv.textContent = cleaned || raw;
+      }
     }
   } catch {
     bubbleDiv.textContent = cleaned || raw;
@@ -1498,9 +1586,33 @@ function preservePlainTextSegments(value) {
   const knownMathWords = new Set([
     'sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'cosec',
     'asin', 'acos', 'atan', 'arcsin', 'arccos', 'arctan',
-    'log', 'ln', 'sqrt', 'root', 'pi', 'theta',
-    'alpha', 'beta', 'gamma', 'delta', 'lambda', 'mu', 'sigma', 'omega',
-    'x', 'y', 'z'
+    'sinh', 'cosh', 'tanh',
+    'log', 'ln', 'lg', 'exp', 'sqrt', 'cbrt', 'root', 'abs',
+    'lim', 'sum', 'prod', 'int', 'mod', 'det',
+    'pi', 'theta', 'phi', 'psi', 'rho', 'tau', 'eta',
+    'alpha', 'beta', 'gamma', 'delta', 'lambda', 'mu', 'sigma', 'omega', 'epsilon',
+    'x', 'y', 'z', 'n', 'r', 'k', 'i', 'j', 'a', 'b', 'c', 'd', 'e', 'f',
+    // Set theory
+    'cup', 'cap', 'subset', 'supset', 'subseteq', 'supseteq',
+    'emptyset', 'varnothing', 'in', 'notin', 'ni', 'setminus',
+    'union', 'intersection', 'intersect', 'element', 'complement',
+    // Logic & arrows
+    'forall', 'exists', 'implies', 'iff',
+    'rightarrow', 'leftarrow', 'mapsto',
+    // Vectors & decorators
+    'vec', 'bar', 'hat', 'dot', 'ddot', 'tilde', 'overline', 'underline',
+    'vector', 'mean', 'average',
+    // Combinatorics
+    'binom', 'nCr', 'nPr',
+    // Calculus
+    'partial', 'integral', 'derivative',
+    // Additional symbols
+    'pm', 'mp', 'approx', 'propto', 'cdots', 'ldots', 'dots',
+    'plusminus', 'proportional',
+    // Geometry
+    'triangle', 'angle', 'perp', 'parallel', 'cong', 'sim', 'therefore',
+    'leq', 'geq', 'neq', 'infinity', 'inf',
+    'summation', 'degree', 'degrees', 'deg',
   ]);
 
   let i = 0;
@@ -1581,6 +1693,24 @@ function smartTextToLatex(text) {
   s = s.replace(/\u2260/g, '\\neq').replace(/\u00b1/g, '\\pm');
   s = s.replace(/\u221e/g, '\\infty');
   s = s.replace(/\u222b/g, '\\int').replace(/\u2211/g, '\\sum');
+
+  // 5. Set theory Unicode
+  s = s.replace(/∅/g, '\\emptyset');
+  s = s.replace(/∪/g, '\\cup ').replace(/∩/g, '\\cap ');
+  s = s.replace(/∈/g, '\\in ').replace(/∉/g, '\\notin ');
+  s = s.replace(/⊂/g, '\\subset ').replace(/⊆/g, '\\subseteq ');
+  s = s.replace(/⊃/g, '\\supset ').replace(/⊇/g, '\\supseteq ');
+
+  // 6. Logic & arrow Unicode
+  s = s.replace(/⇒/g, '\\implies ').replace(/⇔/g, '\\iff ');
+  s = s.replace(/→/g, '\\rightarrow ').replace(/←/g, '\\leftarrow ');
+  s = s.replace(/↔/g, '\\iff ');
+  s = s.replace(/∀/g, '\\forall ').replace(/∃/g, '\\exists ');
+
+  // 7. Additional math Unicode
+  s = s.replace(/∓/g, '\\mp ');
+  s = s.replace(/≈/g, '\\approx ').replace(/∝/g, '\\propto ');
+  s = s.replace(/∂/g, '\\partial ');
 
   return s;
 }
