@@ -1201,6 +1201,13 @@
       case 'subscript': {
         const base = astToLatex(node.base);
         const sub = astToLatex(node.sub);
+        // Special handling for log functions: render as \log_{base}(arg) instead of \log(arg)_{base}
+        if (node.base.type === 'function' && (node.base.name === 'log' || node.base.name === 'lg')) {
+          const logName = node.base.name === 'lg' ? '\\lg' : '\\log';
+          const args = node.base.args.map(astToLatex).join(', ');
+          const argsStr = args ? `(${args})` : '';
+          return `${logName}_{${sub}}${argsStr}`;
+        }
         return `${base}_{${sub}}`;
       }
 

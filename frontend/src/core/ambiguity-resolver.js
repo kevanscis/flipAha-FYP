@@ -917,7 +917,7 @@
   });
 
   // --------------------------------------------------------------------------
-  // Rule 18b: Compact trig + trailing number — sinx2 ↔ sin(x^2)
+  // Rule 18b: Compact trig + trailing number — sinx2 ↔ sin(x^2) or sin(x)^2
   // --------------------------------------------------------------------------
   ambiguityRules.push({
     name: 'compact-trig-trailing-power',
@@ -931,8 +931,15 @@
       const [fn, trailing] = node.factors;
       const results = [node];
       const baseArg = fn.args[0];
+      
+      // Interpretation A: Power on the argument — sin(x^2)
       const poweredArg = ASTNode.power(baseArg, trailing);
       results.push(ASTNode.func(fn.name, [poweredArg], fn.modifier, true));
+      
+      // Interpretation B: Power on the function — sin(x)^2
+      const poweredFunc = ASTNode.power(ASTNode.func(fn.name, [baseArg], null, true), trailing);
+      results.push(poweredFunc);
+      
       return deduplicateASTs(results);
     }
   });
@@ -1327,6 +1334,96 @@
             results.push(improperAST);
           }
         }
+      }
+
+      return deduplicateASTs(results);
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Rule 22b: Logarithm base ambiguity (single arg) — log(234)
+  // When log has a multi-digit numeric argument, can be split as log_base(argument)
+  // Alternatives: log₂(34), log₁₀(234), log₂₃(4)
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'log-base-ambiguity-single-arg',
+    match(node) {
+      if (node.type !== 'function') return false;
+      if (node.name !== 'log' && node.name !== 'lg') return false;
+      if (node.args.length !== 1) return false;
+      const arg = node.args[0];
+      // Check if the argument is a number with 2+ digits
+      if (arg.type !== 'number') return false;
+      return arg.value.length > 1 && /^\d+$/.test(arg.value);
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const allDigits = node.args[0].value;
+      const results = [node]; // Original interpretation: log(234)
+
+      // Generate alternative base interpretations
+      for (let baseLen = 1; baseLen < allDigits.length; baseLen++) {
+        const base = parseInt(allDigits.substring(0, baseLen));
+        const argument = parseInt(allDigits.substring(baseLen));
+        
+        // Skip invalid cases (base 0 or 1, argument 0, or very large bases)
+        if (base <= 1 || base > 1000 || argument === 0) continue;
+        
+        // Create log_base(argument)
+        const logWithBaseAndArg = ASTNode.func(node.name, [ASTNode.number(String(argument))], null, true);
+        const logWithSubscript = ASTNode.subscript(logWithBaseAndArg, ASTNode.number(String(base)));
+        results.push(logWithSubscript);
+      }
+      
+      return deduplicateASTs(results);
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // Rule 22: Logarithm base ambiguity — log234
+  // "log234" parses as implicit_mul(log(2), 3, 4)
+  // Alternatives: log₂(34), log₁₀(234), log₂₃(4)
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'log-base-ambiguity',
+    match(node) {
+      if (node.type !== 'implicit_multiply' || node.factors.length < 2) return false;
+      const first = node.factors[0];
+      // Check if first factor is a log function with exactly one numeric argument
+      if (first.type !== 'function' || (first.name !== 'log' && first.name !== 'lg')) return false;
+      if (first.args.length !== 1 || first.args[0].type !== 'number') return false;
+      // Check if remaining factors are all single-digit numbers
+      return node.factors.slice(1).every(f => f.type === 'number' && /^\d$/.test(f.value));
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const logFunc = node.factors[0];
+      const baseDigit = logFunc.args[0].value;
+      const trailingDigits = node.factors.slice(1).map(f => f.value).join('');
+      const allDigits = baseDigit + trailingDigits;
+      
+      const results = [node]; // Original interpretation
+
+      // Generate alternative base interpretations
+      for (let baseLen = 1; baseLen < allDigits.length; baseLen++) {
+        const base = parseInt(allDigits.substring(0, baseLen));
+        const argument = parseInt(allDigits.substring(baseLen));
+        
+        // Skip invalid cases (base 0 or 1, argument 0)
+        if (base <= 1 || base > 1000 || argument === 0) continue;
+        
+        // Create log_base(argument)
+        const logWithBaseAndArg = ASTNode.func(logFunc.name, [ASTNode.number(String(argument))], null, true);
+        const logWithSubscript = ASTNode.subscript(logWithBaseAndArg, ASTNode.number(String(base)));
+        
+        results.push(logWithSubscript);
+      }
+      
+      // Also suggest base 10 (common case)
+      if (allDigits.length > 1) {
+        const log10WithArg = ASTNode.func('log', [ASTNode.number(allDigits)], null, true);
+        const log10WithSubscript = ASTNode.subscript(log10WithArg, ASTNode.number('10'));
+        results.push(log10WithSubscript);
       }
 
       return deduplicateASTs(results);
