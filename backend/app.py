@@ -446,7 +446,7 @@ def health_check():
 
 from analytics import *
 
-app.secret_key = "your-super-secret-key"  # Change this in production
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-only-secret-key-change-me")
 
 # Load routes in another folder
 app.register_blueprint(register_bp)
@@ -557,4 +557,6 @@ def serve_file(filename):
     return "File Not Found", 404
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=True)
+    port = int(os.getenv("PORT", "5000"))
+    debug_mode = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    app.run(host="0.0.0.0", port=port, debug=debug_mode)

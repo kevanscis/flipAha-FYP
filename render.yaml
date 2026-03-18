@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: flipaha-web
+    env: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+      - key: FLASK_DEBUG
+        value: "false"
+      - key: CLOUD_LLM_BASE_URL
+        value: https://text.pollinations.ai/openai
+      - key: CLOUD_LLM_MODEL
+        value: openai
