@@ -22,6 +22,12 @@
       expectAtLeast: ['\\tan(60^{\\circ})'],
     },
     {
+      input: 'sin30o',
+      desc: 'Typed degree shorthand → sin(30°) without trailing o',
+      expectAtLeast: ['\\sin(30^{\\circ})'],
+      expectNotContains: ['\\sin(30)o', '\\sin(30^{\\circ})o'],
+    },
+    {
       input: 'e^2x',
       desc: 'Power trailing → e^{2}x, e^{2x}',
       expectAtLeast: ['e^{2x}'],
@@ -83,8 +89,11 @@
     const missing = test.expectAtLeast.filter(expected => {
       return !suggestions.some(s => s.replace(/\s/g, '') === expected.replace(/\s/g, ''));
     });
+    const forbidden = (test.expectNotContains || []).filter(forbiddenPattern => {
+      return suggestions.some(s => s.replace(/\s/g, '') === forbiddenPattern.replace(/\s/g, ''));
+    });
 
-    const ok = missing.length === 0;
+    const ok = missing.length === 0 && forbidden.length === 0;
     const status = ok ? '✓' : '✗';
 
     console.log(`${status} ${test.input.padEnd(16)} → [${suggestions.length} suggestions]`);
@@ -93,6 +102,9 @@
 
     if (!ok) {
       console.log(`  MISSING: ${missing.join(', ')}`);
+      if (forbidden.length > 0) {
+        console.log(`  FORBIDDEN FOUND: ${forbidden.join(', ')}`);
+      }
       failed++;
     } else {
       passed++;

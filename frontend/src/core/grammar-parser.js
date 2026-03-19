@@ -212,6 +212,18 @@
     const tokens = [];
     let i = 0;
 
+    function prevNonSpaceChar(idx) {
+      let j = idx - 1;
+      while (j >= 0 && /\s/.test(src[j])) j--;
+      return j >= 0 ? src[j] : '';
+    }
+
+    function nextNonSpaceChar(idx) {
+      let j = idx + 1;
+      while (j < src.length && /\s/.test(src[j])) j++;
+      return j < src.length ? src[j] : '';
+    }
+
     while (i < src.length) {
       // Skip whitespace
       if (/\s/.test(src[i])) { i++; continue; }
@@ -409,6 +421,18 @@
       if (src[i] === '°') {
         tokens.push({ type: TokenType.DEGREE, value: '°', pos: i });
         i++; continue;
+      }
+
+      // Common typed degree shorthand: 30o, (45)o
+      if (src[i] === 'o' || src[i] === 'O') {
+        const prev = prevNonSpaceChar(i);
+        const next = nextNonSpaceChar(i);
+        const prevLooksAngular = /[0-9)\}]/.test(prev);
+        const nextIsWordLike = /[a-zA-Z0-9_]/.test(next);
+        if (prevLooksAngular && !nextIsWordLike) {
+          tokens.push({ type: TokenType.DEGREE, value: '°', pos: i });
+          i++; continue;
+        }
       }
 
       // --- LaTeX commands (backslash-prefixed) ---
