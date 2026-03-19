@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = '';
 const CHART_WIDTH = 500;
 const CHART_HEIGHT = 320;
 const dashboardDateFilter = {

@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:5000'; // change to your backend URL
+const API_BASE_URL = ''; // change to your backend URL
 
 const form = document.getElementById('loginForm');
 const usernameInput = document.getElementById('username');

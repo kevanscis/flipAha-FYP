@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = '';
 
 const form = document.getElementById('registerForm');
 const usernameInput = document.getElementById('username');
