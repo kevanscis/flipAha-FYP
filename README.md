@@ -1,3 +1,13 @@
+---
+title: FlipAha
+emoji: 📚
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # FlipAha
 
 FlipAha is a full-stack mathematical education application with:
