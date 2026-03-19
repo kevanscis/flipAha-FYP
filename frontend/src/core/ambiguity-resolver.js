@@ -1812,6 +1812,27 @@
   // MAIN: GENERATE SUGGESTIONS FROM INPUT
   // ==========================================================================
 
+  function getCompactInverseTrigSuggestion(input) {
+    const raw = String(input || '').trim();
+    if (!raw) return '';
+
+    const compact = raw.toLowerCase().replace(/\s+/g, '');
+    const m = compact.match(/^(?:arc|a)?(sin|cos|tan|sec|csc|cot|cosec)([+\-].+)$/i);
+    if (!m) return '';
+
+    const fnRaw = String(m[1] || '').toLowerCase();
+    const fn = fnRaw === 'cosec' ? 'csc' : fnRaw;
+    const argRaw = String(m[2] || '').trim();
+    if (!argRaw) return '';
+
+    const normalizedArg = argRaw
+      .replace(/sqrt\s*\(?\s*([A-Za-z0-9]+)\s*\)?/gi, '\\sqrt{$1}')
+      .replace(/\btheta\b/gi, '\\theta')
+      .replace(/\bpi\b/gi, '\\pi');
+
+    return `\\${fn}^{-1}(${normalizedArg})`;
+  }
+
   /**
    * Parse input and generate all alternative LaTeX interpretations.
    * @param {string} input — raw math text from student
@@ -1826,8 +1847,12 @@
       return [];
     }
 
+    const compactInverseSuggestion = getCompactInverseTrigSuggestion(input);
+
     const { ast, error } = parser.parseMath(input);
-    if (error || !ast) return [];
+    if (error || !ast) {
+      return compactInverseSuggestion ? [compactInverseSuggestion].slice(0, maxSuggestions) : [];
+    }
 
     // Step 1: Render the default parse
     const defaultLatex = parser.astToLatex(ast);
@@ -1867,6 +1892,14 @@
       s => normalizeLatexForComparison(s) !== defaultNorm
     );
     orderedSuggestions.unshift(defaultLatex);
+
+    if (compactInverseSuggestion) {
+      const compactNorm = normalizeLatexForComparison(compactInverseSuggestion);
+      const hasCompact = orderedSuggestions.some(s => normalizeLatexForComparison(s) === compactNorm);
+      if (!hasCompact) {
+        orderedSuggestions.unshift(compactInverseSuggestion);
+      }
+    }
 
     return orderedSuggestions.slice(0, maxSuggestions);
   }

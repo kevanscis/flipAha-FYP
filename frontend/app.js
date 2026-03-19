@@ -1457,8 +1457,14 @@ function handleInputChange() {
             }
 
             const compactPrefix = expr.slice(0, i).replace(/\s+/g, '');
-            const inversePrefixPattern = /(?:(?:\\)?(?:sin|cos|tan|sec|csc|cot|cosec)(?:\^\{?)?|(?:\\)?(?:arc|a)(?:sin|cos|tan))$/i;
-            const isInverseTrig = char === '-' && expr[i + 1] === '1' && inversePrefixPattern.test(compactPrefix);
+            const inversePrefixPattern = /(?:(?:\\)?(?:(?:arc|a)?(?:sin|cos|tan|sec|csc|cot|cosec))(?:\^\{?\s*-?1\s*\}?)?)$/i;
+            let nextIndex = i + 1;
+            while (nextIndex < expr.length && /\s/.test(expr[nextIndex])) {
+              nextIndex += 1;
+            }
+            const nextChar = nextIndex < expr.length ? expr[nextIndex] : '';
+            const signedArgLooksValid = /[A-Za-z0-9_\\(πθα-ωΑ-Ω]/i.test(nextChar);
+            const isInverseTrig = char === '-' && inversePrefixPattern.test(compactPrefix) && signedArgLooksValid;
             if (!isInverseTrig) {
               lastOperatorIndex = i;
             }
