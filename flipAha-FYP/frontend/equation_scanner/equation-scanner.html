@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Equation Scanner - flipAha!</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Oswald:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- KaTeX for rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/katex.min.css">
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+
+    <!-- Cropper.js for image cropping -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom styles -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="row">
+            <div class="col"></div>
+            <div class="col text-center">
+                <h1>
+                    <span class="flip">Flip</span><span class="aha">Aha</span>!
+                </h1>
+                <p>Upload Your Math Equations</p>
+                <div class="header-nav">
+                    <a class="nav-button" href="/"><i class="fas fa-comments"></i> Chat Tutor</a>
+                    <button class="nav-button active" onclick="goImage()"><i class="fas fa-camera"></i> Equation Scanner</button>
+                    <div id="imageHistoryButton">
+                        <a class="nav-button" href="/imageHistory"><i class="fas fa-history"></i> Image History</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col"></div>
+        </header>
+
+        <!-- Tab Navigation -->
+        <div class="tab-bar">
+            <button class="tab-button active" data-tab="upload">Upload & Convert</button>
+            <button class="tab-button" data-tab="editor">Edit LaTeX</button>
+            <button class="tab-button" data-tab="gallery">Gallery</button>
+        </div>
+
+        <!-- Tab Contents -->
+        <main class="tutor-main">
+            <!-- Upload & Convert Tab -->
+            <div class="tab-content active" id="uploadTab">
+                <div class="upload-section">
+                    <div class="file-input-wrapper" id="fileInputWrapper">
+                        <div class="file-input-text">
+                            <span class="icon">📷</span>
+                            <p><strong>Click to upload or drag and drop</strong></p>
+                            <p>PNG, JPG, GIF, BMP up to 10MB</p>
+                        </div>
+                        <input type="file" id="fileInput" accept="image/*">
+                    </div>
+
+                    <div id="uploadError" class="error-message" style="display: none;"></div>
+                    <div id="uploadSuccess" class="success-message" style="display: none;"></div>
+                    <div id="qualityWarnings" class="quality-warnings" style="display: none;">
+                        <h4>⚠️ Quality Warnings</h4>
+                        <ul id="warningsList"></ul>
+                    </div>
+
+                    <div id="previewSection" style="display: none;">
+                        <h3>Preview</h3>
+                        <img id="previewImage" class="preview-image" alt="Preview">
+                        <div class="button-group">
+                            <button id="showCropBtn" class="btn btn-secondary">🔍 Crop Image</button>
+                            <button id="convertBtn" class="btn btn-primary">⚡ Convert to LaTeX</button>
+                        </div>
+
+                        <div id="convertLoading" style="display: none;">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                <p>Converting image to LaTeX...</p>
+                            </div>
+                        </div>
+
+                        <label style="display: flex; gap: 10px; align-items: center; margin-top: 15px;">
+                            <input type="checkbox" id="highAccuracy">
+                            <span>Use High Accuracy Mode (slower)</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LaTeX Editor Tab -->
+            <div class="tab-content" id="editorTab">
+                <div class="editor-section">
+                    <div id="noImageSelected" class="empty-state">
+                        <div class="empty-state-icon">📷</div>
+                        <h3>No Image Selected</h3>
+                        <p>Upload an image and convert it to see the LaTeX editor.</p>
+                    </div>
+
+                    <div id="editorContent" style="display: none;">
+                        <div class="latex-input-group">
+                            <label for="imageNameInput">Image Name:</label>
+                            <input type="text" id="imageNameInput" placeholder="Image name">
+                        </div>
+
+                        <div id="confidenceBadge" style="display: none; margin-bottom: 20px;">
+                            <span style="background: #fff7ed; color: #9a3412; border: 1px solid rgba(244, 98, 58, 0.25); padding: 8px 16px; border-radius: 24px; font-size: 14px; font-weight: 700; display: inline-block;">
+                                Confidence: <span id="confidenceValue">0%</span>
+                            </span>
+                        </div>
+
+                        <div class="latex-input-group">
+                            <label for="latexInput">LaTeX Expression:</label>
+                            <textarea id="latexInput" rows="6" placeholder="Edit your LaTeX here..."></textarea>
+                        </div>
+
+                        <div class="latex-input-group">
+                            <label>Preview:</label>
+                            <div class="preview-box" id="latexPreview">
+                                <p>Preview will appear here</p>
+                            </div>
+                        </div>
+
+                        <div class="rating-section">
+                            <label>Rate Accuracy:</label>
+                            <div class="star-rating" id="starRating">
+                                <span class="star" data-rating="1">☆</span>
+                                <span class="star" data-rating="2">☆</span>
+                                <span class="star" data-rating="3">☆</span>
+                                <span class="star" data-rating="4">☆</span>
+                                <span class="star" data-rating="5">☆</span>
+                            </div>
+                        </div>
+
+                        <div class="button-group" style="margin-top: 20px;">
+                            <button id="saveLatexBtn" class="btn btn-primary">💾 Save Changes</button>
+                            <button id="exportLatexBtn" class="btn btn-secondary">📋 Copy LaTeX</button>
+                        </div>
+
+                        <div id="editorMessage" class="success-message" style="display: none; margin-top: 15px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gallery Tab -->
+            <div class="tab-content" id="galleryTab">
+                <div>
+                    <h2>Your Converted Images</h2>
+                    
+                    <div id="galleryStats" class="gallery-stats" style="display: none;">
+                        <div class="stats-item">
+                            <div class="stats-label">Total Images</div>
+                            <div class="stats-value" id="totalImages">0</div>
+                        </div>
+                    </div>
+
+                    <div id="galleryLoading" style="display: none;">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                            <p>Loading gallery...</p>
+                        </div>
+                    </div>
+
+                    <div id="galleryError" class="error-message" style="display: none;"></div>
+
+                    <div id="galleryEmpty" class="empty-state">
+                        <div class="empty-state-icon">📸</div>
+                        <h3>No Images Yet</h3>
+                        <p>Upload and convert images to build your gallery.</p>
+                    </div>
+
+                    <div class="gallery-grid" id="galleryGrid" style="display: none;"></div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer>
+            <p>&copy; 2026 FlipAha - Math Tutoring Made Easy</p>
+        </footer>
+    </div>
+
+    <!-- Crop Modal -->
+    <div id="cropModal" class="crop-modal">
+        <div class="crop-container">
+            <img id="cropImage" src="" alt="Image to crop">
+        </div>
+        <div class="crop-controls">
+            <button id="cropConfirmBtn" class="btn btn-primary">✂️ Crop & Apply</button>
+            <button id="cropCancelBtn" class="btn btn-secondary">❌ Cancel</button>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/contrib/auto-render.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+    <script src="equation-scanner.js"></script>
+    
+    <!-- Lazy load Cropper.js when needed -->
+    <script>
+        function loadCropperJS() {
+            if (window.Cropper) return;
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js';
+            document.body.appendChild(script);
+        }
+    </script>
+</body>
+</html>
