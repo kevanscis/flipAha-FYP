@@ -355,6 +355,59 @@
   });
 
   // --------------------------------------------------------------------------
+  // Rule 7c: Function argument fraction grouping — cos(-1/2x)
+  // cos(-1/2x) → cos((-1/2)x)
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'func-fraction-grouping',
+    match(node) {
+      if (node.type !== 'function') return false;
+      if (node.args.length !== 1) return false;
+
+      const arg = node.args[0];
+
+      // Match: something like (-1)/(2x)
+      return arg.type === 'binary' &&
+            arg.op === '/' &&
+            arg.right &&
+            arg.right.type === 'implicit_multiply' &&
+            arg.right.factors.length > 1;
+    },
+
+    expand(node) {
+      const { ASTNode } = getParser();
+      const results = [];
+
+      // Original
+      results.push(node);
+
+      const arg = node.args[0];
+      const denomFactors = arg.right.factors;
+
+      const head = denomFactors[0];      // 2
+      const tail = denomFactors.slice(1); // x
+
+      // Build (-1/2)
+      const newFrac = ASTNode.binary('/', arg.left, head);
+
+      // Build (-1/2)x
+      let newArg;
+      if (tail.length === 0) {
+        newArg = newFrac;
+      } else {
+        newArg = ASTNode.implicitMul([newFrac, ...tail]);
+      }
+
+      // Wrap in function
+      const newFunc = ASTNode.func(node.name, [newArg], node.modifier, true);
+
+      results.push(newFunc);
+
+      return deduplicateASTs(results);
+    }
+  });
+
+  // --------------------------------------------------------------------------
   // Rule 8: sqrt alternative — x^(1/2) ↔ sqrt(x)
   // --------------------------------------------------------------------------
   ambiguityRules.push({
