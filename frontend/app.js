@@ -1472,6 +1472,17 @@ function handleInputChange() {
           }
 
           if (char === '*' || char === '/' || char === ',' || char === '=' || /\s/.test(char)) {
+            if (char === '=') {
+              let prevEqIndex = i - 1;
+              while (prevEqIndex >= 0 && /\s/.test(expr[prevEqIndex])) {
+                prevEqIndex -= 1;
+              }
+              const prevEqChar = prevEqIndex >= 0 ? expr[prevEqIndex] : '';
+              // Keep <=, >= and != together as one token so symbol suggestions trigger.
+              if (prevEqChar === '<' || prevEqChar === '>' || prevEqChar === '!') {
+                continue;
+              }
+            }
             if (char === '/') {
               const beforeSlash = expr.slice(0, i);
               const looksLikeTrigPiFraction = /(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)\s*\d*(?:\\pi|π|pi)$/i.test(beforeSlash);
