@@ -826,50 +826,51 @@ function renderMixedTextMath(rawText, bubbleDiv) {
     return;
   }
 
-  const cleaned = trimmed
-    .replace(/\\\$/g, ' ')
-    .replace(/\$/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  // ── Sentence mode: mix plain-text nodes with inline KaTeX spans ──
-  if (looksLikeSentence(cleaned)) {
-    renderSentenceWithInlineMath(cleaned, bubbleDiv);
-    return;
-  }
-
-  // ── Pure math mode: render entirely with KaTeX ──
-  let normalized = '';
-  if (typeof globalThis.grammarParser?.mathToLatexGrammar === 'function') {
-    try {
-      normalized = globalThis.grammarParser.mathToLatexGrammar(cleaned);
-    } catch {
-      normalized = '';
-    }
-  }
-  if (!normalized) {
-    normalized = normalizeToLatex(preservePlainTextSegments(cleaned));
-  }
-
-  try {
-    katex.render(normalized, bubbleDiv, {
-      throwOnError: false,
-      displayMode: false
-    });
-
-    if (bubbleDiv.querySelector('.katex-error')) {
-      const fallback = normalizeToLatex(preservePlainTextSegments(cleaned));
-      try {
-        katex.render(fallback, bubbleDiv, { throwOnError: false, displayMode: false });
-        if (bubbleDiv.querySelector('.katex-error')) {
-          bubbleDiv.textContent = cleaned || raw;
-        }
-      } catch {
-        bubbleDiv.textContent = cleaned || raw;
+  // Helper: split text into alternating [plain, math, plain, math, ...] segments
+  function splitTextAndMathSegments(text) {
+    // Matches $...$, \[...\], \(...\) as math, rest as text
+    const regex = /(\$[^$]+\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\))/g;
+    let result = [];
+    let lastIndex = 0;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        result.push({ type: 'text', value: text.slice(lastIndex, match.index) });
       }
+      result.push({ type: 'math', value: match[0] });
+      lastIndex = regex.lastIndex;
     }
-  } catch {
-    bubbleDiv.textContent = cleaned || raw;
+    if (lastIndex < text.length) {
+      result.push({ type: 'text', value: text.slice(lastIndex) });
+    }
+    return result;
+  }
+
+  // Use the helper to split and render
+  bubbleDiv.innerHTML = '';
+  const segments = splitTextAndMathSegments(trimmed);
+  for (const seg of segments) {
+    if (seg.type === 'text') {
+      // Render plain text as-is
+      bubbleDiv.appendChild(document.createTextNode(seg.value));
+    } else if (seg.type === 'math') {
+      // Remove delimiters for KaTeX
+      let latex = seg.value;
+      if (latex.startsWith('$$') && latex.endsWith('$$')) {
+        latex = latex.slice(2, -2);
+      } else if (latex.startsWith('$') && latex.endsWith('$')) {
+        latex = latex.slice(1, -1);
+      } else if ((latex.startsWith('\\[') && latex.endsWith('\\]')) || (latex.startsWith('\\(') && latex.endsWith('\\)'))) {
+        latex = latex.slice(2, -2);
+      }
+      const span = document.createElement('span');
+      try {
+        katex.render(latex.trim(), span, { throwOnError: false, displayMode: false });
+      } catch {
+        span.textContent = seg.value;
+      }
+      bubbleDiv.appendChild(span);
+    }
   }
 }
 
