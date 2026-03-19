@@ -22,5 +22,4 @@ numpy>=1.26.0,<2
 # pix2text==1.1.6
 # optimum[onnxruntime]==1.23.3
 # opencv-python==4.11.0.86
-# numpy==1.26.4
-gunicorn==21.2.0
+# numpy==1.26.4gunicorn==21.2.0
