@@ -846,18 +846,22 @@ function renderMixedTextMath(rawText, bubbleDiv) {
     return result;
   }
 
-  // If the message contains LaTeX commands (e.g., \tan, \cos, \sin, etc.), treat those tokens as math
+  // Enhanced: treat as math if token looks like math (LaTeX command, or function name, or contains ^, _, digits, parens)
   const latexCmdRegex = /\\[a-zA-Z]+/g;
-  const mathLike = latexCmdRegex.test(trimmed);
+  const mathFuncRegex = /\b(sin|cos|tan|log|ln|exp|sqrt|sec|csc|cot)\b/gi;
+  const mathLike = latexCmdRegex.test(trimmed) || mathFuncRegex.test(trimmed) || /[\^_\d\(\)\[\]\{\}=+\-*/]/.test(trimmed);
 
   bubbleDiv.innerHTML = '';
   if (mathLike && !/[$]|\\\[|\\\(/.test(trimmed)) {
-    // If the message is mostly math (contains LaTeX commands but no $...$ or \[...\]),
-    // split on word boundaries and render LaTeX tokens as math, others as text
-    const tokens = trimmed.split(/(\\[a-zA-Z]+\([^)]*\)|\\[a-zA-Z]+|\s+)/g).filter(Boolean);
+    // Split on whitespace and math boundaries, render math-like tokens with KaTeX
+    const tokens = trimmed.split(/(\s+)/g).filter(Boolean);
     for (const token of tokens) {
-      if (/^\\[a-zA-Z]+/.test(token)) {
-        // Try to render as math
+      // Heuristic: treat as math if it matches function, contains ^, _, digits, parens, or LaTeX command
+      if (
+        /^\\[a-zA-Z]+/.test(token) ||
+        mathFuncRegex.test(token) ||
+        /[\^_\d\(\)\[\]\{\}=+\-*/]/.test(token)
+      ) {
         const span = document.createElement('span');
         try {
           katex.render(token, span, { throwOnError: false, displayMode: false });
