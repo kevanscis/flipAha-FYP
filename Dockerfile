@@ -12,7 +12,9 @@ RUN apt-get update && apt-get install -y \
 
 # Copy the backend code and requirements
 COPY backend/ /app/backend/
-COPY frontend/ /app/frontend/
+
+# Create a mock frontend folder just in case the app expects it
+RUN mkdir -p /app/frontend
 
 # Install Python requirements
 WORKDIR /app/backend
