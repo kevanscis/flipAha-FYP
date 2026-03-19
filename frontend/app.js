@@ -8,9 +8,11 @@ let suggestionContext = { start: 0, end: 0 };
 let inputMethod = 'typing';
 let usedSuggestion = false;
 let suppressSuggestionForValue = '';
+let lastShownSuggestions = [];   // track suggestions shown for ML feedback
+let lastSuggestionQuery = '';    // track the raw input that triggered suggestions
 
 // Configuration
-const API_BASE_URL = 'http://localhost:5000'; // Update with your backend URL
+const API_BASE_URL = ''; // Relative — works in both dev and production
 
 function goHome(){
   window.location.href = `${API_BASE_URL}/`;
@@ -39,10 +41,10 @@ function lockChat() {
   const questionInput = document.getElementById('questionInput');
   const sendBtn = document.getElementById('submitBtn');
   const cameraBtn = document.getElementById('cameraBtn');
+  const llmEquationBtn = document.getElementById('llmEquationBtn');
 
   if (!questionInput || !sendBtn) return;
 
-  questionInput.disabled = true;
   sendBtn.disabled = true;
 
   // Lock camera button when not logged in
@@ -52,20 +54,25 @@ function lockChat() {
     cameraBtn.title = 'Please log in to use the equation scanner';
   }
 
-  questionInput.setAttribute(
-    'placeholder',
-    '\\text{Please log in to get started}'
-  );
+  if (llmEquationBtn) {
+    llmEquationBtn.disabled = true;
+    llmEquationBtn.classList.add('btn-locked');
+    llmEquationBtn.title = 'Please log in to use AI equation drafting';
+  }
+
+  questionInput.contentEditable = 'false';
+  questionInput.classList.add('locked');
+  questionInput.dataset.placeholder = 'Please log in to get started';
 }
 
 function unlockChat() {
   const questionInput = document.getElementById('questionInput');
   const sendBtn = document.getElementById('submitBtn');
   const cameraBtn = document.getElementById('cameraBtn');
+  const llmEquationBtn = document.getElementById('llmEquationBtn');
 
   if (!questionInput || !sendBtn) return;
 
-  questionInput.disabled = false;
   sendBtn.disabled = false;
 
   // Unlock camera button when logged in
@@ -75,10 +82,15 @@ function unlockChat() {
     cameraBtn.title = 'Scan equation from image';
   }
 
-  questionInput.setAttribute(
-    'placeholder',
-    '\\text{Ask your math question... (e.g. 1/2, sin x, x^2)}'
-  );
+  if (llmEquationBtn) {
+    llmEquationBtn.disabled = false;
+    llmEquationBtn.classList.remove('btn-locked');
+    llmEquationBtn.title = 'Draft equation with AI';
+  }
+
+  questionInput.contentEditable = 'true';
+  questionInput.classList.remove('locked');
+  questionInput.dataset.placeholder = 'Ask your math question... (e.g. 1/2, sin x, x^2)';
 }
 
 async function checkAuthStatus() {
@@ -139,6 +151,7 @@ async function checkAuthStatus() {
 }
 
 window.addEventListener('load', checkAuthStatus);
+// [DISABLED] window.addEventListener('load', loadSuggestionFeedbackScores);
 
 async function goLogout() {
   // Clear user-specific session so image history is not accessible after logout
@@ -171,8 +184,8 @@ function getFeedbackUpBtn() { return document.getElementById('suggestionUpBtn');
 function getFeedbackDownBtn() { return document.getElementById('suggestionDownBtn'); }
 
 
-// MathLive element
-let questionInput = null;
+// Input elements
+let questionInput = null;   // the contenteditable div
 let mathFieldReady = false;
 
 // Character Maps
@@ -284,6 +297,45 @@ function cleanInsertedText(s) {
     .trim();
 }
 
+/**
+ * Convert LaTeX to clean, readable plain text for the input field.
+ * e.g. "x^{3}" → "x^3", "\\frac{1}{2}" → "1/2", "\\sin(x)" → "sin(x)"
+ */
+function latexToReadableText(latex) {
+  let text = String(latex || '');
+  // Remove \left and \right
+  text = text.replace(/\\left/g, '').replace(/\\right/g, '');
+  // Fractions: \frac{a}{b} → a/b
+  const replaceFrac = () => {
+    const next = text.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2');
+    const changed = next !== text;
+    text = next;
+    return changed;
+  };
+  while (replaceFrac()) {}
+  // Roots: \sqrt{x} → sqrt(x), \sqrt[n]{x} → sqrt[n](x)
+  text = text.replace(/\\sqrt\[(\d+)\]\{([^}]+)\}/g, 'sqrt[$1]($2)');
+  text = text.replace(/\\sqrt\{([^}]+)\}/g, 'sqrt($1)');
+  // Remove backslash from known functions
+  text = text.replace(/\\(sin|cos|tan|sec|csc|cot|arcsin|arccos|arctan|log|ln)\b/g, '$1');
+  // Greek: \pi → pi, \theta → theta, etc.
+  text = text.replace(/\\(pi|theta|alpha|beta|gamma|delta|lambda|mu|omega|sigma|infty)\b/g, '$1');
+  // Operators
+  text = text.replace(/\\times/g, '*').replace(/\\cdot/g, '*');
+  text = text.replace(/\\pm/g, '+-');
+  text = text.replace(/\\leq/g, '<=').replace(/\\geq/g, '>=');
+  text = text.replace(/\\neq/g, '!=').replace(/\\approx/g, '~=');
+  // Exponents: ^{3} → ^3
+  text = text.replace(/\^\{([^}]+)\}/g, '^$1');
+  // Subscripts: _{3} → _3
+  text = text.replace(/_\{([^}]+)\}/g, '_$1');
+  // Strip remaining braces
+  text = text.replace(/[{}]/g, '');
+  // Clean up whitespace
+  text = text.replace(/\s+/g, ' ').trim();
+  return text;
+}
+
 function normalizeLatexForOverlay(latex) {
   return latex
     .replace(/\\sin/g, '\\mathrm{sin}')
@@ -330,6 +382,72 @@ function normalizeToLatex(input) {
     .replace(/π/g, '\\pi')
     .replace(/(^|[^A-Za-z\\])pi(?=[^A-Za-z]|$)/gi, '$1\\pi');
 
+  // Set theory Unicode symbols
+  s = s
+    .replace(/∅/g, '\\emptyset')
+    .replace(/∪/g, '\\cup ')
+    .replace(/∩/g, '\\cap ')
+    .replace(/∈/g, '\\in ')
+    .replace(/∉/g, '\\notin ')
+    .replace(/⊂/g, '\\subset ')
+    .replace(/⊆/g, '\\subseteq ')
+    .replace(/⊃/g, '\\supset ')
+    .replace(/⊇/g, '\\supseteq ');
+
+  // Set theory keyword aliases
+  s = s.replace(/(^|[^A-Za-z\\])union(?=[^A-Za-z]|$)/gi, '$1\\cup ');
+  s = s.replace(/(^|[^A-Za-z\\])intersect(?:ion)?(?=[^A-Za-z]|$)/gi, '$1\\cap ');
+  s = s.replace(/(^|[^A-Za-z\\])emptyset(?=[^A-Za-z]|$)/gi, '$1\\emptyset ');
+  s = s.replace(/(^|[^A-Za-z\\])subset(?=[^A-Za-z]|$)/gi, '$1\\subset ');
+  s = s.replace(/(^|[^A-Za-z\\])subseteq(?=[^A-Za-z]|$)/gi, '$1\\subseteq ');
+  s = s.replace(/(^|[^A-Za-z\\])supset(?=[^A-Za-z]|$)/gi, '$1\\supset ');
+  s = s.replace(/(^|[^A-Za-z\\])supseteq(?=[^A-Za-z]|$)/gi, '$1\\supseteq ');
+
+  // Logic & arrow Unicode symbols
+  s = s
+    .replace(/⇒/g, '\\implies ')
+    .replace(/⇔/g, '\\iff ')
+    .replace(/→/g, '\\rightarrow ')
+    .replace(/←/g, '\\leftarrow ')
+    .replace(/↔/g, '\\iff ');
+
+  // Logic keyword aliases
+  s = s.replace(/(^|[^A-Za-z\\])forall(?=[^A-Za-z]|$)/gi, '$1\\forall ');
+  s = s.replace(/(^|[^A-Za-z\\])exists(?=[^A-Za-z]|$)/gi, '$1\\exists ');
+  s = s.replace(/(^|[^A-Za-z\\])implies(?=[^A-Za-z]|$)/gi, '$1\\implies ');
+
+  // Additional math Unicode symbols
+  s = s
+    .replace(/±/g, '\\pm ')
+    .replace(/∓/g, '\\mp ')
+    .replace(/≈/g, '\\approx ')
+    .replace(/∝/g, '\\propto ')
+    .replace(/∀/g, '\\forall ')
+    .replace(/∃/g, '\\exists ')
+    .replace(/∂/g, '\\partial ')
+    .replace(/∫/g, '\\int ');
+
+  // Additional keyword aliases
+  s = s.replace(/(^|[^A-Za-z\\])approx(?=[^A-Za-z]|$)/gi, '$1\\approx ');
+  s = s.replace(/(^|[^A-Za-z\\])propto(?=[^A-Za-z]|$)/gi, '$1\\propto ');
+  s = s.replace(/(^|[^A-Za-z\\])partial(?=[^A-Za-z]|$)/gi, '$1\\partial ');
+
+  // Decorator functions: vec(x) → \vec{x}, bar(x) → \bar{x}, etc.
+  s = s.replace(/(^|[^A-Za-z\\])(vec|bar|hat|overline|underline|tilde|dot|ddot)\s*\(([^)]+)\)/gi,
+    (m, pre, func, arg) => `${pre}\\${func.toLowerCase()}{${arg.trim()}}`);
+  s = s.replace(/(^|[^A-Za-z\\])(vec|bar|hat|overline|underline|tilde|dot|ddot)\s+([A-Za-z])/gi,
+    (m, pre, func, arg) => `${pre}\\${func.toLowerCase()}{${arg}}`);
+
+  // Keyword aliases for decorators
+  s = s.replace(/(^|[^A-Za-z\\])vector\s*\(([^)]+)\)/gi, '$1\\vec{$2}');
+  s = s.replace(/(^|[^A-Za-z\\])vector\s+([A-Za-z])/gi, '$1\\vec{$2}');
+  s = s.replace(/(^|[^A-Za-z\\])mean\s*\(([^)]+)\)/gi, '$1\\bar{$2}');
+  s = s.replace(/(^|[^A-Za-z\\])mean\s+([A-Za-z])/gi, '$1\\bar{$2}');
+
+  // Combinatorics: binom(n,r) → \binom{n}{r}
+  s = s.replace(/(^|[^A-Za-z\\])binom\s*\(([^,]+),\s*([^)]+)\)/gi,
+    '$1\\binom{$2}{$3}');
+
   // Logs
   s = s.replace(/\blog\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/g, '\\log_{$1}($2)');
   s = s.replace(/\blog_([A-Za-z0-9]+)\s*\(\s*([^)]+)\s*\)/g, '\\log_{$1}($2)');
@@ -350,11 +468,12 @@ function normalizeToLatex(input) {
 function normalizeSuggestionLatex(value) {
   const raw = String(value ?? '').trim();
   if (!raw) return '';
-  if (raw.startsWith('\\')) return raw;
+  // Already looks like LaTeX — return as-is
+  if (raw.startsWith('\\') || /[_^{}\\]/.test(raw)) return raw;
 
-  if (typeof window.mathToLatex === 'function') {
+  if (typeof globalThis.grammarParser?.mathToLatexGrammar === 'function') {
     try {
-      const normalized = String(window.mathToLatex(raw) ?? '').trim();
+      const normalized = String(globalThis.grammarParser.mathToLatexGrammar(raw) ?? '').trim();
       if (normalized) return normalized;
     } catch {
       // Fall back to local normalizer
@@ -362,6 +481,341 @@ function normalizeSuggestionLatex(value) {
   }
 
   return normalizeToLatex(raw);
+}
+
+function getCustomSuggestionLatex(queryTerm, queryTermText) {
+  const raw = String(queryTerm || '').trim();
+  const text = String(queryTermText || raw).trim();
+  if (!raw && !text) return [];
+
+  const compact = text.toLowerCase().replace(/\s+/g, '');
+  const out = [];
+
+  const normalizeHatBase = (value) => {
+    const v = String(value || '').trim().toLowerCase();
+    if (!v) return 'x';
+    if (v === 'pi' || v === 'π') return '\\pi';
+    if (v === 'theta' || v === 'θ') return '\\theta';
+    return v;
+  };
+
+  if (compact === '<=' || compact === '≤') out.push('\\leq');
+  if (compact === '>=' || compact === '≥') out.push('\\geq');
+  if (compact === '!=' || compact === '≠') out.push('\\neq');
+
+  // Short words that double as math symbols — offer the symbol as a suggestion
+  if (compact === 'in')  out.push('\\in');
+  if (compact === 'or')  out.push('\\cup');   // set union (A or B)
+  if (compact === 'and') out.push('\\cap');    // set intersection (A and B)
+  if (compact === 'not') out.push('\\neg');
+
+  if (/^root(?:\(|\b)|^sqrt$/.test(compact)) out.push('\\sqrt{x}');
+
+  if (/^hat$|^\^$/.test(compact)) out.push('\\hat{x}');
+
+  const hatSuffixMatch = compact.match(/^([a-zα-ωπθ]+)hat$/i);
+  if (hatSuffixMatch) {
+    out.push(`\\hat{${normalizeHatBase(hatSuffixMatch[1])}}`);
+  }
+
+  const hatCaretMatch = compact.match(/^([a-zα-ωπθ]+)\^$/i);
+  if (hatCaretMatch) {
+    out.push(`\\hat{${normalizeHatBase(hatCaretMatch[1])}}`);
+  }
+
+  if (/^absolute$|^abs$|^\|[^|]*\|$/.test(compact)) out.push('\\left|x\\right|');
+
+  if (/^summation$|^sum$|^∑$/.test(compact)) {
+    out.push('\\sum');
+    out.push('\\sum_{i=1}^{n}');
+  }
+
+  const angleMatch = compact.match(/^angle([a-z]{3,})$/i);
+  if (compact === 'angle') out.push('\\angle');
+  if (angleMatch) out.push(`\\angle ${angleMatch[1].toUpperCase()}`);
+
+  const logBaseCompact = compact.match(/^log(\d)(\d+)$/);
+  if (logBaseCompact) {
+    out.push(`\\log_{${logBaseCompact[1]}}(${logBaseCompact[2]})`);
+  }
+
+  return out;
+}
+
+function insertLatexChipIntoInput(latex, sourceMethod) {
+  const normalizedLatex = String(latex || '').trim();
+  if (!normalizedLatex || !questionInput || !mathFieldReady) return false;
+
+  const chip = document.createElement('span');
+  chip.className = 'math-chip';
+  chip.contentEditable = 'false';
+  chip.dataset.latex = normalizedLatex;
+  chip.dataset.text = latexToReadableText(normalizedLatex);
+  try {
+    katex.render(normalizedLatex, chip, { throwOnError: false, displayMode: false });
+  } catch {
+    chip.textContent = chip.dataset.text;
+  }
+
+  questionInput.appendChild(chip);
+  questionInput.appendChild(document.createTextNode('\u200B'));
+  questionInput.focus();
+  inputMethod = sourceMethod || 'typing';
+  handleInputChange();
+  return true;
+}
+
+async function handleGenerateEquationDraft() {
+  const modal = document.getElementById('equationDraftModal');
+  const promptInput = document.getElementById('equationDraftPrompt');
+  const statusEl = document.getElementById('equationDraftStatus');
+
+  if (!modal || !promptInput || !statusEl) return;
+  statusEl.style.display = 'none';
+  statusEl.className = 'equation-draft-status';
+  modal.classList.add('active');
+  setTimeout(() => promptInput.focus(), 0);
+}
+
+function closeEquationDraftModal() {
+  const modal = document.getElementById('equationDraftModal');
+  const promptInput = document.getElementById('equationDraftPrompt');
+  const statusEl = document.getElementById('equationDraftStatus');
+
+  if (!modal || !promptInput || !statusEl) return;
+  modal.classList.remove('active');
+  statusEl.style.display = 'none';
+  statusEl.className = 'equation-draft-status';
+  statusEl.textContent = '';
+  promptInput.value = '';
+}
+
+function setEquationDraftStatus(type, message) {
+  const statusEl = document.getElementById('equationDraftStatus');
+  if (!statusEl) return;
+  statusEl.className = `equation-draft-status ${type}`;
+  statusEl.textContent = message;
+  statusEl.style.display = 'block';
+}
+
+async function submitEquationDraftFromModal() {
+  if (!questionInput || !mathFieldReady || loading) return;
+
+  const promptInput = document.getElementById('equationDraftPrompt');
+  const generateBtn = document.getElementById('equationDraftGenerate');
+  const cancelBtn = document.getElementById('equationDraftCancel');
+  const closeBtn = document.getElementById('equationDraftClose');
+  const trimmedPrompt = String(promptInput?.value || '').trim();
+
+  if (!trimmedPrompt) {
+    setEquationDraftStatus('error', 'Please describe what equation you want.');
+    return;
+  }
+
+  const llmEquationBtn = document.getElementById('llmEquationBtn');
+  if (llmEquationBtn) llmEquationBtn.disabled = true;
+  if (generateBtn) generateBtn.disabled = true;
+  if (cancelBtn) cancelBtn.disabled = true;
+  if (closeBtn) closeBtn.disabled = true;
+  setEquationDraftStatus('loading', 'Generating equation draft...');
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/equation-draft`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: trimmedPrompt })
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Failed to generate equation draft');
+    }
+
+    const plainText = cleanInsertedText(data.plain_text || '');
+    if (plainText) {
+      questionInput.appendChild(document.createTextNode(`${plainText} `));
+    }
+
+    const inserted = insertLatexChipIntoInput(data.latex, 'llm');
+    if (!inserted) {
+      throw new Error('Input field is not ready for insertion');
+    }
+
+    closeEquationDraftModal();
+    if (plainText) {
+      showResponseStatus('success', 'Inserted normal text + equation draft. You can edit before sending.');
+    } else {
+      showResponseStatus('success', 'Equation draft inserted. You can edit before sending.');
+    }
+
+    try {
+      await fetch(`${API_BASE_URL}/api/log-input-method`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input_method: 'llm' })
+      });
+    } catch (_) { /* ignore analytics failure */ }
+  } catch (error) {
+    setEquationDraftStatus('error', 'Error: ' + error.message);
+  } finally {
+    if (llmEquationBtn) llmEquationBtn.disabled = false;
+    if (generateBtn) generateBtn.disabled = false;
+    if (cancelBtn) cancelBtn.disabled = false;
+    if (closeBtn) closeBtn.disabled = false;
+  }
+}
+
+/**
+ * Math keywords — tokens that should always be treated as math, not English.
+ */
+const MATH_KEYWORDS = new Set([
+  'sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'cosec',
+  'asin', 'acos', 'atan', 'arcsin', 'arccos', 'arctan',
+  'sinh', 'cosh', 'tanh',
+  'log', 'ln', 'lg', 'exp', 'sqrt', 'cbrt', 'root', 'abs',
+  'lim', 'sum', 'prod', 'int', 'mod', 'det',
+  'pi', 'theta', 'phi', 'psi', 'rho', 'tau', 'eta',
+  'alpha', 'beta', 'gamma', 'delta', 'lambda', 'mu', 'sigma', 'omega', 'epsilon',
+  'cup', 'cap', 'subset', 'supset', 'subseteq', 'supseteq',
+  'emptyset', 'varnothing', 'notin', 'ni', 'setminus',
+  'union', 'intersection', 'intersect', 'element', 'complement',
+  'forall', 'exists', 'implies', 'iff',
+  'rightarrow', 'leftarrow', 'mapsto',
+  'vec', 'bar', 'hat', 'dot', 'ddot', 'tilde', 'overline', 'underline',
+  'vector', 'mean', 'average',
+  'binom', 'nCr', 'nPr',
+  'partial', 'integral', 'derivative',
+  'pm', 'mp', 'approx', 'propto', 'cdots', 'ldots', 'dots',
+  'plusminus', 'proportional',
+  'perp', 'parallel', 'cong', 'sim',
+  'leq', 'geq', 'neq', 'infinity', 'inf',
+]);
+
+/**
+ * Returns true when `text` looks like a natural-language sentence rather than
+ * a pure math expression.  Instead of maintaining a big word-list, we count
+ * how many multi-letter tokens are NOT recognisable as math.  If there are 2+
+ * such "unknown" words the input is almost certainly a sentence.
+ */
+function looksLikeSentence(text) {
+  const tokens = text.split(/\s+/);
+  let unknownWordCount = 0;
+  for (const t of tokens) {
+    const clean = t.replace(/[.,!?;:]+$/g, '');
+    const lower = clean.toLowerCase();
+    if (clean.length <= 1) continue;                       // single char → variable
+    if (/[0-9]/.test(clean)) continue;                     // contains digits → math
+    if (clean.startsWith('\\')) continue;                   // LaTeX command
+    if (/[+\-*/=^_(){}[\]<>|°±∓≈≠≤≥∞∫∑∏∂∅∪∩∈∉⊂⊆⊃⊇⇒⇔→←↔∀∃∝′π]/.test(clean)) continue;
+    if (MATH_KEYWORDS.has(lower)) continue;                // known math keyword
+    unknownWordCount++;
+  }
+  return unknownWordCount >= 2;
+}
+
+/**
+ * Classify a whitespace-delimited token as 'math' or 'text'.
+ */
+function classifyToken(token) {
+  const clean = token.replace(/[.,!?;:]+$/g, '');
+  const lower = clean.toLowerCase();
+
+  // Single character → math (variable)
+  if (clean.length === 1 && /[A-Za-z]/.test(clean)) return 'math';
+  // Starts with digit or contains digits mixed with symbols → math
+  if (/[0-9]/.test(clean)) return 'math';
+  // Contains math operator / bracket / Unicode math symbol
+  if (/[+\-*/=^_(){}[\]<>|°±∓≈≠≤≥∞∫∑∏∂∅∪∩∈∉⊂⊆⊃⊇⇒⇔→←↔∀∃∝′π]/.test(clean)) return 'math';
+  // Starts with backslash → LaTeX command
+  if (clean.startsWith('\\')) return 'math';
+  // Known math keyword
+  if (MATH_KEYWORDS.has(lower)) return 'math';
+  // Everything else is text
+  return 'text';
+}
+
+/**
+ * Render a math segment (one or more consecutive math tokens) via KaTeX.
+ * Falls back to plain text on error.
+ */
+function renderMathSegment(mathText, parent) {
+  const span = document.createElement('span');
+  span.style.display = 'inline';
+
+  // If the text already contains LaTeX commands (backslash + letter, e.g.
+  // \circ, \sin, \frac) it came from smartTextToLatex / a math-chip and is
+  // already valid LaTeX — pass it straight to KaTeX.  Otherwise convert
+  // raw human text via the grammar parser first.
+  const alreadyLatex = /\\[a-zA-Z]/.test(mathText);
+
+  let latex = '';
+  if (alreadyLatex) {
+    latex = mathText;                       // use as-is
+  } else if (typeof globalThis.grammarParser?.mathToLatexGrammar === 'function') {
+    try { latex = globalThis.grammarParser.mathToLatexGrammar(mathText); } catch { latex = ''; }
+  }
+  if (!latex) {
+    latex = normalizeToLatex(mathText);
+  }
+
+  try {
+    katex.render(latex, span, { throwOnError: false, displayMode: false });
+    if (span.querySelector('.katex-error')) {
+      // Fallback: try regex normalizer only
+      const fallback = normalizeToLatex(mathText);
+      try {
+        katex.render(fallback, span, { throwOnError: false, displayMode: false });
+        if (span.querySelector('.katex-error')) {
+          span.textContent = mathText;
+        }
+      } catch { span.textContent = mathText; }
+    }
+  } catch {
+    span.textContent = mathText;
+  }
+
+  parent.appendChild(span);
+}
+
+/**
+ * Render a sentence that contains inline math.  English words are kept as
+ * plain text nodes; math tokens are grouped and rendered with KaTeX.
+ */
+function renderSentenceWithInlineMath(text, container) {
+  container.innerHTML = '';
+
+  // Tokenise preserving whitespace boundaries
+  const parts = text.split(/(\s+)/);
+  let mathBuf = '';
+
+  function flushMath() {
+    if (!mathBuf) return;
+    renderMathSegment(mathBuf.trim(), container);
+    mathBuf = '';
+  }
+
+  for (const part of parts) {
+    // Whitespace – belongs to whichever segment is active
+    if (/^\s+$/.test(part)) {
+      if (mathBuf) {
+        mathBuf += part;         // keep space inside math group
+      } else {
+        container.appendChild(document.createTextNode(part));
+      }
+      continue;
+    }
+
+    const type = classifyToken(part);
+    if (type === 'math') {
+      mathBuf += (mathBuf ? ' ' : '') + part;
+    } else {
+      flushMath();
+      container.appendChild(document.createTextNode(part));
+    }
+  }
+  flushMath();  // flush any trailing math
 }
 
 function renderMixedTextMath(rawText, bubbleDiv) {
@@ -378,7 +832,24 @@ function renderMixedTextMath(rawText, bubbleDiv) {
     .replace(/\s+/g, ' ')
     .trim();
 
-  const normalized = normalizeToLatex(preservePlainTextSegments(cleaned));
+  // ── Sentence mode: mix plain-text nodes with inline KaTeX spans ──
+  if (looksLikeSentence(cleaned)) {
+    renderSentenceWithInlineMath(cleaned, bubbleDiv);
+    return;
+  }
+
+  // ── Pure math mode: render entirely with KaTeX ──
+  let normalized = '';
+  if (typeof globalThis.grammarParser?.mathToLatexGrammar === 'function') {
+    try {
+      normalized = globalThis.grammarParser.mathToLatexGrammar(cleaned);
+    } catch {
+      normalized = '';
+    }
+  }
+  if (!normalized) {
+    normalized = normalizeToLatex(preservePlainTextSegments(cleaned));
+  }
 
   try {
     katex.render(normalized, bubbleDiv, {
@@ -387,7 +858,15 @@ function renderMixedTextMath(rawText, bubbleDiv) {
     });
 
     if (bubbleDiv.querySelector('.katex-error')) {
-      bubbleDiv.textContent = cleaned || raw;
+      const fallback = normalizeToLatex(preservePlainTextSegments(cleaned));
+      try {
+        katex.render(fallback, bubbleDiv, { throwOnError: false, displayMode: false });
+        if (bubbleDiv.querySelector('.katex-error')) {
+          bubbleDiv.textContent = cleaned || raw;
+        }
+      } catch {
+        bubbleDiv.textContent = cleaned || raw;
+      }
     }
   } catch {
     bubbleDiv.textContent = cleaned || raw;
@@ -396,18 +875,16 @@ function renderMixedTextMath(rawText, bubbleDiv) {
 
 function getInputTextValue() {
   if (!questionInput) return '';
-
-  // Avoid calling unsupported formats on MathLive (some builds throw
-  // "Unexpected format \"text\"" inside their internals). Instead
-  // rely on LaTeX output which is stable across versions and convert
-  // it to a readable/plain form for our suggestion pipeline.
-  try {
-    const latexValue = questionInput.getValue();
-    return latexToSmartText(latexValue || '');
-  } catch (e) {
-    // If MathLive changed API or the field isn't ready, return empty.
-    return '';
-  }
+  let text = '';
+  questionInput.childNodes.forEach(node => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      // Strip zero-width spaces used for cursor positioning
+      text += (node.textContent || '').replace(/\u200B/g, '');
+    } else if (node.classList && node.classList.contains('math-chip')) {
+      text += node.dataset.text || '';
+    }
+  });
+  return text;
 }
 
 // Message Rendering
@@ -458,41 +935,210 @@ function showResponseStatus(type, message) {
   }
 }
 
-// Initialize MathLive when DOM is ready
+// Initialize contenteditable math input
 function initializeMathField() {
   questionInput = document.getElementById('questionInput');
   
   if (!questionInput) {
-    console.error('MathField not found');
+    console.error('Math input field not found');
     return;
   }
-  
-  mathFieldReady = true;
 
-  // Keep input disabled until authentication is confirmed.
-  
-  // Configure MathLive - smart mode is set via HTML attribute
-  questionInput.mathVirtualKeyboardPolicy = 'manual';
-
-  // In smart mode, MathLive can treat a plain 'x' as a multiplication shortcut.
-  // Keep 'x' as a variable when the user types it.
-  try {
-    const existingShortcuts = questionInput.inlineShortcuts || {};
-    questionInput.inlineShortcuts = {
-      ...existingShortcuts,
-      x: 'x',
-      X: 'X'
-    };
-  } catch {
-    // Ignore if inlineShortcuts is not supported in this MathLive build
-  }
-  
-  // Handle input changes for suggestions
-  questionInput.addEventListener('input', () => {
+  // Listen for input changes
+  questionInput.addEventListener('input', function() {
+    // Clean up: if contenteditable gets <br> or <div>, normalize
+    cleanContentEditable();
     handleInputChange();
   });
-  
-  console.log('MathLive field initialized with smart mode');
+
+  // Submit on Enter, prevent newlines
+  questionInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      document.getElementById('questionForm').dispatchEvent(
+        new Event('submit', { cancelable: true })
+      );
+    }
+  });
+
+  // Paste as plain text only
+  questionInput.addEventListener('paste', function(e) {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+    document.execCommand('insertText', false, text);
+  });
+
+  // Click on a math chip to open inline editor
+  questionInput.addEventListener('click', function(e) {
+    const chip = e.target.closest('.math-chip');
+    if (!chip || !questionInput.contains(chip)) return;
+    openChipEditor(chip);
+  });
+
+  mathFieldReady = true;
+  console.log('Math input field initialized');
+}
+
+// Remove stray <br>/<div> that contenteditable can insert
+function cleanContentEditable() {
+  if (!questionInput) return;
+  const brs = questionInput.querySelectorAll('br');
+  brs.forEach(br => br.remove());
+  // Unwrap any <div> wrappers (some browsers wrap lines in divs)
+  const divs = questionInput.querySelectorAll('div');
+  divs.forEach(div => {
+    while (div.firstChild) div.parentNode.insertBefore(div.firstChild, div);
+    div.remove();
+  });
+}
+
+/**
+ * Open an inline edit field on a math chip so the user can modify
+ * the expression in-place (e.g. change the exponent from 3 to 2).
+ * On Enter or blur, the edited text is re-rendered as a new chip.
+ */
+function openChipEditor(chip) {
+  const readableText = chip.dataset.text || latexToReadableText(chip.dataset.latex || '');
+
+  // Create a small inline input replacing the chip
+  const editor = document.createElement('input');
+  editor.type = 'text';
+  editor.className = 'chip-editor';
+  editor.value = readableText;
+  // Size it to fit the text
+  editor.style.width = Math.max(readableText.length * 0.7, 2) + 'em';
+
+  // Replace chip with editor
+  chip.parentNode.replaceChild(editor, chip);
+  editor.focus();
+  editor.select();
+
+  const commitEdit = () => {
+    // Prevent double-commit
+    if (editor._committed) return;
+    editor._committed = true;
+
+    const newText = editor.value.trim();
+    if (!newText) {
+      // If emptied, just remove the editor
+      editor.remove();
+      questionInput.normalize();
+      prevInputValue = getInputTextValue();
+      handleInputChange();
+      return;
+    }
+
+    // Convert edited text to LaTeX and create a new chip
+    let newLatex;
+    try {
+      newLatex = smartTextToLatex(newText);
+    } catch {
+      newLatex = newText;
+    }
+
+    const newChip = document.createElement('span');
+    newChip.className = 'math-chip';
+    newChip.contentEditable = 'false';
+    newChip.dataset.latex = newLatex;
+    newChip.dataset.text = newText;
+    try {
+      katex.render(newLatex, newChip, { throwOnError: false, displayMode: false });
+    } catch {
+      newChip.textContent = newText;
+    }
+
+    editor.parentNode.replaceChild(newChip, editor);
+
+    // Ensure cursor can be placed after the chip
+    if (!newChip.nextSibling || newChip.nextSibling.nodeType !== Node.TEXT_NODE) {
+      const spacer = document.createTextNode('\u200B');
+      if (newChip.nextSibling) {
+        questionInput.insertBefore(spacer, newChip.nextSibling);
+      } else {
+        questionInput.appendChild(spacer);
+      }
+    }
+
+    // Place cursor after chip
+    try {
+      const target = newChip.nextSibling;
+      const range = document.createRange();
+      const sel = window.getSelection();
+      const off = (target.textContent || '').startsWith('\u200B') ? 1 : 0;
+      range.setStart(target, off);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch { /* fallback */ }
+
+    prevInputValue = getInputTextValue();
+    suppressSuggestionForValue = '';
+    handleInputChange();
+  };
+
+  // Commit on Enter
+  editor.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      commitEdit();
+    }
+    if (e.key === 'Escape') {
+      // Cancel — restore original chip
+      editor._committed = true;
+      editor.parentNode.replaceChild(chip, editor);
+      questionInput.focus();
+    }
+  });
+
+  // Commit on blur (click away)
+  editor.addEventListener('blur', () => {
+    // Small delay so Enter handler fires first
+    setTimeout(commitEdit, 50);
+  });
+}
+
+// Get the current LaTeX representation of the input
+function getInputLatex() {
+  if (!questionInput) return '';
+  const parts = [];
+  questionInput.childNodes.forEach(node => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const t = (node.textContent || '').replace(/\u200B/g, '');
+      if (t.trim()) {
+        try { parts.push(smartTextToLatex(t)); } catch { parts.push(t); }
+      }
+    } else if (node.classList && node.classList.contains('math-chip')) {
+      const chipLatex = node.dataset.latex || '';
+      if (chipLatex) parts.push(chipLatex);
+    }
+  });
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+// Get caret offset in logical text coordinates
+function getCaretOffset() {
+  const sel = window.getSelection();
+  if (!sel.rangeCount || !questionInput.contains(sel.anchorNode)) {
+    return getInputTextValue().length;
+  }
+  const range = sel.getRangeAt(0);
+  let offset = 0;
+  for (const node of questionInput.childNodes) {
+    if (node === range.startContainer || node.contains(range.startContainer)) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return offset + range.startOffset;
+      }
+      // Cursor is at the chip boundary
+      return offset + (node.dataset ? (node.dataset.text || '').length : 0);
+    }
+    if (node.nodeType === Node.TEXT_NODE) {
+      offset += (node.textContent || '').length;
+    } else if (node.classList && node.classList.contains('math-chip')) {
+      offset += (node.dataset.text || '').length;
+    }
+  }
+  return offset;
 }
 
 // Wait for page load
@@ -507,11 +1153,12 @@ async function handleSubmitQuestion(e) {
   e.preventDefault();
 
   if (!questionInput || !mathFieldReady) {
-    console.error('MathField not ready');
+    console.error('Math input not ready');
     return;
   }
 
-  const rawQuestion = questionInput.getValue('latex-expanded').trim();
+  const rawText = getInputTextValue().trim();
+  const rawQuestion = rawText ? getInputLatex() : '';
   const question = normalizeMathLiveArtifacts(rawQuestion).trim();
   
   if (!question) {
@@ -523,15 +1170,26 @@ async function handleSubmitQuestion(e) {
   addMessage({ text: question, role: 'user' });
   
   // Clear input
-  questionInput.setValue('');
+  questionInput.innerHTML = '';
   smartRanges = [];
   prevInputValue = '';
 
   // Set loading state
   loading = true;
   submitBtn.disabled = true;
-  questionInput.disabled = true;
+  questionInput.contentEditable = 'false';
+  questionInput.classList.add('locked');
   showResponseStatus('loading', 'Processing your question...');
+
+  // Implicit negative signal: if suggestions were shown but user typed without
+  // clicking any of them, treat it as a rejection of all shown suggestions.
+  if (lastShownSuggestions.length > 0 && !usedSuggestion) {
+    if (typeof globalThis.suggestionRanker?.addFeedback === 'function') {
+      globalThis.suggestionRanker.addFeedback(
+        lastSuggestionQuery, '', lastShownSuggestions, 0
+      );
+    }
+  }
 
   // Add loading message
   const loadingMsgIndex = messages.length;
@@ -580,7 +1238,8 @@ async function handleSubmitQuestion(e) {
   } finally {
     loading = false;
     submitBtn.disabled = false;
-    questionInput.disabled = false;
+    questionInput.contentEditable = 'true';
+    questionInput.classList.remove('locked');
     questionInput.focus();
     inputMethod = 'typing';
     usedSuggestion = false;
@@ -637,37 +1296,52 @@ function updateSmartRanges(prevValue, nextValue) {
 function handleInputChange() {
   if (!questionInput || !mathFieldReady) return;
 
-  if (!usedSuggestion){
+  // Reset usedSuggestion once the user starts typing/backspacing again
+  if (usedSuggestion) {
+    // The first call right after selectSuggestion() sets prevInputValue;
+    // once the value actually changes (user typed/backspaced), reset the flag.
+    const currentVal = getInputTextValue();
+    if (currentVal !== prevInputValue) {
+      usedSuggestion = false;
+      inputMethod = 'typing';
+    }
+  } else {
     inputMethod = 'typing';
   }
   
-  // Get LaTeX representation - our rules now match LaTeX format
-  const latexValue = questionInput.getValue();
+  // Get text value from input
   const textValue = getInputTextValue();
+  let latexValue = '';
+  try {
+    latexValue = textValue ? smartTextToLatex(textValue) : '';
+  } catch (e) {
+    console.warn('smartTextToLatex error:', e);
+    latexValue = textValue;
+  }
   const searchValue = textValue;
   const normalizedSearchValue = String(searchValue || '').replace(/\s+/g, '');
 
   if (suppressSuggestionForValue && normalizedSearchValue === suppressSuggestionForValue) {
+    // Still matches the just-inserted suggestion — suppress, but update state
+    prevInputValue = searchValue;
     hideSuggestions();
     return;
   }
-  if (suppressSuggestionForValue && normalizedSearchValue !== suppressSuggestionForValue) {
-    suppressSuggestionForValue = '';
-  }
+  // Clear suppression as soon as the value diverges
+  suppressSuggestionForValue = '';
   
   console.log('LaTeX value:', latexValue); // Debug
   console.log('Search value:', searchValue); // Debug
   
-  const caret = searchValue.length;
+  // Use actual cursor position from contenteditable
+  const caret = getCaretOffset();
 
   smartRanges = updateSmartRanges(prevInputValue, searchValue);
   prevInputValue = searchValue;
 
-  renderOverlay();
-
   // Extract the current word/phrase for suggestions
   // Match more characters including backslash for LaTeX commands
-  const mathSymbolRegex = /[A-Za-z0-9_\\^/+\-*(),{}<>=!|√∛∜×·⋅≤≥≠±∞∪∩≈∫∑⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ⃗αβγδΔθλμωΩπ°'"]/;
+  const mathSymbolRegex = /[A-Za-z0-9_\\^/+\-*(),{}<>=!|.√∛∜×·⋅≤≥≠±∞∪∩≈∫∑⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ⃗αβγδΔθλμωΩπ°'"]/;
   const isChar = (ch) => mathSymbolRegex.test(ch);
 
   // Get current word/phrase
@@ -677,28 +1351,26 @@ function handleInputChange() {
   while (end < searchValue.length && isChar(searchValue[end])) end += 1;
   
   let query = searchValue.slice(start, end).trim();
-  const queryText = latexToSmartText(query);
+  let queryText = '';
+  try {
+    queryText = latexToSmartText(query);
+  } catch (e) {
+    console.warn('latexToSmartText error:', e);
+    queryText = query;
+  }
   
-  // Clean query from placeholders and empty groups to ensure better matching
-  // This allows "log\placeholder" to match the "log" rule
-  // Also remove trailing subscripts/superscripts that might be artifacts of smart mode
-  query = query.replace(/\\placeholder(\{[^}]*\})?/g, '')
-               .replace(/\{\}/g, '')
-               .replace(/[_^]$/, ''); // Remove dangling subscript/superscript indicators
-
-  // MathLive builds structured constructs with placeholders (e.g. "\\sum_{...}^{...}").
-  // For suggestions, we usually want to match the base command.
-  if (query.startsWith('\\sum')) query = '\\sum';
-  if (query.startsWith('\\int')) query = '\\int';
+  // Clean query from empty groups
+  query = query.replace(/\{\}/g, '')
+               .replace(/_$/, '');
                
-  // If query became empty or just backslash, check if we had content before
-  if (query === '\\' || query === '') {
-     // If we stripped everything, maybe just use the original without placeholder to be safe, 
-     // or let it be empty (which will hide suggestions)
+  // If query became empty, just backslash, or a bare operator, treat as empty
+  if (query === '\\' || query === '' || /^[+\-*/=,\s]+$/.test(query)) {
+    query = '';
   }
 
   console.log('Query for suggestions:', query); // Debug
 
+  try {
   if (query.length > 0) {
     // Extract the actual term used for suggestions (after operators)
     // Split on operators ONLY if they're at the top level (not inside parentheses)
@@ -726,7 +1398,7 @@ function handleInputChange() {
               prevIndex -= 1;
             }
             const prevNonSpace = prevIndex >= 0 ? expr[prevIndex] : '';
-            const isUnarySign = prevIndex < 0 || /[+\-*/=,(]/.test(prevNonSpace);
+            const isUnarySign = prevIndex < 0 || /[+\-*/=,(^{]/.test(prevNonSpace);
             if (isUnarySign) {
               continue;
             }
@@ -809,14 +1481,37 @@ function handleInputChange() {
     };
     
     const compactTrigExpression = /^(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)(?!\s*\().+/i.test(query);
+    const fullQueryCompactForRatio = String(queryText || query || '')
+      .replace(/\\/g, '')
+      .replace(/\s+/g, '')
+      .toLowerCase();
+    const fullSimpleTrigRatioMatch = fullQueryCompactForRatio.match(/^sin([a-z0-9πθ]+)\/cos\1$/i);
+    const fullParenTrigRatioMatch = fullQueryCompactForRatio.match(/^sin\(([^)]+)\)\/cos\(\1\)$/i);
+    const hasFullTrigRatioIntent = Boolean(fullSimpleTrigRatioMatch || fullParenTrigRatioMatch);
     const lastTopLevelOperatorIndex = findLastTopLevelOperatorIndex(query);
     const hasTopLevelPlusMinus = lastTopLevelOperatorIndex !== -1;
 
     if (!compactTrigExpression || hasTopLevelPlusMinus) {
       if (lastTopLevelOperatorIndex !== -1) {
-        queryTerm = query.substring(lastTopLevelOperatorIndex + 1).trim();
-        termStartOffset = lastTopLevelOperatorIndex + 1;
-        queryTermText = latexToSmartText(queryTerm);
+        const afterOp = query.substring(lastTopLevelOperatorIndex + 1).trim();
+        if (afterOp.length > 0) {
+          // There is a term after the operator — use it
+          queryTerm = afterOp;
+          termStartOffset = lastTopLevelOperatorIndex + 1;
+          queryTermText = latexToSmartText(queryTerm);
+        } else {
+          // Trailing operator (e.g. "10x +") — use the term before the operator
+          // but only if it isn't already resolved as a math chip in the input
+          const termBefore = query.substring(0, lastTopLevelOperatorIndex).trim();
+          const isResolvedChip = Array.from(questionInput.childNodes).some(
+            n => n.classList && n.classList.contains('math-chip') && (n.dataset.text || '') === termBefore
+          );
+          if (!isResolvedChip) {
+            queryTerm = termBefore;
+            termStartOffset = 0;
+            queryTermText = latexToSmartText(queryTerm);
+          }
+        }
       }
     }
 
@@ -826,7 +1521,7 @@ function handleInputChange() {
       const isCompactTrigAmbiguity = /^(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)\s*\d*[a-zα-ω\\()]+\s*[+\-].+/i.test(trailingTrigTerm);
       const leadingSegment = query.substring(termStartOffset, trailingTrigStart).trim();
       const hasLeadingNumericFactor = /^[-+]?\d+(?:\.\d+)?(?:\s*\/\s*[-+]?\d+(?:\.\d+)?)?$/.test(leadingSegment);
-      const shouldPreferTrailingTrig = (trailingTrigStart > termStartOffset && !hasLeadingNumericFactor) || isCompactTrigAmbiguity;
+      const shouldPreferTrailingTrig = !hasFullTrigRatioIntent && ((trailingTrigStart > termStartOffset && !hasLeadingNumericFactor) || isCompactTrigAmbiguity);
 
       if (shouldPreferTrailingTrig) {
         queryTerm = trailingTrigTerm;
@@ -836,11 +1531,51 @@ function handleInputChange() {
     }
     
     // Match rules directly with LaTeX input (use extracted term, not full query)
-    let suggestions = getLatexSuggestions(queryTerm).filter(s => {
-      if (s === queryTerm) return false;
-      if (searchValue.includes(s)) return false;
-      return true;
-    });
+    // --- Grammar-based suggestions (ambiguity resolver) ---
+    let grammarSuggestions = [];
+    if (typeof globalThis.ambiguityResolver?.generateSuggestions === 'function') {
+      try {
+        grammarSuggestions = globalThis.ambiguityResolver.generateSuggestions(queryTerm, 8)
+          .filter(s => s && s !== queryTerm && !searchValue.includes(s));
+      } catch (e) {
+        console.warn('Grammar parser error:', e);
+      }
+    }
+
+    const intentCompact = String(queryTermText || queryTerm || '')
+      .toLowerCase()
+      .replace(/\s+/g, '');
+    const strictSymbolIntent = ['<=', '≤', '>=', '≥', '!=', '≠'].includes(intentCompact);
+    const strictHatIntent = /^hat$|^\^$|^[a-zα-ωπθ]+hat$|^[a-zα-ωπθ]+\^$/i.test(intentCompact);
+
+    // Filter out suggestions containing placeholder '?' (incomplete parse artifacts)
+    let suggestions = grammarSuggestions.filter(s => !s.includes('?'));
+    const customSuggestions = getCustomSuggestionLatex(queryTerm, queryTermText);
+    if (customSuggestions.length) {
+      suggestions = [...customSuggestions, ...suggestions];
+    }
+
+    if ((strictSymbolIntent || strictHatIntent) && customSuggestions.length) {
+      suggestions = customSuggestions.slice();
+    }
+
+    const trigRatioCompact = String(queryTermText || queryTerm || '')
+      .replace(/\\/g, '')
+      .replace(/\s+/g, '')
+      .toLowerCase();
+    const simpleTrigRatioMatch = trigRatioCompact.match(/^sin([a-z0-9πθ]+)\/cos\1$/i);
+    const parenTrigRatioMatch = trigRatioCompact.match(/^sin\(([^)]+)\)\/cos\(\1\)$/i);
+    const trigRatioArg = simpleTrigRatioMatch?.[1] || parenTrigRatioMatch?.[1] || fullSimpleTrigRatioMatch?.[1] || fullParenTrigRatioMatch?.[1] || '';
+    const hasTrigRatioIntent = Boolean(simpleTrigRatioMatch || parenTrigRatioMatch || hasFullTrigRatioIntent);
+    if (hasTrigRatioIntent) {
+      const normalizedArg = String(trigRatioArg || 'x')
+        .replace(/π/g, '\\pi')
+        .replace(/θ/g, '\\theta')
+        .replace(/\bpi\b/gi, '\\pi')
+        .replace(/\btheta\b/gi, '\\theta');
+      const tanIdentity = `\\tan(${normalizedArg || 'x'})`;
+      suggestions = [tanIdentity, ...suggestions.filter(s => String(s) !== tanIdentity)];
+    }
 
     const normalizeInverseIntentSource = (value) => String(value || '')
       .toLowerCase()
@@ -865,8 +1600,13 @@ function handleInputChange() {
         return /\^\{\s*[−-]?1\s*\}|\^[−-]?1|⁻¹/.test(text);
       });
 
+      const normalizedArg = String(rawArg || '')
+        .replace(/sqrt\s*\(?\s*([A-Za-z0-9]+)\s*\)?/gi, '\\sqrt{$1}')
+        .replace(/\btheta\b/gi, '\\theta')
+        .replace(/\bpi\b/gi, '\\pi');
+
       const fallbackInverse = hasTypedArg
-        ? `\\${normalizedFunc}^{-1}(${rawArg})`
+        ? `\\${normalizedFunc}^{-1}(${normalizedArg})`
         : `\\${normalizedFunc}^{-1}(x)`;
 
       if (!suggestions.includes(fallbackInverse)) {
@@ -901,23 +1641,7 @@ function handleInputChange() {
       suggestions = suggestions.filter(s => /(?:^|\\)(sin|cos|tan|sec|csc|cot|cosec)\b/i.test(String(s)));
     }
 
-    if (suggestions.length === 0 && typeof window.getLayer2Suggestions === 'function') {
-      const layer2Input = queryText || textValue || query;
-      const layer2Candidates = window.getLayer2Suggestions(layer2Input, {
-        curriculum: 'o-level',
-        maxSuggestions: 5
-      });
-
-      const layer2Latex = layer2Candidates
-        .map(candidate => {
-          const value = candidate.text || candidate.display || '';
-          return window.mathToLatex ? window.mathToLatex(value) : value;
-        })
-        .filter(s => s && s !== query && !searchValue.includes(s));
-
-      suggestions = [...new Set(layer2Latex)].slice(0, 5);
-    }
-    
+    suggestions = Array.from(new Set(suggestions));
     console.log('Suggestions found:', suggestions); // Debug
 
     if (suggestions.length > 0) {
@@ -955,6 +1679,18 @@ function handleInputChange() {
         queryTerm,
         queryTermText
       };
+      // Re-rank suggestions using XGBoost-style GBDT model,
+      // but preserve strict symbol and trig-identity intent ordering.
+      const bypassRanking = strictSymbolIntent || strictHatIntent || hasTrigRatioIntent;
+      if (!bypassRanking && typeof globalThis.suggestionRanker?.rankSuggestions === 'function') {
+        try {
+          suggestions = globalThis.suggestionRanker.rankSuggestions(queryTerm, suggestions);
+        } catch (e) {
+          console.warn('Suggestion ranker error:', e);
+        }
+      }
+      lastShownSuggestions = suggestions.slice();
+      lastSuggestionQuery = queryTerm;
       showSuggestions(suggestions);
     } else {
       hideSuggestions();
@@ -962,10 +1698,10 @@ function handleInputChange() {
   } else {
     hideSuggestions();
   }
-}
-
-function renderOverlay() {
-  // MathLive handles its own rendering
+  } catch (e) {
+    console.warn('Suggestion processing error:', e);
+    hideSuggestions();
+  }
 }
 
 function showSuggestions(suggestions) {
@@ -1011,9 +1747,33 @@ function preservePlainTextSegments(value) {
   const knownMathWords = new Set([
     'sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'cosec',
     'asin', 'acos', 'atan', 'arcsin', 'arccos', 'arctan',
-    'log', 'ln', 'sqrt', 'root', 'pi', 'theta',
-    'alpha', 'beta', 'gamma', 'delta', 'lambda', 'mu', 'sigma', 'omega',
-    'x', 'y', 'z'
+    'sinh', 'cosh', 'tanh',
+    'log', 'ln', 'lg', 'exp', 'sqrt', 'cbrt', 'root', 'abs',
+    'lim', 'sum', 'prod', 'int', 'mod', 'det',
+    'pi', 'theta', 'phi', 'psi', 'rho', 'tau', 'eta',
+    'alpha', 'beta', 'gamma', 'delta', 'lambda', 'mu', 'sigma', 'omega', 'epsilon',
+    'x', 'y', 'z', 'n', 'r', 'k', 'i', 'j', 'a', 'b', 'c', 'd', 'e', 'f',
+    // Set theory
+    'cup', 'cap', 'subset', 'supset', 'subseteq', 'supseteq',
+    'emptyset', 'varnothing', 'notin', 'ni', 'setminus',
+    'union', 'intersection', 'intersect', 'element', 'complement',
+    // Logic & arrows
+    'forall', 'exists', 'implies', 'iff',
+    'rightarrow', 'leftarrow', 'mapsto',
+    // Vectors & decorators
+    'vec', 'bar', 'hat', 'dot', 'ddot', 'tilde', 'overline', 'underline',
+    'vector', 'mean', 'average',
+    // Combinatorics
+    'binom', 'nCr', 'nPr',
+    // Calculus
+    'partial', 'integral', 'derivative',
+    // Additional symbols
+    'pm', 'mp', 'approx', 'propto', 'cdots', 'ldots', 'dots',
+    'plusminus', 'proportional',
+    // Geometry
+    'triangle', 'angle', 'perp', 'parallel', 'cong', 'sim', 'therefore',
+    'leq', 'geq', 'neq', 'infinity', 'inf',
+    'summation', 'degree', 'degrees', 'deg',
   ]);
 
   let i = 0;
@@ -1054,7 +1814,7 @@ function preservePlainTextSegments(value) {
 /**
  * Convert "smart text" (the output of latexToSmartText) back to valid LaTeX.
  * This reverses Unicode superscripts, bare trig names, Greek letters, etc.
- * so MathLive can interpret the result correctly in setValue().
+ * so KaTeX can render the result correctly.
  */
 function smartTextToLatex(text) {
   let s = String(text || '');
@@ -1095,6 +1855,24 @@ function smartTextToLatex(text) {
   s = s.replace(/\u221e/g, '\\infty');
   s = s.replace(/\u222b/g, '\\int').replace(/\u2211/g, '\\sum');
 
+  // 5. Set theory Unicode
+  s = s.replace(/∅/g, '\\emptyset');
+  s = s.replace(/∪/g, '\\cup ').replace(/∩/g, '\\cap ');
+  s = s.replace(/∈/g, '\\in ').replace(/∉/g, '\\notin ');
+  s = s.replace(/⊂/g, '\\subset ').replace(/⊆/g, '\\subseteq ');
+  s = s.replace(/⊃/g, '\\supset ').replace(/⊇/g, '\\supseteq ');
+
+  // 6. Logic & arrow Unicode
+  s = s.replace(/⇒/g, '\\implies ').replace(/⇔/g, '\\iff ');
+  s = s.replace(/→/g, '\\rightarrow ').replace(/←/g, '\\leftarrow ');
+  s = s.replace(/↔/g, '\\iff ');
+  s = s.replace(/∀/g, '\\forall ').replace(/∃/g, '\\exists ');
+
+  // 7. Additional math Unicode
+  s = s.replace(/∓/g, '\\mp ');
+  s = s.replace(/≈/g, '\\approx ').replace(/∝/g, '\\propto ');
+  s = s.replace(/∂/g, '\\partial ');
+
   return s;
 }
 
@@ -1107,21 +1885,13 @@ function selectSuggestion(latex) {
   usedSuggestion = true;
 
   console.log(inputMethod, usedSuggestion);
-  // Set the LaTeX value in MathLive
 
   const currentValue = getInputTextValue();
-  const { replaceStart, replaceEnd } = computeSuggestionReplacementRange(suggestionLatex, currentValue);
+  let { replaceStart, replaceEnd } = computeSuggestionReplacementRange(suggestionLatex, currentValue);
 
-  try {
-    questionInput.defaultMode = 'text';
-    questionInput.mode = 'text';
-  } catch {
-    // Ignore if mode APIs are not supported
-  }
-
+  // Handle trailing paren balance
+  const suffix = currentValue.slice(replaceEnd || 0);
   const prefix = currentValue.slice(0, replaceStart || 0);
-  let suffix = currentValue.slice(replaceEnd || 0);
-
   if (suggestionLatex.endsWith(')') && suffix.startsWith(')')) {
     const countParenBalance = (text) => {
       let balance = 0;
@@ -1131,23 +1901,27 @@ function selectSuggestion(latex) {
       }
       return balance;
     };
-
     const balanceAfterInsert = countParenBalance(`${prefix}${suggestionLatex}`);
     if (balanceAfterInsert <= 0) {
-      suffix = suffix.slice(1);
+      replaceEnd += 1; // consume the extra closing paren
     }
   }
 
-  const safePrefix = preservePlainTextSegments(smartTextToLatex(prefix));
-  const safeSuffix = preservePlainTextSegments(smartTextToLatex(suffix));
-  questionInput.setValue(`${safePrefix}${suggestionLatex}${safeSuffix}`);
-
+  // Create a rendered math chip
+  const chip = document.createElement('span');
+  chip.className = 'math-chip';
+  chip.contentEditable = 'false';
+  chip.dataset.latex = suggestionLatex;
+  chip.dataset.text = latexToReadableText(suggestionLatex);
   try {
-    questionInput.defaultMode = 'text';
-    questionInput.mode = 'text';
+    katex.render(suggestionLatex, chip, { throwOnError: false, displayMode: false });
   } catch {
-    // Ignore if mode APIs are not supported
+    chip.textContent = chip.dataset.text;
   }
+
+  // Preserve existing chips: splice the new chip into the DOM at the right position
+  // Walk child nodes mapping logical text offsets → DOM nodes
+  insertChipIntoDOM(replaceStart, replaceEnd, chip);
 
   hideSuggestions();
   
@@ -1155,8 +1929,6 @@ function selectSuggestion(latex) {
   showSuggestionFeedbackUI(latex);
 
   // Reset suggestion-tracking state after programmatic insertion.
-  // Some MathLive builds don't emit consistent input events for insert(),
-  // which can leave suggestion extraction stale until another full edit cycle.
   prevInputValue = getInputTextValue();
   suppressSuggestionForValue = String(prevInputValue || '').replace(/\s+/g, '');
   smartRanges = [];
@@ -1165,6 +1937,106 @@ function selectSuggestion(latex) {
     questionInput.focus();
     handleInputChange();
   });
+}
+
+/**
+ * Insert a chip into the contenteditable div at logical text range [start, end),
+ * preserving all existing chips and only modifying the affected text node(s).
+ */
+function insertChipIntoDOM(replaceStart, replaceEnd, chip) {
+  const nodes = Array.from(questionInput.childNodes);
+  const newChildren = [];
+  let pos = 0;
+  let chipInserted = false;
+
+  for (const node of nodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      // Get the logical text (without zero-width spaces)
+      const raw = node.textContent || '';
+      const logical = raw.replace(/\u200B/g, '');
+      const nodeStart = pos;
+      const nodeEnd = pos + logical.length;
+
+      if (nodeEnd <= replaceStart || nodeStart >= replaceEnd) {
+        // Node is fully outside replacement range — keep as-is
+        newChildren.push(node);
+      } else {
+        // This text node overlaps with the replacement range
+        const cutStart = Math.max(0, replaceStart - nodeStart);
+        const cutEnd = Math.min(logical.length, replaceEnd - nodeStart);
+
+        const beforeText = logical.slice(0, cutStart);
+        const afterText = logical.slice(cutEnd);
+
+        if (beforeText) {
+          newChildren.push(document.createTextNode(beforeText));
+        }
+        if (!chipInserted) {
+          newChildren.push(chip);
+          chipInserted = true;
+        }
+        if (afterText) {
+          newChildren.push(document.createTextNode(afterText));
+        }
+      }
+      pos += logical.length;
+
+    } else if (node.classList && node.classList.contains('math-chip')) {
+      const chipText = node.dataset.text || '';
+      const nodeStart = pos;
+      const nodeEnd = pos + chipText.length;
+
+      if (nodeEnd <= replaceStart || nodeStart >= replaceEnd) {
+        // Chip fully outside — keep it
+        newChildren.push(node);
+      } else {
+        // Chip overlaps replacement (unusual, but handle gracefully — replace it)
+        if (!chipInserted) {
+          newChildren.push(chip);
+          chipInserted = true;
+        }
+      }
+      pos += chipText.length;
+
+    } else {
+      // Other nodes (shouldn't happen) — keep
+      newChildren.push(node);
+    }
+  }
+
+  // If chip was not inserted (e.g. appending at end), add it
+  if (!chipInserted) {
+    newChildren.push(chip);
+  }
+
+  // Rebuild content preserving chips
+  questionInput.innerHTML = '';
+  newChildren.forEach(n => questionInput.appendChild(n));
+
+  // Ensure there's a text node after the chip for continued typing
+  const nextAfterChip = chip.nextSibling;
+  let cursorTarget;
+  if (!nextAfterChip || nextAfterChip.nodeType !== Node.TEXT_NODE) {
+    cursorTarget = document.createTextNode('\u200B');
+    if (nextAfterChip) {
+      questionInput.insertBefore(cursorTarget, nextAfterChip);
+    } else {
+      questionInput.appendChild(cursorTarget);
+    }
+  } else {
+    cursorTarget = nextAfterChip;
+  }
+
+  // Place cursor right after the chip
+  try {
+    const range = document.createRange();
+    const sel = window.getSelection();
+    const startOffset = (cursorTarget.textContent || '').startsWith('\u200B') ? 1 : 0;
+    range.setStart(cursorTarget, startOffset);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } catch { /* focus fallback */ }
 }
 
 function showSuggestionFeedbackUI(latex) {
@@ -1206,13 +2078,29 @@ async function sendSuggestionFeedback(latex, rating) {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ suggestion_text: latex, rating })
+      body: JSON.stringify({
+        suggestion_text: latex,
+        rating,
+        raw_input: lastSuggestionQuery,
+        all_suggestions: lastShownSuggestions,
+      })
     });
 
     const data = await res.json();
     if (!data.success) {
       console.warn('Feedback not recorded:', data);
       showResponseStatus('error', 'Could not record feedback');
+    } else {
+      // Feed the interaction to the online GBDT learner so ranking improves
+      if (typeof globalThis.suggestionRanker?.addFeedback === 'function') {
+        try {
+          globalThis.suggestionRanker.addFeedback(
+            lastSuggestionQuery, latex, lastShownSuggestions, rating
+          );
+        } catch (e) {
+          console.warn('Online learner error:', e);
+        }
+      }
     }
   } catch (e) {
     console.error('Error sending suggestion feedback', e);
@@ -1269,9 +2157,39 @@ function computeSuggestionReplacementRange(latex, currentValue = '') {
 // Event Listeners
 questionForm.addEventListener('submit', handleSubmitQuestion);
 
+const llmEquationBtn = document.getElementById('llmEquationBtn');
+if (llmEquationBtn) {
+  llmEquationBtn.addEventListener('click', handleGenerateEquationDraft);
+}
+
+const equationDraftModal = document.getElementById('equationDraftModal');
+const equationDraftClose = document.getElementById('equationDraftClose');
+const equationDraftCancel = document.getElementById('equationDraftCancel');
+const equationDraftGenerate = document.getElementById('equationDraftGenerate');
+const equationDraftPrompt = document.getElementById('equationDraftPrompt');
+
+if (equationDraftClose) equationDraftClose.addEventListener('click', closeEquationDraftModal);
+if (equationDraftCancel) equationDraftCancel.addEventListener('click', closeEquationDraftModal);
+if (equationDraftGenerate) equationDraftGenerate.addEventListener('click', submitEquationDraftFromModal);
+
+if (equationDraftPrompt) {
+  equationDraftPrompt.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      submitEquationDraftFromModal();
+    }
+  });
+}
+
+if (equationDraftModal) {
+  equationDraftModal.addEventListener('click', (e) => {
+    if (e.target === equationDraftModal) closeEquationDraftModal();
+  });
+}
+
 // Close suggestions on click outside
 document.addEventListener('click', (e) => {
-  if (!suggestionList.contains(e.target) && e.target !== questionInput) {
+  if (!suggestionList.contains(e.target) && !questionInput.contains(e.target)) {
     hideSuggestions();
   }
 });
@@ -1513,37 +2431,35 @@ document.addEventListener('click', (e) => {
     const latex = (latexInput.value || '').trim();
     if (!latex) { showMsg(errorDiv, 'Nothing to insert.'); return; }
 
-    // Insert as rendered math (not raw text) at cursor position
-    if (questionInput && mathFieldReady) {
-      questionInput.focus();
-      questionInput.insert(latex, {
-        insertionMode: 'insertAfter',
-        selectionMode: 'after',
-        mode: 'math'
-      });
-      // Switch back to text mode so the user can keep typing
-      questionInput.mode = 'text';
-      inputMethod = 'image';
-    }
+    insertLatexChipIntoInput(latex, 'image');
 
     closeScanner();
   }
 
-  // ---------- Scan rating feedback (frontend-only for now) ----------
-  function handleScanRating(rating) {
+  // ---------- Scan rating feedback ----------
+  async function handleScanRating(rating) {
     rateUpBtn.disabled = true;
     rateDownBtn.disabled = true;
     if (rating === 1) rateUpBtn.classList.add('selected');
     else rateDownBtn.classList.add('selected');
 
-    // TODO: send to POST /api/scan-feedback when backend is ready
-    console.log('Scan feedback:', {
-      original_latex: originalLatex,
-      edited_latex: (latexInput.value || '').trim(),
-      rating: rating
-    });
-
     ratingStatus.textContent = 'Thanks for your feedback!';
+
+    const sessionId = localStorage.getItem('flipaha_session_id') || '';
+    try {
+      await fetch(`${API_BASE_URL}/api/scan-feedback`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          image_id: scanner.imageId || '',
+          rating: rating,
+          original_latex: originalLatex,
+          edited_latex: (latexInput.value || '').trim()
+        })
+      });
+    } catch (_) { /* non-critical, ignore */ }
   }
 
   // ---------- LaTeX preview ----------

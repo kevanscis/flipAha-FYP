@@ -53,6 +53,54 @@
             <div class="container-fluid py-4">
                 <h2 class="dashboard-title mb-4">📊 Dashboard Overview</h2>
 
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="chart-card">
+                            <div class="d-flex flex-wrap align-items-end gap-2">
+                                <div>
+                                    <label for="globalStartDate" class="form-label mb-1">Global start date</label>
+                                    <input id="globalStartDate" type="date" class="form-control form-control-sm" />
+                                </div>
+                                <div>
+                                    <label for="globalEndDate" class="form-label mb-1">Global end date</label>
+                                    <input id="globalEndDate" type="date" class="form-control form-control-sm" />
+                                </div>
+                                <button id="globalDateApplyBtn" class="btn btn-sm btn-primary">Apply to Charts</button>
+                                <button id="globalDateResetBtn" class="btn btn-sm btn-outline-secondary">Reset</button>
+                                <button id="globalRefreshBtn" class="btn btn-sm btn-outline-dark">Refresh</button>
+                                <div class="btn-group btn-group-sm" role="group" aria-label="Date presets">
+                                    <button id="presetLast7" class="btn btn-outline-primary">Last 7d</button>
+                                    <button id="presetLast30" class="btn btn-outline-primary">Last 30d</button>
+                                    <button id="presetTerm" class="btn btn-outline-primary">This term</button>
+                                </div>
+                                <small class="text-muted">Applies to: Difficulty, Topic Distribution, Question Volume, Input Method Usage.</small>
+                            </div>
+                            <div class="mt-2 text-muted" id="dashboardLastUpdated" style="font-size: 0.9rem;">Last updated: -</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mb-4 g-3">
+                    <div class="col-md-4">
+                        <div class="chart-card h-100">
+                            <h6 class="mb-2">Top Struggling Topic</h6>
+                            <div id="insightTopStruggle" class="fw-semibold">-</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="chart-card h-100">
+                            <h6 class="mb-2">Hard Difficulty Trend</h6>
+                            <div id="insightHardDelta" class="fw-semibold">-</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="chart-card h-100">
+                            <h6 class="mb-2">Anomaly Monitor</h6>
+                            <div id="insightAnomaly" class="fw-semibold">-</div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- KPI cards -->
                 <div class="row mb-4">
                     <div class="col-md-3 mb-3">
@@ -89,7 +137,78 @@
                 </div>
 
                 <div class="row g-4 mb-4">
-                    <!-- Active Users -->
+                    <div class="col-md-6">
+                        <div class="chart-card h-100">
+                            <h4 class="chart-title">Question Difficulty Distribution by Topic</h4>
+
+                            <div class="row g-2 mb-3">
+                                <div class="col-6">
+                                    <div class="p-2 border rounded bg-light">
+                                        <small>Total classified</small>
+                                        <div id="qdTotal" class="fw-bold fs-5">0</div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="p-2 border rounded" style="background:#d1e7dd;">
+                                        <small>Easy</small>
+                                        <div id="qdEasy" class="fw-bold fs-5">0 (0%)</div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="p-2 border rounded" style="background:#fff3cd;">
+                                        <small>Medium</small>
+                                        <div id="qdMedium" class="fw-bold fs-5">0 (0%)</div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="p-2 border rounded" style="background:#f8d7da;">
+                                        <small>Hard</small>
+                                        <div id="qdHard" class="fw-bold fs-5">0 (0%)</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <svg id="difficultyByTopicChart"></svg>
+
+                            <div class="mt-2">
+                                <button id="clearTopicSelectionBtn" class="btn btn-sm btn-outline-secondary">Clear topic selection</button>
+                                <small id="selectedTopicLabel" class="text-muted ms-2">All topics</small>
+                            </div>
+
+                            <div class="table-responsive mt-3" style="max-height: 180px; overflow-y: auto;">
+                                <table class="table table-sm align-middle" id="difficultyByTopicTable">
+                                    <thead>
+                                        <tr>
+                                            <th><button class="btn btn-link btn-sm p-0" data-sort-key="topic">Topic</button></th>
+                                            <th><button class="btn btn-link btn-sm p-0" data-sort-key="easy_pct">Easy</button></th>
+                                            <th><button class="btn btn-link btn-sm p-0" data-sort-key="medium_pct">Medium</button></th>
+                                            <th><button class="btn btn-link btn-sm p-0" data-sort-key="hard_pct">Hard</button></th>
+                                            <th><button class="btn btn-link btn-sm p-0" data-sort-key="total">Total</button></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                            <button id="exportDifficultyCsv" class="btn btn-sm btn-outline-secondary mt-2">Export Difficulty CSV</button>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="chart-card h-100">
+                            <h4 class="chart-title">Topic Distribution</h4>
+                            <svg id="topicDistributionChart"></svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-4 mb-4">
+                    <div class="col-md-6">
+                        <div class="chart-card h-100">
+                            <h4 class="chart-title">Question Volume (Last 7 Days)</h4>
+                            <svg id="questionVolumeChart"></svg>
+                        </div>
+                    </div>
+
                     <div class="col-md-6">
                         <div class="chart-card h-100">
                             <h4 class="chart-title">Active Users Trend</h4>
@@ -104,8 +223,9 @@
                             <svg id="activeTrendChart" class="chart-svg"></svg>
                         </div>
                     </div>
+                </div>
 
-                    <!-- New vs Returning -->
+                <div class="row g-4 mb-4">
                     <div class="col-md-6">
                         <div class="chart-card h-100">
                             <h4 class="chart-title">New vs Returning Users</h4>
@@ -113,16 +233,7 @@
                             <svg id="newReturningChart" class="chart-svg"></svg>
                         </div>
                     </div>
-                </div>
 
-                <div class="row g-4 mb-4">
-                    <!-- Question Volume Chart -->
-                    <div class="col-md-6">
-                        <div class="chart-card h-100">
-                            <h4 class="chart-title">Question Volume (Last 7 Days)</h4>
-                            <svg id="questionVolumeChart"></svg>
-                        </div>
-                    </div>
                     <div class="col-md-6">
                         <div class="chart-card h-100">
                             <h4 class="chart-title">Input Method Usage</h4>
@@ -132,15 +243,6 @@
                 </div>
 
                 <div class="row g-4 mb-4">
-                    <!-- Topic Distribution Chart -->
-                    <div class="col-md-6">
-                        <div class="chart-card h-100">
-                            <h4 class="chart-title">Topic Distribution</h4>
-                            <svg id="topicDistributionChart"></svg>
-                        </div>
-                    </div>
-
-                    <!-- Suggestion Feedback -->
                     <div class="col-md-6">
                         <div class="chart-card h-100">
                             <h4 class="chart-title">Suggestion Feedback</h4>
@@ -155,6 +257,25 @@
                                     <p><strong>Total responses:</strong> <span id="sfTotal">–</span></p>
                                     <p><strong>Useful:</strong> <span id="sfUseful">–</span></p>
                                     <p><strong>Not useful:</strong> <span id="sfNotUseful">–</span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="chart-card h-100">
+                            <h4 class="chart-title">Image Converter Accuracy Feedback</h4>
+                            <div class="suggestion-feedback p-4 text-center">
+                                <div id="ifEmoji" style="font-size: 72px; margin: 20px 0;">😐</div>
+                                <div id="ifSentiment" style="font-size: 18px; font-weight: bold; margin: 10px 0; color: #999;">–</div>
+                                <div id="ifRate" style="font-size: 28px; font-weight: bold; color: #999; margin: 15px 0;">–</div>
+
+                                <hr style="margin: 20px 0;">
+
+                                <div style="font-size: 13px; color: #666;">
+                                    <p><strong>Total responses:</strong> <span id="ifTotal">–</span></p>
+                                    <p><strong>👍 Accurate:</strong> <span id="ifUseful">–</span></p>
+                                    <p><strong>👎 Not accurate:</strong> <span id="ifNotUseful">–</span></p>
                                 </div>
                             </div>
                         </div>

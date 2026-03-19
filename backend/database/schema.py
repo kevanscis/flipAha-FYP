@@ -25,6 +25,7 @@ def create_tables():
         question_timestamp DATETIME NOT NULL,
         input_method TEXT NOT NULL,
         topic TEXT NOT NULL,
+        difficulty TEXT,
         FOREIGN KEY (user_id) REFERENCES users(user_id)                 
     );
                         
@@ -45,12 +46,40 @@ def create_tables():
         question_id TEXT,
         suggestion_text TEXT NOT NULL,
         rating INTEGER NOT NULL,
+        raw_input TEXT,
+        all_suggestions TEXT,
         feedback_timestamp DATETIME NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users(user_id),
         FOREIGN KEY (question_id) REFERENCES questions(question_id)
     );
+
+    CREATE TABLE IF NOT EXISTS image_feedback (
+        feedback_id TEXT PRIMARY KEY,
+        user_id TEXT,
+        session_id TEXT NOT NULL,
+        image_id TEXT NOT NULL,
+        rating INTEGER,
+        confidence REAL,
+        created_at DATETIME NOT NULL
+    );
     """)
     db.commit()
+
+    # Migrate: add new columns if they don't exist (for existing databases)
+    try:
+        db.execute("ALTER TABLE suggestion_feedback ADD COLUMN raw_input TEXT")
+    except Exception:
+        pass  # column already exists
+    try:
+        db.execute("ALTER TABLE suggestion_feedback ADD COLUMN all_suggestions TEXT")
+    except Exception:
+        pass  # column already exists
+    try:
+        db.execute("ALTER TABLE questions ADD COLUMN difficulty TEXT")
+    except Exception:
+        pass  # column already exists
+    db.commit()
+
     db.close()
 
 create_tables()

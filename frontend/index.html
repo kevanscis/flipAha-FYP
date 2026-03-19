@@ -12,9 +12,6 @@
     
     <!-- KaTeX for rendering -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/katex.min.css">
-    
-    <!-- MathLive for editing -->
-    <link rel="stylesheet" href="https://unpkg.com/mathlive@0.104.0/dist/mathlive-static.css">
 
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
@@ -77,14 +74,12 @@
                             <i class="fas fa-camera"></i>
                         </button>
 
+                        <button type="button" class="btn btn-equation" id="llmEquationBtn" title="Draft equation with AI">
+                            <i class="fas fa-wand-magic-sparkles"></i>
+                        </button>
+
                         <div class="input-dropdown-wrapper">
-                            <math-field
-                                id="questionInput"
-                                class="question-input"
-                                default-mode="text"
-                                virtual-keyboard-mode="manual"
-                                disabled
-                            ></math-field>
+                            <div id="questionInput" class="question-input" contenteditable="true" data-placeholder="Ask your math question... (e.g. 1/2, sin x, x^2)" spellcheck="false"></div>
 
                             <!-- Suggestions dropdown -->
                             <ul class="suggestion-list" id="suggestionList" style="display: none;"></ul>
@@ -112,6 +107,31 @@
             <p>&copy; 2026 FlipAha - Math Tutoring Made Easy</p>
         </footer>
 
+    </div>
+
+    <!-- AI Equation Draft Modal -->
+    <div id="equationDraftModal" class="equation-draft-modal">
+        <div class="equation-draft-modal-content">
+            <div class="equation-draft-modal-header">
+                <h3>Draft Equation With AI</h3>
+                <button class="equation-draft-modal-close" id="equationDraftClose">&times;</button>
+            </div>
+            <div class="equation-draft-modal-body">
+                <label for="equationDraftPrompt" class="equation-draft-label">Describe what equation you want:</label>
+                <textarea
+                    id="equationDraftPrompt"
+                    class="equation-draft-input"
+                    rows="4"
+                    maxlength="300"
+                    placeholder="e.g. quadratic formula, simultaneous equations with fractions, binomial expansion of (x+2)^3"
+                ></textarea>
+                <div id="equationDraftStatus" class="equation-draft-status" style="display:none"></div>
+                <div class="equation-draft-actions">
+                    <button id="equationDraftCancel" class="btn btn-secondary" type="button">Cancel</button>
+                    <button id="equationDraftGenerate" class="btn btn-primary" type="button">Generate & Insert</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Equation Scanner Modal -->
@@ -188,29 +208,16 @@
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/katex.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/contrib/auto-render.min.js"></script>
-    <script src="https://unpkg.com/mathlive@0.104.0"></script>
+
     <script src="nav.js"></script>
     
-    <!-- Subject modules (must load BEFORE mathToLatex.js) -->
-    <script src="src/core/subjects/trig.js"></script>
-    <script src="src/core/subjects/logs.js"></script>
-    <script src="src/core/subjects/vectors.js"></script>
-    <script src="src/core/subjects/normal.js"></script>
-    <script src="src/core/subjects/fractions.js"></script>
-    
-    <!-- Math parser (must load BEFORE mathToLatex.js) -->
-    <script src="src/core/math-extractor-enhanced.js"></script>
-    
-    <!-- Permutation rule files (must load BEFORE mathToLatex.js) -->
-    <script src="src/core/permutation-rules/log-rules.js"></script>
-    <script src="src/core/permutation-rules/trig-rules.js"></script>
-    <script src="src/core/permutation-rules/algebra-rules.js"></script>
-    
-    <!-- Unified Orchestrator (LaTeX + Permutations) -->
-    <script src="mathToLatex.js"></script>
+    <!-- Grammar-based parser & ambiguity resolver -->
+    <script src="src/core/grammar-parser.js"></script>
+    <script src="src/core/ambiguity-resolver.js"></script>
+    <!-- XGBoost-style GBDT suggestion ranker -->
+    <script src="src/core/suggestion-ranker.js"></script>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-    <script type="module" src="layer2-suggestions.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

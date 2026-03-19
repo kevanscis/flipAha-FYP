@@ -1,6 +1,7 @@
 from flask import Flask, send_from_directory, request, jsonify, session, abort
 from register import register_bp
 from login import login_bp
+from concurrent.futures import ThreadPoolExecutor
 import os
 import json
 import subprocess
@@ -65,7 +66,6 @@ def _normalize_response_text(text):
     normalized = normalized.replace("\r\n", "\n").replace("\r", "\n")
     normalized = re.sub(r"[\t\x0b\x0c]+", " ", normalized)
     normalized = re.sub(r"\n{3,}", "\n\n", normalized)
-    normalized = re.sub(r"[ ]{2,}", " ", normalized)
     return normalized.strip()
 
 
@@ -76,6 +76,30 @@ def format_llm_answer_for_chat(text):
     s = re.sub(r"^#{1,6}\s*", "", s, flags=re.MULTILINE)
     s = s.replace("\\[", "").replace("\\]", "")
     s = s.replace("\\(", "").replace("\\)", "")
+
+    # Convert common LaTeX operators/symbols so math is readable in plain chat.
+    latex_symbol_map = {
+        r"\\leq": "≤",
+        r"\\geq": "≥",
+        r"\\neq": "≠",
+        r"\\pm": "±",
+        r"\\times": "×",
+        r"\\cdot": "·",
+        r"\\infty": "∞",
+        r"\\sum": "∑",
+        r"\\int": "∫",
+        r"\\theta": "θ",
+        r"\\pi": "π",
+        r"\\alpha": "α",
+        r"\\beta": "β",
+        r"\\gamma": "γ",
+        r"\\Delta": "Δ",
+        r"\\sqrt": "√",
+        r"\\angle": "∠",
+    }
+    for pattern, symbol in latex_symbol_map.items():
+        s = re.sub(pattern, symbol, s)
+
     s = re.sub(r"\n{3,}", "\n\n", s)
     return s.strip()
 
@@ -202,6 +226,127 @@ def generate_llm_answer(question):
             "error": str(e)
         }
 
+
+def _clean_latex_candidate(text):
+    """Normalize model output into a single LaTeX expression string."""
+    s = _normalize_response_text(text)
+    s = s.replace("```latex", "").replace("```", "").strip()
+
+    # Remove common math delimiters if present.
+    s = re.sub(r"^\$\$(.*)\$\$$", r"\1", s)
+    s = re.sub(r"^\$(.*)\$$", r"\1", s)
+    s = re.sub(r"^\\\((.*)\\\)$", r"\1", s)
+    s = re.sub(r"^\\\[(.*)\\\]$", r"\1", s)
+
+    # If multiple lines are returned, keep the first non-empty one.
+    if "\n" in s:
+        lines = [line.strip() for line in s.split("\n") if line.strip()]
+        s = lines[0] if lines else ""
+
+    return s.strip()
+
+
+def _clean_plain_text_candidate(text):
+    """Normalize short plain-text intent returned by the model."""
+    s = _normalize_response_text(text)
+    s = s.replace("```", "").strip()
+    # Keep intent concise for input-box insertion.
+    if len(s) > 240:
+        s = s[:240].rstrip()
+    return s
+
+
+def generate_equation_draft(user_prompt):
+    """Generate plain-text intent + one LaTeX draft for insertion into chat input."""
+    payload = {
+        "model": CLOUD_LLM_MODEL,
+        "stream": False,
+        "temperature": 0.2,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You convert mixed natural-language math prompts into two outputs. "
+                    "Return ONLY valid JSON with keys: plain_text, latex. "
+                    "plain_text: short normal-language intent with no LaTeX; use empty string if none. "
+                    "latex: exactly ONE LaTeX equation/expression only, no markdown. "
+                    "Do not wrap latex in $...$, \\(...\\), or \\[...\\]. "
+                    "Prefer standard commands like \\frac, \\sqrt, \\sin, \\cos, \\tan. "
+                    "Examples: "
+                    "'Find all solutions to cos(x) = -1' -> {\"plain_text\":\"Find all solutions\",\"latex\":\"\\cos(x)=-1\"}; "
+                    "'What is arcsin(0.5)?' -> {\"plain_text\":\"Evaluate\",\"latex\":\"\\arcsin(0.5)\"}; "
+                    "'What angle has a sine of 0.866?' -> {\"plain_text\":\"Find the angle\",\"latex\":\"\\sin(x)=0.866\"}."
+                )
+            },
+            {
+                "role": "user",
+                "content": user_prompt
+            }
+        ]
+    }
+
+    try:
+        resp = requests.post(
+            f"{CLOUD_LLM_BASE_URL}/chat/completions",
+            json=payload,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0"
+            },
+            timeout=45
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        choices = data.get("choices") or []
+        first = choices[0] if choices else {}
+        message = first.get("message") or {}
+        content = (message.get("content") or "").strip()
+
+        parsed = None
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            # Try extracting JSON object from accidental wrappers.
+            m = re.search(r"\{[\s\S]*\}", content)
+            if m:
+                try:
+                    parsed = json.loads(m.group(0))
+                except json.JSONDecodeError:
+                    parsed = None
+
+        plain_text = ""
+        latex = ""
+        if isinstance(parsed, dict):
+            plain_text = _clean_plain_text_candidate(parsed.get("plain_text") or "")
+            latex = _clean_latex_candidate(parsed.get("latex") or "")
+
+        # Fallback for non-JSON model output.
+        if not latex:
+            latex = _clean_latex_candidate(content)
+
+        if not latex:
+            raise ValueError("Empty equation draft")
+
+        return {
+            "plain_text": plain_text,
+            "latex": latex
+        }, {
+            "provider": "pollinations",
+            "model": CLOUD_LLM_MODEL,
+            "used_fallback": False
+        }
+    except (requests.RequestException, TimeoutError, ValueError, json.JSONDecodeError) as e:
+        return {
+            "plain_text": "",
+            "latex": ""
+        }, {
+            "provider": "fallback-llm-unavailable",
+            "model": None,
+            "used_fallback": True,
+            "error": str(e)
+        }
+
 def classify_question_topic(question):
     """
     Classify a question into a math topic using the LLM.
@@ -256,8 +401,121 @@ def classify_question_topic(question):
             topic = "Other"
 
         return topic
-    except (urlerror.URLError, urlerror.HTTPError, TimeoutError, ValueError, json.JSONDecodeError) as e:
+    except (requests.RequestException, TimeoutError, ValueError, json.JSONDecodeError):
         return "Other"
+
+
+def classify_question_difficulty(question):
+    """
+    Classify a question difficulty as one of: easy, medium, hard.
+    """
+    payload = {
+        "model": CLOUD_LLM_MODEL,
+        "stream": False,
+        "temperature": 0,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a math question difficulty classifier for O-Level students. "
+                    "Classify the given math question into exactly one level: easy, medium, or hard. "
+                    "Respond with only one lowercase word: easy, medium, or hard."
+                )
+            },
+            {
+                "role": "user",
+                "content": question
+            }
+        ]
+    }
+
+    try:
+        resp = requests.post(
+            f"{CLOUD_LLM_BASE_URL}/chat/completions",
+            json=payload,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0"
+            },
+            timeout=60
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        choices = data.get("choices") or []
+        first = choices[0] if choices else {}
+        message = first.get("message") or {}
+        difficulty = (message.get("content") or "").strip().lower()
+
+        if difficulty not in ("easy", "medium", "hard"):
+            difficulty = "medium"
+
+        return difficulty
+    except Exception:
+        return "medium"
+
+
+def classify_question_metadata(question):
+    """
+    Classify both topic and difficulty in a single LLM call to reduce latency.
+    Returns: {"topic": <Topic>, "difficulty": <easy|medium|hard>}
+    """
+    payload = {
+        "model": CLOUD_LLM_MODEL,
+        "stream": False,
+        "temperature": 0,
+        "max_tokens": 50,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a math metadata classifier for O-Level students. "
+                    "Return ONLY valid JSON with shape: "
+                    "{\"topic\":\"Algebra|Trigonometry|Calculus|Geometry|Statistics|Other\","
+                    "\"difficulty\":\"easy|medium|hard\"}."
+                )
+            },
+            {
+                "role": "user",
+                "content": question
+            }
+        ]
+    }
+
+    valid_topics = {"Algebra", "Trigonometry", "Calculus", "Geometry", "Statistics", "Other"}
+    valid_difficulties = {"easy", "medium", "hard"}
+
+    try:
+        resp = requests.post(
+            f"{CLOUD_LLM_BASE_URL}/chat/completions",
+            json=payload,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0"
+            },
+            timeout=20
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        choices = data.get("choices") or []
+        first = choices[0] if choices else {}
+        message = first.get("message") or {}
+        content = (message.get("content") or "").strip()
+
+        parsed = json.loads(content)
+        topic = str(parsed.get("topic", "Other")).strip()
+        difficulty = str(parsed.get("difficulty", "medium")).strip().lower()
+
+        if topic not in valid_topics:
+            topic = "Other"
+        if difficulty not in valid_difficulties:
+            difficulty = "medium"
+
+        return {"topic": topic, "difficulty": difficulty}
+
+    except Exception:
+        return {"topic": "Other", "difficulty": "medium"}
 
 @app.after_request
 def add_cors_headers(response):
@@ -267,6 +525,10 @@ def add_cors_headers(response):
         "http://localhost:5000",
         "http://127.0.0.1:5000",
     }
+    # Add production origin from env var (e.g. https://flipaha.onrender.com)
+    prod_origin = os.getenv("CORS_ORIGIN")
+    if prod_origin:
+        allowed.add(prod_origin.rstrip("/"))
 
     origin = request.headers.get("Origin")
     if origin in allowed:
@@ -283,6 +545,49 @@ def add_cors_headers(response):
 def preflight_questions():
     """Explicit CORS preflight for /api/questions"""
     return jsonify({'status': 'ok'}), 200
+
+
+@app.route('/api/equation-draft', methods=['OPTIONS'])
+def preflight_equation_draft():
+    """Explicit CORS preflight for /api/equation-draft"""
+    return jsonify({'status': 'ok'}), 200
+
+
+@app.route('/api/equation-draft', methods=['POST'])
+def equation_draft():
+    """Generate a LaTeX equation draft from a natural-language request."""
+    try:
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({'success': False, 'error': 'Not logged in'}), 401
+
+        data = request.get_json(silent=True) or {}
+        prompt = (data.get('prompt') or '').strip()
+
+        if not prompt:
+            return jsonify({'success': False, 'error': 'Prompt is required'}), 400
+        if len(prompt) > 300:
+            return jsonify({'success': False, 'error': 'Prompt is too long'}), 400
+
+        draft, llm_meta = generate_equation_draft(prompt)
+        latex = (draft.get('latex') or '').strip()
+        plain_text = (draft.get('plain_text') or '').strip()
+
+        if not latex:
+            return jsonify({
+                'success': False,
+                'error': 'Could not generate an equation right now. Please try again.',
+                'llm': llm_meta
+            }), 503
+
+        return jsonify({
+            'success': True,
+            'plain_text': plain_text,
+            'latex': latex,
+            'llm': llm_meta
+        }), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/questions', methods=['POST']) # Updates data on questions table
 def ask_question():
@@ -310,10 +615,15 @@ def ask_question():
                 'error': 'Question is empty'
             }), 400
 
-        # 3) Generate answer via hosted LLM
-        answer, llm_meta = generate_llm_answer(question)
-        # Classify question into a topic
-        topic = classify_question_topic(question)
+        # 3) Run answer and metadata classification in parallel to cut latency.
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            answer_future = executor.submit(generate_llm_answer, question)
+            metadata_future = executor.submit(classify_question_metadata, question)
+            answer, llm_meta = answer_future.result()
+            metadata = metadata_future.result()
+
+        topic = metadata.get("topic", "Other")
+        difficulty = metadata.get("difficulty", "medium")
         
         # Ensure quality before returning to client
         quality = evaluate_response_quality(question, answer)
@@ -341,10 +651,10 @@ def ask_question():
             conn.execute("""
                 INSERT INTO questions (
                     question_id, user_id, question_timestamp,
-                    input_method, topic
+                    input_method, topic, difficulty
                 )
-                VALUES (?, ?, ?, ?, ?)
-            """, (question_id, user_id, ts, input_method, topic))
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (question_id, user_id, ts, input_method, topic, difficulty))
         conn.close()
 
         # 5) Return response
@@ -353,6 +663,7 @@ def ask_question():
             'question': question,
             'answer': answer,
             'topic': topic,
+            'difficulty': difficulty,
             'question_id': question_id,
             'llm': llm_meta,
             'quality': {
@@ -410,10 +721,10 @@ def log_input_method():
             conn.execute("""
                 INSERT INTO questions (
                     question_id, user_id, question_timestamp,
-                    input_method, topic
+                    input_method, topic, difficulty
                 )
-                VALUES (?, ?, ?, ?, ?)
-            """, (question_id, user_id, ts, input_method, 'Other'))
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (question_id, user_id, ts, input_method, 'Other', 'unknown'))
         conn.close()
         
         return jsonify({
@@ -478,6 +789,9 @@ def submit_suggestion_feedback():
         data = request.get_json(silent=True) or {}
         suggestion_text = (data.get('suggestion_text') or '').strip()
         question_id = data.get('question_id')
+        raw_input = (data.get('raw_input') or '').strip()
+        all_suggestions_list = data.get('all_suggestions') or []
+        all_suggestions_json = json.dumps(all_suggestions_list) if all_suggestions_list else None
         # Accept either 'rating' (preferred) or legacy 'useful' boolean
         if 'rating' in data:
             try:
@@ -497,12 +811,93 @@ def submit_suggestion_feedback():
         with conn:
             conn.execute("""
                 INSERT INTO suggestion_feedback (
-                    feedback_id, user_id, question_id, suggestion_text, rating, feedback_timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?)
-            """, (feedback_id, user_id, question_id, suggestion_text, rating, ts))
+                    feedback_id, user_id, question_id, suggestion_text, rating,
+                    raw_input, all_suggestions, feedback_timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (feedback_id, user_id, question_id, suggestion_text, rating,
+                  raw_input, all_suggestions_json, ts))
         conn.close()
 
         return jsonify({'success': True}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/suggestion-feedback/training-data', methods=['GET'])
+def get_training_data():
+    """Export feedback data for offline GBDT model training.
+
+    Response: JSON array of { suggestion_text, rating, raw_input, all_suggestions }
+    Admin only.
+    """
+    if session.get('role') != 'admin':
+        abort(403)
+
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT suggestion_text, rating, raw_input, all_suggestions,
+                   feedback_timestamp
+            FROM suggestion_feedback
+            ORDER BY feedback_timestamp
+        """)
+        rows = cursor.fetchall()
+        conn.close()
+
+        data = []
+        for r in rows:
+            entry = {
+                'suggestion_text': r['suggestion_text'],
+                'rating': r['rating'],
+                'raw_input': r['raw_input'] or '',
+                'all_suggestions': json.loads(r['all_suggestions']) if r['all_suggestions'] else [],
+                'timestamp': r['feedback_timestamp'],
+            }
+            data.append(entry)
+
+        return jsonify({'success': True, 'data': data}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/suggestion-feedback/scores', methods=['GET'])
+def get_suggestion_scores():
+    """Return aggregated feedback scores per suggestion for ranking.
+
+    Response: { scores: { "<latex>": { ups, downs, total, score }, ... } }
+    score = (ups - downs) / total  (range -1 to 1)
+    Only suggestions with >= 2 ratings are included to reduce noise.
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT suggestion_text,
+                   SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END) AS ups,
+                   SUM(CASE WHEN rating = 0 THEN 1 ELSE 0 END) AS downs,
+                   COUNT(*) AS total
+            FROM suggestion_feedback
+            GROUP BY suggestion_text
+            HAVING total >= 2
+            ORDER BY total DESC
+        """)
+        rows = cursor.fetchall()
+        conn.close()
+
+        scores = {}
+        for r in rows:
+            total = r['total']
+            ups = r['ups'] or 0
+            downs = r['downs'] or 0
+            scores[r['suggestion_text']] = {
+                'ups': ups,
+                'downs': downs,
+                'total': total,
+                'score': round((ups - downs) / total, 4) if total else 0
+            }
+
+        return jsonify({'success': True, 'scores': scores}), 200
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -631,7 +1026,7 @@ def health_check():
 from analytics import *
 
 
-app.secret_key = "your-super-secret-key"  # Change this in production
+app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
 
 # Load routes in another folder
 app.register_blueprint(register_bp)
@@ -720,12 +1115,38 @@ def new_vs_returning_dashboard():
 
 @app.route("/api/dashboard/question-volume")
 def dashboard_question_volume():
-    data = get_weekly_question_volume()
+    start_date = (request.args.get('start_date') or '').strip() or None
+    end_date = (request.args.get('end_date') or '').strip() or None
+
+    for value, label in ((start_date, 'start_date'), (end_date, 'end_date')):
+        if value:
+            try:
+                datetime.strptime(value, '%Y-%m-%d')
+            except ValueError:
+                return jsonify({'error': f'Invalid {label}. Use YYYY-MM-DD'}), 400
+
+    if start_date and end_date and start_date > end_date:
+        return jsonify({'error': 'start_date cannot be after end_date'}), 400
+
+    data = get_weekly_question_volume(start_date=start_date, end_date=end_date)
     return jsonify(data)
 
 @app.route("/api/dashboard/input-method-trends")
 def input_method_trends():
-    data = get_weekly_input_method_trends()
+    start_date = (request.args.get('start_date') or '').strip() or None
+    end_date = (request.args.get('end_date') or '').strip() or None
+
+    for value, label in ((start_date, 'start_date'), (end_date, 'end_date')):
+        if value:
+            try:
+                datetime.strptime(value, '%Y-%m-%d')
+            except ValueError:
+                return jsonify({'error': f'Invalid {label}. Use YYYY-MM-DD'}), 400
+
+    if start_date and end_date and start_date > end_date:
+        return jsonify({'error': 'start_date cannot be after end_date'}), 400
+
+    data = get_weekly_input_method_trends(start_date=start_date, end_date=end_date)
     return jsonify(data), 200
 
 ########################################################################################################################
@@ -975,6 +1396,48 @@ def get_images():
             'error': str(e)
         }), 500
 
+@app.route('/api/scan-feedback', methods=['POST'])
+def scan_feedback():
+    """
+    Record thumbs-up (1) / thumbs-down (0) feedback for an inline scan conversion.
+    JSON: {session_id, image_id, rating (0 or 1), original_latex?, edited_latex?}
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        session_id = (data.get('session_id') or '').strip()
+        image_id = (data.get('image_id') or '').strip()
+        rating = data.get('rating')
+
+        if not session_id:
+            return jsonify({'success': False, 'error': 'Missing session_id'}), 400
+
+        if rating is None:
+            return jsonify({'success': False, 'error': 'Missing rating'}), 400
+        try:
+            rating = int(rating)
+            if rating not in (0, 1):
+                return jsonify({'success': False, 'error': 'Rating must be 0 or 1'}), 400
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'Invalid rating value'}), 400
+
+        user_id = session.get('user_id')
+        feedback_id = str(uuid.uuid4())
+        ts = datetime.now(SINGAPORE_TZ).isoformat()
+
+        conn = get_db()
+        with conn:
+            conn.execute("""
+                INSERT INTO image_feedback (feedback_id, user_id, session_id, image_id, rating, confidence, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (feedback_id, user_id, session_id, image_id or '', rating, None, ts))
+        conn.close()
+
+        return jsonify({'success': True, 'message': 'Feedback recorded'}), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/image/<image_id>', methods=['DELETE'])
 def delete_image(image_id):
     """
@@ -1014,9 +1477,58 @@ def topic_frequency():
     """Get the frequency distribution of question topics"""
     if session.get('role') != 'admin':
         abort(403)
+
+    start_date = (request.args.get('start_date') or '').strip() or None
+    end_date = (request.args.get('end_date') or '').strip() or None
+
+    for value, label in ((start_date, 'start_date'), (end_date, 'end_date')):
+        if value:
+            try:
+                datetime.strptime(value, '%Y-%m-%d')
+            except ValueError:
+                return jsonify({'error': f'Invalid {label}. Use YYYY-MM-DD'}), 400
+
+    if start_date and end_date and start_date > end_date:
+        return jsonify({'error': 'start_date cannot be after end_date'}), 400
     
     try:
-        data = get_topic_frequency()
+        data = get_topic_frequency(start_date=start_date, end_date=end_date)
+        return jsonify(data), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/dashboard/question-difficulty')
+def question_difficulty_dashboard():
+    """Get easy/medium/hard question distribution overall and by topic."""
+    if session.get('role') != 'admin':
+        abort(403)
+
+    start_date = (request.args.get('start_date') or '').strip() or None
+    end_date = (request.args.get('end_date') or '').strip() or None
+
+    for value, label in ((start_date, 'start_date'), (end_date, 'end_date')):
+        if value:
+            try:
+                datetime.strptime(value, '%Y-%m-%d')
+            except ValueError:
+                return jsonify({'error': f'Invalid {label}. Use YYYY-MM-DD'}), 400
+
+    try:
+        data = get_question_difficulty_distribution(start_date=start_date, end_date=end_date)
+        return jsonify(data), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route("/api/dashboard/image-feedback")
+def image_feedback_dashboard():
+    """Get image converter star-rating stats for the dashboard"""
+    if session.get('role') != 'admin':
+        abort(403)
+
+    try:
+        data = get_image_feedback_stats()
         return jsonify(data), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1042,4 +1554,6 @@ def serve_file(filename):
     return "File Not Found", 404
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=True)
+    port = int(os.getenv("PORT", 5000))
+    debug = os.getenv("FLASK_ENV", "development") == "development"
+    app.run(host="0.0.0.0", port=port, debug=debug)

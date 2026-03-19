@@ -19,16 +19,34 @@ async function checkAdminStatus() {
         const response = await fetch('/api/me');
         const data = await response.json();
         const dashboardButton = document.getElementById('dashboardButton');
+        const authButtons = document.getElementById('authButtons');
+        const logoutButton = document.getElementById('logoutButton');
         
-        if (!data.logged_in || data.role !== 'admin') {
+        if (!data.logged_in) {
+            // User not logged in - show login, hide logout and dashboard
+            authButtons.style.display = 'block';
+            logoutButton.style.display = 'none';
             dashboardButton.style.display = 'none';
         } else {
-            dashboardButton.style.display = 'block';
+            // User is logged in - show logout, hide login
+            authButtons.style.display = 'none';
+            logoutButton.style.display = 'block';
+            
+            // Show dashboard only if admin
+            if (data.role === 'admin') {
+                dashboardButton.style.display = 'block';
+            } else {
+                dashboardButton.style.display = 'none';
+            }
         }
     } catch (error) {
         console.warn('Could not check admin status:', error);
-        // Hide dashboard button by default if check fails
+        // Show login by default if check fails
+        const authButtons = document.getElementById('authButtons');
+        const logoutButton = document.getElementById('logoutButton');
         const dashboardButton = document.getElementById('dashboardButton');
+        authButtons.style.display = 'block';
+        logoutButton.style.display = 'none';
         dashboardButton.style.display = 'none';
     }
 }

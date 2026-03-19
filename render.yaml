@@ -1,0 +1,25 @@
+## Render Blueprint – deploy with "New > Blueprint" on https://dashboard.render.com
+## Docs: https://docs.render.com/blueprint-spec
+
+services:
+  - type: web
+    name: flipaha
+    runtime: python
+    region: singapore          # change to "oregon" if Singapore is unavailable on free
+    plan: free                 # free tier: 512 MB RAM, spins down after 15 min idle
+    buildCommand: |
+      cd backend && pip install -r requirements.txt
+    startCommand: |
+      cd backend && gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true      # Render auto-generates a random value
+      - key: ADMIN_SECRET_CODE
+        value: CHANGE_ME         # set a real secret in the Render dashboard
+      - key: LITE_MODE
+        value: "true"            # disable heavy ML models on free tier (512 MB)
+      - key: FLASK_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: "3.11.6"
+    healthCheckPath: /health
