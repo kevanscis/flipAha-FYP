@@ -847,8 +847,8 @@ function renderMixedTextMath(rawText, bubbleDiv) {
   }
 
   // Enhanced: treat as math if token looks like math (LaTeX command, or function name, or contains ^, _, digits, parens)
-  const latexCmdRegex = /\\[a-zA-Z]+/g;
-  const mathFuncRegex = /\b(sin|cos|tan|log|ln|exp|sqrt|sec|csc|cot)\b/gi;
+  const latexCmdRegex = /\\[a-zA-Z]+/;
+  const mathFuncRegex = /\b(sin|cos|tan|log|ln|exp|sqrt|sec|csc|cot)\b/i;
   const mathLike = latexCmdRegex.test(trimmed) || mathFuncRegex.test(trimmed) || /[\^_\d\(\)\[\]\{\}=+\-*/]/.test(trimmed);
 
   bubbleDiv.innerHTML = '';
@@ -926,12 +926,23 @@ function createMessageElement(message) {
     renderMixedTextMath(message?.text, bubbleDiv);
   } else if (message.role === 'loading') {
     bubbleDiv.textContent = message.text;
+  } else if (message.role === 'assistant') {
+    // Render assistant responses with LaTeX to KaTeX conversion
+    renderAssistantMessage(message?.text, bubbleDiv);
   } else {
     bubbleDiv.textContent = message.text;
   }
 
   messageDiv.appendChild(bubbleDiv);
   return messageDiv;
+}
+
+/**
+ * Render assistant message with LaTeX support.
+ * Converts LaTeX equations to rendered math using KaTeX.
+ */
+function renderAssistantMessage(text, bubbleDiv) {
+  renderMixedTextMath(text, bubbleDiv);
 }
 
 function addMessage(message) {

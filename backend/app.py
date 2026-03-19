@@ -68,12 +68,12 @@ def _normalize_response_text(text):
 
 
 def format_llm_answer_for_chat(text):
-    """Convert markdown/LaTeX-heavy LLM output into plain chat-friendly text."""
+    """Normalize LLM output while preserving math delimiters for frontend rendering."""
     s = _normalize_response_text(text)
+    s = re.sub(r"```(?:[a-zA-Z]+)?\n?", "", s)
+    s = s.replace("```", "")
     s = re.sub(r"\*\*(.*?)\*\*", r"\1", s)
     s = re.sub(r"^#{1,6}\s*", "", s, flags=re.MULTILINE)
-    s = s.replace("\\[", "").replace("\\]", "")
-    s = s.replace("\\(", "").replace("\\)", "")
 
     # Convert common LaTeX operators/symbols so math is readable in plain chat.
     latex_symbol_map = {

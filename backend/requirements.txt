@@ -10,6 +10,7 @@ pix2tex
 pix2text==1.1.4
 opencv-python
 numpy>=1.26.0,<2
+requests>=2.28.0
 
 # germaine's requirements.txt
 # Flask==3.0.0
