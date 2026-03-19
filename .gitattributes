@@ -39,3 +39,4 @@ flipAha-FYP/frontend/node_modules/@esbuild/darwin-arm64/bin/esbuild filter=lfs d
 flipAha-FYP/frontend/node_modules/@rollup/rollup-darwin-arm64/rollup.darwin-arm64.node filter=lfs diff=lfs merge=lfs -text
 flipAha-FYP/frontend/node_modules/esbuild/bin/esbuild filter=lfs diff=lfs merge=lfs -text
 flipAha-FYP/frontend/node_modules/fsevents/fsevents.node filter=lfs diff=lfs merge=lfs -text
+backend/database/app.db filter=lfs diff=lfs merge=lfs -text
