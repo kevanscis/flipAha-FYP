@@ -1,22 +1,36 @@
-import torch
-from PIL import Image
-from transformers import TrOCRProcessor, VisionEncoderDecoderModel
-from pix2tex.cli import LatexOCR
 import io
 from typing import Optional, Dict
 import re
 import os
 import threading
 
-try:
-    print("[INFO] Attempting to import Pix2Text...")
-    from pix2text import Pix2Text
-    print("[INFO] Pix2Text imported successfully")
-except Exception as e:  # pragma: no cover
-    print(f"[ERROR] Failed to import Pix2Text: {type(e).__name__}: {e}")
-    import traceback
-    traceback.print_exc()
+# ---- Conditional heavy imports ------------------------------------------------
+# When LITE_MODE is enabled (free-tier deploy), skip importing torch/transformers
+# entirely so the process stays well under 512 MB RAM.
+_LITE_MODE = os.getenv("LITE_MODE", "").lower() in ("1", "true", "yes")
+
+if _LITE_MODE:
+    print("[INFO] LITE_MODE enabled — skipping heavy ML imports to save memory")
+    torch = None
+    Image = None
+    TrOCRProcessor = None
+    VisionEncoderDecoderModel = None
+    LatexOCR = None
     Pix2Text = None
+else:
+    import torch
+    from PIL import Image
+    from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+    from pix2tex.cli import LatexOCR
+    try:
+        print("[INFO] Attempting to import Pix2Text...")
+        from pix2text import Pix2Text
+        print("[INFO] Pix2Text imported successfully")
+    except Exception as e:  # pragma: no cover
+        print(f"[ERROR] Failed to import Pix2Text: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        Pix2Text = None
 
 class LatexConverter:
     """Converts equation images to LaTeX using transformer models"""

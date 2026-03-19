@@ -1,11 +1,22 @@
 import os
-import cv2
-import numpy as np
-from PIL import Image
-from PIL import ImageOps, ImageFilter
 import io
 import base64
 from typing import Tuple, Dict, Optional
+
+# Conditional heavy imports — skip on free-tier deploy
+_LITE_MODE = os.getenv("LITE_MODE", "").lower() in ("1", "true", "yes")
+
+if _LITE_MODE:
+    cv2 = None
+    np = None
+    Image = None
+    ImageOps = None
+    ImageFilter = None
+else:
+    import cv2
+    import numpy as np
+    from PIL import Image
+    from PIL import ImageOps, ImageFilter
 
 class ImageProcessor:
     """Handles image quality checking and preprocessing"""

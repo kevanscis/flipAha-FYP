@@ -8,9 +8,9 @@ services:
     region: singapore          # change to "oregon" if Singapore is unavailable on free
     plan: free                 # free tier: 512 MB RAM, spins down after 15 min idle
     buildCommand: |
-      cd backend && pip install -r requirements.txt
+      cd backend && pip install -r requirements-deploy.txt
     startCommand: |
-      cd backend && gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+      cd backend && gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
     envVars:
       - key: SECRET_KEY
         generateValue: true      # Render auto-generates a random value
