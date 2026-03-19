@@ -1523,9 +1523,13 @@ function handleInputChange() {
       .replace(/\\/g, '')
       .replace(/\s+/g, '')
       .toLowerCase();
-    const fullSimpleTrigRatioMatch = fullQueryCompactForRatio.match(/^sin([a-z0-9πθ]+)\/cos\1$/i);
-    const fullParenTrigRatioMatch = fullQueryCompactForRatio.match(/^sin\(([^)]+)\)\/cos\(\1\)$/i);
-    const hasFullTrigRatioIntent = Boolean(fullSimpleTrigRatioMatch || fullParenTrigRatioMatch);
+    const fullSimpleSinCosMatch = fullQueryCompactForRatio.match(/^sin([a-z0-9πθ]+)\/cos\1$/i);
+    const fullParenSinCosMatch = fullQueryCompactForRatio.match(/^sin\(([^)]+)\)\/cos\(\1\)$/i);
+    const fullSimpleCosSinMatch = fullQueryCompactForRatio.match(/^cos([a-z0-9πθ]+)\/sin\1$/i);
+    const fullParenCosSinMatch = fullQueryCompactForRatio.match(/^cos\(([^)]+)\)\/sin\(\1\)$/i);
+    const hasFullTrigRatioIntent = Boolean(
+      fullSimpleSinCosMatch || fullParenSinCosMatch || fullSimpleCosSinMatch || fullParenCosSinMatch
+    );
     const lastTopLevelOperatorIndex = findLastTopLevelOperatorIndex(query);
     const hasTopLevelPlusMinus = lastTopLevelOperatorIndex !== -1;
 
@@ -1601,18 +1605,47 @@ function handleInputChange() {
       .replace(/\\/g, '')
       .replace(/\s+/g, '')
       .toLowerCase();
-    const simpleTrigRatioMatch = trigRatioCompact.match(/^sin([a-z0-9πθ]+)\/cos\1$/i);
-    const parenTrigRatioMatch = trigRatioCompact.match(/^sin\(([^)]+)\)\/cos\(\1\)$/i);
-    const trigRatioArg = simpleTrigRatioMatch?.[1] || parenTrigRatioMatch?.[1] || fullSimpleTrigRatioMatch?.[1] || fullParenTrigRatioMatch?.[1] || '';
-    const hasTrigRatioIntent = Boolean(simpleTrigRatioMatch || parenTrigRatioMatch || hasFullTrigRatioIntent);
+    const simpleSinCosMatch = trigRatioCompact.match(/^sin([a-z0-9πθ]+)\/cos\1$/i);
+    const parenSinCosMatch = trigRatioCompact.match(/^sin\(([^)]+)\)\/cos\(\1\)$/i);
+    const simpleCosSinMatch = trigRatioCompact.match(/^cos([a-z0-9πθ]+)\/sin\1$/i);
+    const parenCosSinMatch = trigRatioCompact.match(/^cos\(([^)]+)\)\/sin\(\1\)$/i);
+
+    const trigRatioArg =
+      simpleSinCosMatch?.[1] ||
+      parenSinCosMatch?.[1] ||
+      simpleCosSinMatch?.[1] ||
+      parenCosSinMatch?.[1] ||
+      fullSimpleSinCosMatch?.[1] ||
+      fullParenSinCosMatch?.[1] ||
+      fullSimpleCosSinMatch?.[1] ||
+      fullParenCosSinMatch?.[1] ||
+      '';
+
+    const ratioKind = (simpleCosSinMatch || parenCosSinMatch || fullSimpleCosSinMatch || fullParenCosSinMatch)
+      ? 'cot'
+      : ((simpleSinCosMatch || parenSinCosMatch || fullSimpleSinCosMatch || fullParenSinCosMatch) ? 'tan' : '');
+    const hasTrigRatioIntent = Boolean(ratioKind);
     if (hasTrigRatioIntent) {
       const normalizedArg = String(trigRatioArg || 'x')
         .replace(/π/g, '\\pi')
         .replace(/θ/g, '\\theta')
         .replace(/\bpi\b/gi, '\\pi')
         .replace(/\btheta\b/gi, '\\theta');
-      const tanIdentity = `\\tan(${normalizedArg || 'x'})`;
-      suggestions = [tanIdentity, ...suggestions.filter(s => String(s) !== tanIdentity)];
+      const safeArg = normalizedArg || 'x';
+      const identity = ratioKind === 'cot' ? `\\cot(${safeArg})` : `\\tan(${safeArg})`;
+      const canonicalRatio = ratioKind === 'cot'
+        ? `\\frac{\\cos(${safeArg})}{\\sin(${safeArg})}`
+        : `\\frac{\\sin(${safeArg})}{\\cos(${safeArg})}`;
+
+      // Drop absorb-denominator parses like \cos(\frac{x}{\sin(x)}) for explicit ratio intent.
+      const absorbedRatioPattern = /^\\(?:sin|cos)\(\\frac\{[^{}]+\}\{\\(?:sin|cos)\([^)]*\)\}\)$/;
+      const filtered = suggestions.filter(s => !absorbedRatioPattern.test(String(s || '')));
+
+      suggestions = [
+        canonicalRatio,
+        identity,
+        ...filtered.filter(s => String(s) !== canonicalRatio && String(s) !== identity)
+      ];
     }
 
     const normalizeInverseIntentSource = (value) => String(value || '')
