@@ -2,3 +2,13 @@ Flask==3.0.0
 requests==2.31.0
 werkzeug==3.0.1
 gunicorn==21.2.0
+Flask-CORS==4.0.0
+pytz
+Pillow==10.2.0
+transformers>=4.37.0,<5
+torch>=2.2.0
+torchvision>=0.17.0
+pix2tex
+pix2text==1.1.4
+opencv-python
+numpy>=1.26.0,<2
