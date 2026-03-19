@@ -826,9 +826,9 @@ function renderMixedTextMath(rawText, bubbleDiv) {
     return;
   }
 
-  // Helper: split text into alternating [plain, math, plain, math, ...] segments
+  // Helper: split text into alternating [plain, math, plain, math, ...] segments, or treat as math if it looks like math
   function splitTextAndMathSegments(text) {
-    // Matches $...$, \[...\], \(...\) as math, rest as text
+    // Matches $...$, \\[...\\], \\(...\\) as math, rest as text
     const regex = /(\$[^$]+\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\))/g;
     let result = [];
     let lastIndex = 0;
@@ -846,30 +846,52 @@ function renderMixedTextMath(rawText, bubbleDiv) {
     return result;
   }
 
-  // Use the helper to split and render
+  // If the message contains LaTeX commands (e.g., \tan, \cos, \sin, etc.), treat those tokens as math
+  const latexCmdRegex = /\\[a-zA-Z]+/g;
+  const mathLike = latexCmdRegex.test(trimmed);
+
   bubbleDiv.innerHTML = '';
-  const segments = splitTextAndMathSegments(trimmed);
-  for (const seg of segments) {
-    if (seg.type === 'text') {
-      // Render plain text as-is
-      bubbleDiv.appendChild(document.createTextNode(seg.value));
-    } else if (seg.type === 'math') {
-      // Remove delimiters for KaTeX
-      let latex = seg.value;
-      if (latex.startsWith('$$') && latex.endsWith('$$')) {
-        latex = latex.slice(2, -2);
-      } else if (latex.startsWith('$') && latex.endsWith('$')) {
-        latex = latex.slice(1, -1);
-      } else if ((latex.startsWith('\\[') && latex.endsWith('\\]')) || (latex.startsWith('\\(') && latex.endsWith('\\)'))) {
-        latex = latex.slice(2, -2);
+  if (mathLike && !/[$]|\\\[|\\\(/.test(trimmed)) {
+    // If the message is mostly math (contains LaTeX commands but no $...$ or \[...\]),
+    // split on word boundaries and render LaTeX tokens as math, others as text
+    const tokens = trimmed.split(/(\\[a-zA-Z]+\([^)]*\)|\\[a-zA-Z]+|\s+)/g).filter(Boolean);
+    for (const token of tokens) {
+      if (/^\\[a-zA-Z]+/.test(token)) {
+        // Try to render as math
+        const span = document.createElement('span');
+        try {
+          katex.render(token, span, { throwOnError: false, displayMode: false });
+        } catch {
+          span.textContent = token;
+        }
+        bubbleDiv.appendChild(span);
+      } else {
+        bubbleDiv.appendChild(document.createTextNode(token));
       }
-      const span = document.createElement('span');
-      try {
-        katex.render(latex.trim(), span, { throwOnError: false, displayMode: false });
-      } catch {
-        span.textContent = seg.value;
+    }
+  } else {
+    // Use the helper to split and render
+    const segments = splitTextAndMathSegments(trimmed);
+    for (const seg of segments) {
+      if (seg.type === 'text') {
+        bubbleDiv.appendChild(document.createTextNode(seg.value));
+      } else if (seg.type === 'math') {
+        let latex = seg.value;
+        if (latex.startsWith('$$') && latex.endsWith('$$')) {
+          latex = latex.slice(2, -2);
+        } else if (latex.startsWith('$') && latex.endsWith('$')) {
+          latex = latex.slice(1, -1);
+        } else if ((latex.startsWith('\\[') && latex.endsWith('\\]')) || (latex.startsWith('\\(') && latex.endsWith('\\)'))) {
+          latex = latex.slice(2, -2);
+        }
+        const span = document.createElement('span');
+        try {
+          katex.render(latex.trim(), span, { throwOnError: false, displayMode: false });
+        } catch {
+          span.textContent = seg.value;
+        }
+        bubbleDiv.appendChild(span);
       }
-      bubbleDiv.appendChild(span);
     }
   }
 }
