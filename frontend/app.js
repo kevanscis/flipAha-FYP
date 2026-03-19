@@ -905,9 +905,9 @@ function getInputTextValue() {
   let text = '';
   questionInput.childNodes.forEach(node => {
     if (node.nodeType === Node.TEXT_NODE) {
-      // Strip zero-width spaces used for cursor positioning
-      text += (node.textContent || '').replace(/\u200B/g, '');
-    } else if (node.classList && node.classList.contains('math-chip')) {
+      text += node.textContent;
+    } else if (node.classList?.contains('math-chip')) {
+      // Preserve existing chip text exactly as-is
       text += node.dataset.text || '';
     }
   });
@@ -1370,12 +1370,27 @@ function handleInputChange() {
   
   console.log('LaTeX value:', latexValue); // Debug
   console.log('Search value:', searchValue); // Debug
-  
+
   // Use actual cursor position from contenteditable
   const caret = getCaretOffset();
 
-  smartRanges = updateSmartRanges(prevInputValue, searchValue);
-  prevInputValue = searchValue;
+  // Inside your input handler:
+  function isCaretInsideChip() {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return false;
+    const node = sel.anchorNode;
+    if (!node) return false;
+    return node.classList?.contains('math-chip') || node.parentNode?.classList?.contains('math-chip');
+  }
+
+  // Before parsing for suggestions:
+  if (isCaretInsideChip()) {
+    hideSuggestions();
+    return; // Early exit
+  }
+
+  smartRanges = updateSmartRanges(prevInputValue, getInputTextValue());
+  prevInputValue = getInputTextValue();
 
   // Extract the current word/phrase for suggestions
   // Match more characters including backslash for LaTeX commands
