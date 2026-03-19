@@ -22,16 +22,6 @@ class LatexConverter:
     """Converts equation images to LaTeX using transformer models"""
     
     def __init__(self):
-        self.lite_mode = os.getenv("LITE_MODE", "").lower() in ("1", "true", "yes")
-        if self.lite_mode:
-            print("[INFO] LITE_MODE enabled — ML models disabled to save memory")
-            self.device = "cpu"
-            self.model = None
-            self.model_type = None
-            self._initialized = True
-            self._init_error = "ML models disabled in LITE_MODE"
-            self._init_lock = threading.Lock()
-            return
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model = None
         self.model_type = "pix2text"  # default; will fall back if unavailable

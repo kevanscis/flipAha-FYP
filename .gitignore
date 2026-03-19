@@ -20,6 +20,3 @@ ENV/
 
 # Logs
 *.log
-
-# Environment
-.env

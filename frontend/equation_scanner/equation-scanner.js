@@ -1,6 +1,6 @@
 // Equation Scanner - Vanilla JS Implementation
 // Configuration
-const API_BASE_URL = ''; // Relative — works in both dev and production
+const API_BASE_URL = 'http://localhost:5000';
 
 function goChat() {
   window.location.href = `${API_BASE_URL}/`;

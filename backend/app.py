@@ -525,10 +525,6 @@ def add_cors_headers(response):
         "http://localhost:5000",
         "http://127.0.0.1:5000",
     }
-    # Add production origin from env var (e.g. https://flipaha.onrender.com)
-    prod_origin = os.getenv("CORS_ORIGIN")
-    if prod_origin:
-        allowed.add(prod_origin.rstrip("/"))
 
     origin = request.headers.get("Origin")
     if origin in allowed:
@@ -1026,7 +1022,7 @@ def health_check():
 from analytics import *
 
 
-app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
+app.secret_key = "your-super-secret-key"  # Change this in production
 
 # Load routes in another folder
 app.register_blueprint(register_bp)
@@ -1554,6 +1550,4 @@ def serve_file(filename):
     return "File Not Found", 404
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
-    debug = os.getenv("FLASK_ENV", "development") == "development"
-    app.run(host="0.0.0.0", port=port, debug=debug)
+    app.run(port=5000, debug=True)
