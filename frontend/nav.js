@@ -5,6 +5,10 @@ document.addEventListener('DOMContentLoaded', () => {
     
     navButtons.forEach(btn => {
         const href = btn.getAttribute('href');
+        // Some nav buttons are action buttons (no href), so skip page matching for those.
+        if (!href) {
+            return;
+        }
         const btnPage = href.split('/').pop() || 'index.html';
         
         if (btnPage === currentPage || (currentPage === '' && btnPage === 'index.html')) {
