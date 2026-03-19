@@ -32,8 +32,17 @@ form.addEventListener('submit', async (e) => {
     statusMessage.textContent = data.message;
 
     if (response.ok) {
-      // equivalent to onSuccess()
-      window.location.href = `${API_BASE_URL}/`;
+      // Confirm session cookie is visible to subsequent requests before redirect.
+      const meResponse = await fetch(`${API_BASE_URL}/api/me`, {
+        credentials: 'include'
+      });
+      const meData = await meResponse.json();
+
+      if (meData.logged_in) {
+        window.location.href = `${API_BASE_URL}/`;
+      } else {
+        statusMessage.textContent = 'Login succeeded but session was not persisted. Please allow cookies for this site and try again.';
+      }
     }
   } catch (err) {
     console.error(err);

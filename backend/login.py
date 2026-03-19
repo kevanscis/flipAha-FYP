@@ -41,6 +41,7 @@ def login_user():
             return jsonify({"message": "Incorrect password"}), 401
 
         # Store current user_id and role in session
+        session.permanent = True
         session["user_id"] = user["user_id"]
         session["role"] = user["role"]
 

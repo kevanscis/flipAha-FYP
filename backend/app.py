@@ -23,6 +23,25 @@ SINGAPORE_TZ = ZoneInfo("Asia/Singapore")
 
 app = Flask(__name__)
 
+def _env_flag(name, default=False):
+    val = os.getenv(name)
+    if val is None:
+        return default
+    return val.strip().lower() in {"1", "true", "yes", "on"}
+
+# Session/cookie settings tuned for HF deployment while remaining configurable.
+hf_runtime = bool(os.getenv("SPACE_ID") or os.getenv("HF_SPACE_ID"))
+session_cookie_secure = _env_flag("SESSION_COOKIE_SECURE", default=hf_runtime)
+default_samesite = "None" if session_cookie_secure else "Lax"
+
+app.config.update(
+    SECRET_KEY=os.getenv("FLASK_SECRET_KEY", "your-super-secret-key"),
+    SESSION_COOKIE_NAME=os.getenv("SESSION_COOKIE_NAME", "flipaha_session"),
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE=os.getenv("SESSION_COOKIE_SAMESITE", default_samesite),
+    SESSION_COOKIE_SECURE=session_cookie_secure,
+)
+
 # Initialize services for image processing and LaTeX conversion
 image_processor = ImageProcessor()
 latex_converter = LatexConverter()
@@ -1022,7 +1041,7 @@ def health_check():
 from analytics import *
 
 
-app.secret_key = "your-super-secret-key"  # Change this in production
+# `SECRET_KEY` is configured above via app.config for cookie signing.
 
 # Load routes in another folder
 app.register_blueprint(register_bp)
@@ -1048,7 +1067,7 @@ def logout():
 @app.route("/dashboard")
 def dashboard_page():
     # Only allow admin
-    if session["role"] != "admin":
+    if session.get("role") != "admin":
         abort(403)  # Forbidden
 
     return send_from_directory(os.path.join(FRONTEND_ROOT, "Dashboard"), "dashboard.html")
