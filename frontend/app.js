@@ -12,7 +12,7 @@ let lastShownSuggestions = [];   // track suggestions shown for ML feedback
 let lastSuggestionQuery = '';    // track the raw input that triggered suggestions
 
 // Configuration
-const API_BASE_URL = 'http://localhost:5000'; // Update with your backend URL
+const API_BASE_URL = ''; // Relative — works in both dev and production
 
 function goHome(){
   window.location.href = `${API_BASE_URL}/`;
@@ -826,62 +826,105 @@ function renderMixedTextMath(rawText, bubbleDiv) {
     return;
   }
 
-  const cleaned = trimmed
-    .replace(/\\\$/g, ' ')
-    .replace(/\$/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  // ── Sentence mode: mix plain-text nodes with inline KaTeX spans ──
-  if (looksLikeSentence(cleaned)) {
-    renderSentenceWithInlineMath(cleaned, bubbleDiv);
-    return;
-  }
-
-  // ── Pure math mode: render entirely with KaTeX ──
-  let normalized = '';
-  if (typeof globalThis.grammarParser?.mathToLatexGrammar === 'function') {
-    try {
-      normalized = globalThis.grammarParser.mathToLatexGrammar(cleaned);
-    } catch {
-      normalized = '';
+  // Helper: split text into alternating [plain, math, plain, math, ...] segments, or treat as math if it looks like math
+  function splitTextAndMathSegments(text) {
+    // Matches $...$, \\[...\\], \\(...\\) as math, rest as text
+    const regex = /(\$[^$]+\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\))/g;
+    let result = [];
+    let lastIndex = 0;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        result.push({ type: 'text', value: text.slice(lastIndex, match.index) });
+      }
+      result.push({ type: 'math', value: match[0] });
+      lastIndex = regex.lastIndex;
     }
-  }
-  if (!normalized) {
-    normalized = normalizeToLatex(preservePlainTextSegments(cleaned));
+    if (lastIndex < text.length) {
+      result.push({ type: 'text', value: text.slice(lastIndex) });
+    }
+    return result;
   }
 
-  try {
-    katex.render(normalized, bubbleDiv, {
-      throwOnError: false,
-      displayMode: false
-    });
+  // Enhanced: treat as math if token looks like math (LaTeX command, or function name, or contains ^, _, digits, parens)
+  const latexCmdRegex = /\\[a-zA-Z]+/;
+  const mathFuncRegex = /\b(sin|cos|tan|log|ln|exp|sqrt|sec|csc|cot)\b/i;
+  const mathLike = latexCmdRegex.test(trimmed) || mathFuncRegex.test(trimmed) || /[\^_\d\(\)\[\]\{\}=+\-*/]/.test(trimmed);
 
-    if (bubbleDiv.querySelector('.katex-error')) {
-      const fallback = normalizeToLatex(preservePlainTextSegments(cleaned));
-      try {
-        katex.render(fallback, bubbleDiv, { throwOnError: false, displayMode: false });
-        if (bubbleDiv.querySelector('.katex-error')) {
-          bubbleDiv.textContent = cleaned || raw;
+  bubbleDiv.innerHTML = '';
+  if (mathLike && !/[$]|\\\[|\\\(/.test(trimmed)) {
+    // Split on whitespace and math boundaries, render math-like tokens with KaTeX
+    const tokens = trimmed.split(/(\s+)/g).filter(Boolean);
+    for (const token of tokens) {
+      // Heuristic: treat as math if it matches function, contains ^, _, digits, parens, or LaTeX command
+      if (
+        /^\\[a-zA-Z]+/.test(token) ||
+        mathFuncRegex.test(token) ||
+        /[\^_\d\(\)\[\]\{\}=+\-*/]/.test(token)
+      ) {
+        const span = document.createElement('span');
+        try {
+          katex.render(token, span, { throwOnError: false, displayMode: false });
+        } catch {
+          span.textContent = token;
         }
-      } catch {
-        bubbleDiv.textContent = cleaned || raw;
+        bubbleDiv.appendChild(span);
+      } else {
+        bubbleDiv.appendChild(document.createTextNode(token));
       }
     }
-  } catch {
-    bubbleDiv.textContent = cleaned || raw;
+  } else {
+    // Use the helper to split and render
+    const segments = splitTextAndMathSegments(trimmed);
+    for (const seg of segments) {
+      if (seg.type === 'text') {
+        bubbleDiv.appendChild(document.createTextNode(seg.value));
+      } else if (seg.type === 'math') {
+        let latex = seg.value;
+        if (latex.startsWith('$$') && latex.endsWith('$$')) {
+          latex = latex.slice(2, -2);
+        } else if (latex.startsWith('$') && latex.endsWith('$')) {
+          latex = latex.slice(1, -1);
+        } else if ((latex.startsWith('\\[') && latex.endsWith('\\]')) || (latex.startsWith('\\(') && latex.endsWith('\\)'))) {
+          latex = latex.slice(2, -2);
+        }
+        const span = document.createElement('span');
+        try {
+          katex.render(latex.trim(), span, { throwOnError: false, displayMode: false });
+        } catch {
+          span.textContent = seg.value;
+        }
+        bubbleDiv.appendChild(span);
+      }
+    }
   }
 }
 
 function getInputTextValue() {
   if (!questionInput) return '';
   let text = '';
-  questionInput.childNodes.forEach(node => {
+  const nodes = Array.from(questionInput.childNodes);
+  const getVirtualChipBoundary = (index) => {
+    const current = nodes[index];
+    const next = nodes[index + 1];
+    if (!current || !next) return '';
+    if (!(current.classList && current.classList.contains('math-chip'))) return '';
+    if (next.nodeType === Node.TEXT_NODE) {
+      const nextText = (next.textContent || '').replace(/\u200B/g, '');
+      if (!nextText || /^\s/.test(nextText)) return '';
+      return ' ';
+    }
+    if (next.classList && next.classList.contains('math-chip')) return ' ';
+    return '';
+  };
+
+  nodes.forEach((node, index) => {
     if (node.nodeType === Node.TEXT_NODE) {
-      // Strip zero-width spaces used for cursor positioning
       text += (node.textContent || '').replace(/\u200B/g, '');
-    } else if (node.classList && node.classList.contains('math-chip')) {
+    } else if (node.classList?.contains('math-chip')) {
+      // Preserve existing chip text exactly as-is
       text += node.dataset.text || '';
+      text += getVirtualChipBoundary(index);
     }
   });
   return text;
@@ -899,12 +942,23 @@ function createMessageElement(message) {
     renderMixedTextMath(message?.text, bubbleDiv);
   } else if (message.role === 'loading') {
     bubbleDiv.textContent = message.text;
+  } else if (message.role === 'assistant') {
+    // Render assistant responses with LaTeX to KaTeX conversion
+    renderAssistantMessage(message?.text, bubbleDiv);
   } else {
     bubbleDiv.textContent = message.text;
   }
 
   messageDiv.appendChild(bubbleDiv);
   return messageDiv;
+}
+
+/**
+ * Render assistant message with LaTeX support.
+ * Converts LaTeX equations to rendered math using KaTeX.
+ */
+function renderAssistantMessage(text, bubbleDiv) {
+  renderMixedTextMath(text, bubbleDiv);
 }
 
 function addMessage(message) {
@@ -1124,18 +1178,37 @@ function getCaretOffset() {
   }
   const range = sel.getRangeAt(0);
   let offset = 0;
-  for (const node of questionInput.childNodes) {
+  const nodes = Array.from(questionInput.childNodes);
+  const getVirtualChipBoundaryLength = (index) => {
+    const current = nodes[index];
+    const next = nodes[index + 1];
+    if (!current || !next) return 0;
+    if (!(current.classList && current.classList.contains('math-chip'))) return 0;
+    if (next.nodeType === Node.TEXT_NODE) {
+      const nextText = (next.textContent || '').replace(/\u200B/g, '');
+      if (!nextText || /^\s/.test(nextText)) return 0;
+      return 1;
+    }
+    if (next.classList && next.classList.contains('math-chip')) return 1;
+    return 0;
+  };
+
+  for (let index = 0; index < nodes.length; index += 1) {
+    const node = nodes[index];
     if (node === range.startContainer || node.contains(range.startContainer)) {
       if (node.nodeType === Node.TEXT_NODE) {
-        return offset + range.startOffset;
+        const raw = node.textContent || '';
+        const logicalPrefix = raw.slice(0, range.startOffset).replace(/\u200B/g, '');
+        return offset + logicalPrefix.length;
       }
       // Cursor is at the chip boundary
       return offset + (node.dataset ? (node.dataset.text || '').length : 0);
     }
     if (node.nodeType === Node.TEXT_NODE) {
-      offset += (node.textContent || '').length;
+      offset += (node.textContent || '').replace(/\u200B/g, '').length;
     } else if (node.classList && node.classList.contains('math-chip')) {
       offset += (node.dataset.text || '').length;
+      offset += getVirtualChipBoundaryLength(index);
     }
   }
   return offset;
@@ -1332,12 +1405,27 @@ function handleInputChange() {
   
   console.log('LaTeX value:', latexValue); // Debug
   console.log('Search value:', searchValue); // Debug
-  
+
   // Use actual cursor position from contenteditable
   const caret = getCaretOffset();
 
-  smartRanges = updateSmartRanges(prevInputValue, searchValue);
-  prevInputValue = searchValue;
+  // Inside your input handler:
+  function isCaretInsideChip() {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return false;
+    const node = sel.anchorNode;
+    if (!node) return false;
+    return node.classList?.contains('math-chip') || node.parentNode?.classList?.contains('math-chip');
+  }
+
+  // Before parsing for suggestions:
+  if (isCaretInsideChip()) {
+    hideSuggestions();
+    return; // Early exit
+  }
+
+  smartRanges = updateSmartRanges(prevInputValue, getInputTextValue());
+  prevInputValue = getInputTextValue();
 
   // Extract the current word/phrase for suggestions
   // Match more characters including backslash for LaTeX commands
@@ -1404,8 +1492,14 @@ function handleInputChange() {
             }
 
             const compactPrefix = expr.slice(0, i).replace(/\s+/g, '');
-            const inversePrefixPattern = /(?:(?:\\)?(?:sin|cos|tan|sec|csc|cot|cosec)(?:\^\{?)?|(?:\\)?(?:arc|a)(?:sin|cos|tan))$/i;
-            const isInverseTrig = char === '-' && expr[i + 1] === '1' && inversePrefixPattern.test(compactPrefix);
+            const inversePrefixPattern = /(?:(?:\\)?(?:(?:arc|a)?(?:sin|cos|tan|sec|csc|cot|cosec))(?:\^\{?\s*-?1\s*\}?)?)$/i;
+            let nextIndex = i + 1;
+            while (nextIndex < expr.length && /\s/.test(expr[nextIndex])) {
+              nextIndex += 1;
+            }
+            const nextChar = nextIndex < expr.length ? expr[nextIndex] : '';
+            const signedArgLooksValid = /[A-Za-z0-9_\\(πθα-ωΑ-Ω]/i.test(nextChar);
+            const isInverseTrig = char === '-' && inversePrefixPattern.test(compactPrefix) && signedArgLooksValid;
             if (!isInverseTrig) {
               lastOperatorIndex = i;
             }
@@ -1413,6 +1507,17 @@ function handleInputChange() {
           }
 
           if (char === '*' || char === '/' || char === ',' || char === '=' || /\s/.test(char)) {
+            if (char === '=') {
+              let prevEqIndex = i - 1;
+              while (prevEqIndex >= 0 && /\s/.test(expr[prevEqIndex])) {
+                prevEqIndex -= 1;
+              }
+              const prevEqChar = prevEqIndex >= 0 ? expr[prevEqIndex] : '';
+              // Keep <=, >= and != together as one token so symbol suggestions trigger.
+              if (prevEqChar === '<' || prevEqChar === '>' || prevEqChar === '!') {
+                continue;
+              }
+            }
             if (char === '/') {
               const beforeSlash = expr.slice(0, i);
               const looksLikeTrigPiFraction = /(?:\\)?(sin|cos|tan|sec|csc|cot|cosec)\s*\d*(?:\\pi|π|pi)$/i.test(beforeSlash);
@@ -1485,9 +1590,13 @@ function handleInputChange() {
       .replace(/\\/g, '')
       .replace(/\s+/g, '')
       .toLowerCase();
-    const fullSimpleTrigRatioMatch = fullQueryCompactForRatio.match(/^sin([a-z0-9πθ]+)\/cos\1$/i);
-    const fullParenTrigRatioMatch = fullQueryCompactForRatio.match(/^sin\(([^)]+)\)\/cos\(\1\)$/i);
-    const hasFullTrigRatioIntent = Boolean(fullSimpleTrigRatioMatch || fullParenTrigRatioMatch);
+    const fullSimpleSinCosMatch = fullQueryCompactForRatio.match(/^sin([a-z0-9πθ]+)\/cos\1$/i);
+    const fullParenSinCosMatch = fullQueryCompactForRatio.match(/^sin\(([^)]+)\)\/cos\(\1\)$/i);
+    const fullSimpleCosSinMatch = fullQueryCompactForRatio.match(/^cos([a-z0-9πθ]+)\/sin\1$/i);
+    const fullParenCosSinMatch = fullQueryCompactForRatio.match(/^cos\(([^)]+)\)\/sin\(\1\)$/i);
+    const hasFullTrigRatioIntent = Boolean(
+      fullSimpleSinCosMatch || fullParenSinCosMatch || fullSimpleCosSinMatch || fullParenCosSinMatch
+    );
     const lastTopLevelOperatorIndex = findLastTopLevelOperatorIndex(query);
     const hasTopLevelPlusMinus = lastTopLevelOperatorIndex !== -1;
 
@@ -1563,18 +1672,47 @@ function handleInputChange() {
       .replace(/\\/g, '')
       .replace(/\s+/g, '')
       .toLowerCase();
-    const simpleTrigRatioMatch = trigRatioCompact.match(/^sin([a-z0-9πθ]+)\/cos\1$/i);
-    const parenTrigRatioMatch = trigRatioCompact.match(/^sin\(([^)]+)\)\/cos\(\1\)$/i);
-    const trigRatioArg = simpleTrigRatioMatch?.[1] || parenTrigRatioMatch?.[1] || fullSimpleTrigRatioMatch?.[1] || fullParenTrigRatioMatch?.[1] || '';
-    const hasTrigRatioIntent = Boolean(simpleTrigRatioMatch || parenTrigRatioMatch || hasFullTrigRatioIntent);
+    const simpleSinCosMatch = trigRatioCompact.match(/^sin([a-z0-9πθ]+)\/cos\1$/i);
+    const parenSinCosMatch = trigRatioCompact.match(/^sin\(([^)]+)\)\/cos\(\1\)$/i);
+    const simpleCosSinMatch = trigRatioCompact.match(/^cos([a-z0-9πθ]+)\/sin\1$/i);
+    const parenCosSinMatch = trigRatioCompact.match(/^cos\(([^)]+)\)\/sin\(\1\)$/i);
+
+    const trigRatioArg =
+      simpleSinCosMatch?.[1] ||
+      parenSinCosMatch?.[1] ||
+      simpleCosSinMatch?.[1] ||
+      parenCosSinMatch?.[1] ||
+      fullSimpleSinCosMatch?.[1] ||
+      fullParenSinCosMatch?.[1] ||
+      fullSimpleCosSinMatch?.[1] ||
+      fullParenCosSinMatch?.[1] ||
+      '';
+
+    const ratioKind = (simpleCosSinMatch || parenCosSinMatch || fullSimpleCosSinMatch || fullParenCosSinMatch)
+      ? 'cot'
+      : ((simpleSinCosMatch || parenSinCosMatch || fullSimpleSinCosMatch || fullParenSinCosMatch) ? 'tan' : '');
+    const hasTrigRatioIntent = Boolean(ratioKind);
     if (hasTrigRatioIntent) {
       const normalizedArg = String(trigRatioArg || 'x')
         .replace(/π/g, '\\pi')
         .replace(/θ/g, '\\theta')
         .replace(/\bpi\b/gi, '\\pi')
         .replace(/\btheta\b/gi, '\\theta');
-      const tanIdentity = `\\tan(${normalizedArg || 'x'})`;
-      suggestions = [tanIdentity, ...suggestions.filter(s => String(s) !== tanIdentity)];
+      const safeArg = normalizedArg || 'x';
+      const identity = ratioKind === 'cot' ? `\\cot(${safeArg})` : `\\tan(${safeArg})`;
+      const canonicalRatio = ratioKind === 'cot'
+        ? `\\frac{\\cos(${safeArg})}{\\sin(${safeArg})}`
+        : `\\frac{\\sin(${safeArg})}{\\cos(${safeArg})}`;
+
+      // Drop absorb-denominator parses like \cos(\frac{x}{\sin(x)}) for explicit ratio intent.
+      const absorbedRatioPattern = /^\\(?:sin|cos)\(\\frac\{[^{}]+\}\{\\(?:sin|cos)\([^)]*\)\}\)$/;
+      const filtered = suggestions.filter(s => !absorbedRatioPattern.test(String(s || '')));
+
+      suggestions = [
+        canonicalRatio,
+        identity,
+        ...filtered.filter(s => String(s) !== canonicalRatio && String(s) !== identity)
+      ];
     }
 
     const normalizeInverseIntentSource = (value) => String(value || '')

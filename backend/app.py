@@ -12,7 +12,6 @@ from zoneinfo import ZoneInfo
 import uuid
 import io
 from database.db import get_db
-from image_processor import ImageProcessor
 from latex_converter import LatexConverter
 from werkzeug.utils import secure_filename
 
@@ -24,7 +23,6 @@ SINGAPORE_TZ = ZoneInfo("Asia/Singapore")
 app = Flask(__name__)
 
 # Initialize services for image processing and LaTeX conversion
-image_processor = ImageProcessor()
 latex_converter = LatexConverter()
 
 # Configuration for file uploads
@@ -49,6 +47,97 @@ def get_stored_image(session_id, image_id):
     return image_store.get(session_id, {}).get(image_id)
 CLOUD_LLM_BASE_URL = os.getenv("CLOUD_LLM_BASE_URL", "https://text.pollinations.ai/openai").rstrip("/")
 CLOUD_LLM_MODEL = os.getenv("CLOUD_LLM_MODEL", "openai")
+CLOUD_LLM_BACKUP_BASE_URLS = [
+    url.strip().rstrip("/")
+    for url in os.getenv("CLOUD_LLM_BACKUP_BASE_URLS", "").split(",")
+    if url.strip()
+]
+CLOUD_LLM_RETRIES = max(1, int(os.getenv("CLOUD_LLM_RETRIES", "2")))
+
+
+def _get_llm_base_urls():
+    seen = set()
+    ordered = []
+    for url in [CLOUD_LLM_BASE_URL, *CLOUD_LLM_BACKUP_BASE_URLS]:
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        ordered.append(url)
+    return ordered
+
+
+def _extract_llm_content(response):
+    """Extract best-effort text from OpenAI-compatible or plain-text providers."""
+    payload = None
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+
+    if isinstance(payload, dict):
+        choices = payload.get("choices") or []
+        if choices:
+            first = choices[0] or {}
+            message = first.get("message") or {}
+            content = message.get("content")
+            if isinstance(content, list):
+                parts = []
+                for chunk in content:
+                    if isinstance(chunk, dict):
+                        text_part = chunk.get("text")
+                        if text_part:
+                            parts.append(str(text_part))
+                content = "".join(parts)
+            if content:
+                return str(content).strip()
+
+            fallback_text = first.get("text")
+            if fallback_text:
+                return str(fallback_text).strip()
+
+        for key in ("response", "output", "text", "content"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+    return (response.text or "").strip()
+
+
+def call_cloud_llm(payload, timeout=60):
+    """Call cloud LLM with retries and optional backup base URLs."""
+    request_payload = dict(payload or {})
+    request_payload.setdefault("model", CLOUD_LLM_MODEL)
+
+    errors = []
+    for base_url in _get_llm_base_urls():
+        endpoint = f"{base_url}/chat/completions"
+        for attempt in range(1, CLOUD_LLM_RETRIES + 1):
+            try:
+                resp = requests.post(
+                    endpoint,
+                    json=request_payload,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Accept": "application/json, text/plain;q=0.9, */*;q=0.8",
+                        "User-Agent": "Mozilla/5.0"
+                    },
+                    timeout=timeout
+                )
+                resp.raise_for_status()
+                content = _extract_llm_content(resp)
+                if not content:
+                    raise ValueError("Empty LLM response")
+                return content, {
+                    "provider": "pollinations",
+                    "model": request_payload.get("model"),
+                    "base_url": base_url,
+                    "attempt": attempt,
+                    "used_fallback": False,
+                }
+            except (requests.RequestException, TimeoutError, ValueError) as err:
+                errors.append(f"{base_url} (attempt {attempt}): {err}")
+
+    raise RuntimeError(" | ".join(errors) if errors else "Cloud LLM call failed")
 
 ########################################################################################################################
 # USE CASE 1
@@ -70,12 +159,12 @@ def _normalize_response_text(text):
 
 
 def format_llm_answer_for_chat(text):
-    """Convert markdown/LaTeX-heavy LLM output into plain chat-friendly text."""
+    """Normalize LLM output while preserving math delimiters for frontend rendering."""
     s = _normalize_response_text(text)
+    s = re.sub(r"```(?:[a-zA-Z]+)?\n?", "", s)
+    s = s.replace("```", "")
     s = re.sub(r"\*\*(.*?)\*\*", r"\1", s)
     s = re.sub(r"^#{1,6}\s*", "", s, flags=re.MULTILINE)
-    s = s.replace("\\[", "").replace("\\]", "")
-    s = s.replace("\\(", "").replace("\\)", "")
 
     # Convert common LaTeX operators/symbols so math is readable in plain chat.
     latex_symbol_map = {
@@ -187,6 +276,83 @@ def generate_llm_answer(question):
     }
 
     try:
+        content, meta = call_cloud_llm(payload, timeout=60)
+
+        content = format_llm_answer_for_chat(content)
+
+        return content, {
+            **meta,
+            "used_fallback": False
+        }
+    except Exception as e:
+        content = FALLBACK_RESPONSE
+        return content, {
+            "provider": "fallback-llm-unavailable",
+            "model": None,
+            "used_fallback": True,
+            "error": str(e)
+        }
+
+
+def _clean_latex_candidate(text):
+    """Normalize model output into a single LaTeX expression string."""
+    s = _normalize_response_text(text)
+    s = s.replace("```latex", "").replace("```", "").strip()
+
+    # Remove common math delimiters if present.
+    s = re.sub(r"^\$\$(.*)\$\$$", r"\1", s)
+    s = re.sub(r"^\$(.*)\$$", r"\1", s)
+    s = re.sub(r"^\\\((.*)\\\)$", r"\1", s)
+    s = re.sub(r"^\\\[(.*)\\\]$", r"\1", s)
+
+    # If multiple lines are returned, keep the first non-empty one.
+    if "\n" in s:
+        lines = [line.strip() for line in s.split("\n") if line.strip()]
+        s = lines[0] if lines else ""
+
+    return s.strip()
+
+
+def _clean_plain_text_candidate(text):
+    """Normalize short plain-text intent returned by the model."""
+    s = _normalize_response_text(text)
+    s = s.replace("```", "").strip()
+    # Keep intent concise for input-box insertion.
+    if len(s) > 240:
+        s = s[:240].rstrip()
+    return s
+
+
+def generate_equation_draft(user_prompt):
+    """Generate plain-text intent + one LaTeX draft for insertion into chat input."""
+    payload = {
+        "model": CLOUD_LLM_MODEL,
+        "stream": False,
+        "temperature": 0.2,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You convert mixed natural-language math prompts into two outputs. "
+                    "Return ONLY valid JSON with keys: plain_text, latex. "
+                    "plain_text: short normal-language intent with no LaTeX; use empty string if none. "
+                    "latex: exactly ONE LaTeX equation/expression only, no markdown. "
+                    "Do not wrap latex in $...$, \\(...\\), or \\[...\\]. "
+                    "Prefer standard commands like \\frac, \\sqrt, \\sin, \\cos, \\tan. "
+                    "Examples: "
+                    "'Find all solutions to cos(x) = -1' -> {\"plain_text\":\"Find all solutions\",\"latex\":\"\\cos(x)=-1\"}; "
+                    "'What is arcsin(0.5)?' -> {\"plain_text\":\"Evaluate\",\"latex\":\"\\arcsin(0.5)\"}; "
+                    "'What angle has a sine of 0.866?' -> {\"plain_text\":\"Find the angle\",\"latex\":\"\\sin(x)=0.866\"}."
+                )
+            },
+            {
+                "role": "user",
+                "content": user_prompt
+            }
+        ]
+    }
+
+    try:
         resp = requests.post(
             f"{CLOUD_LLM_BASE_URL}/chat/completions",
             json=payload,
@@ -194,7 +360,7 @@ def generate_llm_answer(question):
                 "Content-Type": "application/json",
                 "User-Agent": "Mozilla/5.0"
             },
-            timeout=60
+            timeout=45
         )
         resp.raise_for_status()
         data = resp.json()
@@ -204,22 +370,44 @@ def generate_llm_answer(question):
         message = first.get("message") or {}
         content = (message.get("content") or "").strip()
 
-        if not content:
-            raise ValueError("Empty LLM response")
+        parsed = None
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            # Try extracting JSON object from accidental wrappers.
+            m = re.search(r"\{[\s\S]*\}", content)
+            if m:
+                try:
+                    parsed = json.loads(m.group(0))
+                except json.JSONDecodeError:
+                    parsed = None
 
-        content = format_llm_answer_for_chat(content)
+        plain_text = ""
+        latex = ""
+        if isinstance(parsed, dict):
+            plain_text = _clean_plain_text_candidate(parsed.get("plain_text") or "")
+            latex = _clean_latex_candidate(parsed.get("latex") or "")
 
-        return content, {
+        # Fallback for non-JSON model output.
+        if not latex:
+            latex = _clean_latex_candidate(content)
+
+        if not latex:
+            raise ValueError("Empty equation draft")
+
+        return {
+            "plain_text": plain_text,
+            "latex": latex
+        }, {
             "provider": "pollinations",
             "model": CLOUD_LLM_MODEL,
             "used_fallback": False
         }
-    except (requests.RequestException, TimeoutError, ValueError) as e:
-        content = (
-            "Cloud LLM is unavailable right now. "
-            "Please try again in a moment."
-        )
-        return content, {
+    except (requests.RequestException, TimeoutError, ValueError, json.JSONDecodeError) as e:
+        return {
+            "plain_text": "",
+            "latex": ""
+        }, {
             "provider": "fallback-llm-unavailable",
             "model": None,
             "used_fallback": True,
@@ -525,6 +713,10 @@ def add_cors_headers(response):
         "http://localhost:5000",
         "http://127.0.0.1:5000",
     }
+    # Add production origin from env var (e.g. https://flipaha.onrender.com)
+    prod_origin = os.getenv("CORS_ORIGIN")
+    if prod_origin:
+        allowed.add(prod_origin.rstrip("/"))
 
     origin = request.headers.get("Origin")
     if origin in allowed:
@@ -981,25 +1173,14 @@ def llm_health_check():
             "max_tokens": 8,
             "temperature": 0
         }
-        resp = requests.post(
-            f"{CLOUD_LLM_BASE_URL}/chat/completions",
-            json=payload,
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent": "Mozilla/5.0"
-            },
-            timeout=20
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-        choices = data.get("choices") or []
-        ok = bool(choices)
+        content, meta = call_cloud_llm(payload, timeout=20)
+        ok = bool(content)
         return jsonify({
             'success': ok,
             'provider': 'pollinations',
-            'base_url': CLOUD_LLM_BASE_URL,
-            'configured_model': CLOUD_LLM_MODEL
+            'base_url': meta.get('base_url') or CLOUD_LLM_BASE_URL,
+            'configured_model': CLOUD_LLM_MODEL,
+            'response_preview': content[:64]
         }), 200
     except Exception as e:
         return jsonify({
@@ -1022,7 +1203,7 @@ def health_check():
 from analytics import *
 
 
-app.secret_key = "your-super-secret-key"  # Change this in production
+app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
 
 # Load routes in another folder
 app.register_blueprint(register_bp)
@@ -1187,32 +1368,31 @@ def upload_image():
         file_data = file.read()
         image_id = str(uuid.uuid4())
         
-        # Check image quality (blurry, dark, small, etc.)
-        quality_result = image_processor.check_image_quality(file_data)
+        # Disabled: image quality check and storage
+        # quality_result = image_processor.check_image_quality(file_data)
+        # warnings = quality_result.get('warnings', [])
+        # hint = None
+        # if warnings:
+        #     hint = '📸 Try a clearer photo for more accurate results.'
+        # store_image(session_id, image_id, file_data)
         
-        # Build user-friendly warnings with a "Try a clearer photo" hint
-        warnings = quality_result.get('warnings', [])
-        hint = None
-        if warnings:
-            # Add a clear actionable hint for low-quality images
-            hint = '📸 Try a clearer photo for more accurate results.'
-        
-        # Store the image data for later retrieval
-        store_image(session_id, image_id, file_data)
-        
+        # return jsonify({
+        #     'success': True,
+        #     'image_id': image_id,
+        #     'session_id': session_id,
+        #     'filename': secure_filename(file.filename),
+        #     'size': len(file_data),
+        #     'quality': {
+        #         'valid': quality_result.get('valid', True),
+        #         'warnings': warnings,
+        #         'hint': hint,
+        #         'metrics': quality_result.get('metrics', {})
+        #     }
+        # }), 200
         return jsonify({
-            'success': True,
-            'image_id': image_id,
-            'session_id': session_id,
-            'filename': secure_filename(file.filename),
-            'size': len(file_data),
-            'quality': {
-                'valid': quality_result.get('valid', True),
-                'warnings': warnings,
-                'hint': hint,
-                'metrics': quality_result.get('metrics', {})
-            }
-        }), 200
+            'success': False,
+            'error': 'Image upload/processing is disabled in this deployment.'
+        }), 501
     except Exception as e:
         return jsonify({
             'success': False,
@@ -1225,110 +1405,10 @@ def convert_to_latex():
     Convert uploaded image to LaTeX
     JSON: {session_id, image_id, options?: {high_accuracy?: bool, preprocess?: 'auto'|'none'|'mild'|'binarize'}}
     """
-    try:
-        data = request.json or {}
-        session_id = data.get('session_id')
-        image_id = data.get('image_id')
-        options = data.get('options') or {}
-        
-        if not all([session_id, image_id]):
-            return jsonify({
-                'success': False,
-                'error': 'Missing required fields: session_id and image_id'
-            }), 400
-        
-        # Get stored image data
-        original_bytes = get_stored_image(session_id, image_id)
-        if not original_bytes:
-            return jsonify({
-                'success': False,
-                'error': 'Image not found. Please upload an image first.'
-            }), 404
-        
-        # Get options
-        high_accuracy = bool(options.get('high_accuracy'))
-        preprocess_mode = (options.get('preprocess') or 'auto').strip().lower()
-        
-        def pil_to_bytes(pil_img):
-            """Convert PIL image to bytes"""
-            buf = io.BytesIO()
-            pil_img.save(buf, format='PNG')
-            return buf.getvalue()
-        
-        # Prepare variants based on preprocessing mode
-        variants = []
-        if preprocess_mode == 'none':
-            variants = [('raw', original_bytes)]
-        elif preprocess_mode == 'mild':
-            variants = [('mild', pil_to_bytes(image_processor.preprocess_image(original_bytes, mode='mild')))]
-        elif preprocess_mode == 'binarize':
-            variants = [('binarize', pil_to_bytes(image_processor.preprocess_image(original_bytes, mode='binarize')))]
-        else:
-            # auto: try raw first (best for Pix2Tex), fall back to mild, and optionally binarize
-            variants = [('raw', original_bytes), ('mild', pil_to_bytes(image_processor.preprocess_image(original_bytes, mode='mild')))]
-            if high_accuracy:
-                variants.append(('binarize', pil_to_bytes(image_processor.preprocess_image(original_bytes, mode='binarize'))))
-        
-        best = None
-        attempts = []
-        
-        # Try each variant
-        for tag, img_bytes in variants:
-            attempt = latex_converter.convert_to_latex(img_bytes)
-            if not attempt.get('success'):
-                attempts.append({
-                    'variant': tag,
-                    'success': False,
-                    'error': attempt.get('error', 'Conversion failed')
-                })
-                continue
-            
-            score_info = latex_converter.score_latex(attempt.get('latex', ''))
-            attempts.append({
-                'variant': tag,
-                'success': True,
-                'latex': attempt.get('latex', ''),
-                'confidence': attempt.get('confidence', 0),
-                'score': score_info.get('score', 0)
-            })
-            
-            # Keep the best result
-            if best is None or score_info.get('score', 0) > best.get('score', 0):
-                best = {
-                    'variant': tag,
-                    'latex': attempt.get('latex', ''),
-                    'confidence': attempt.get('confidence', 0),
-                    'score': score_info.get('score', 0)
-                }
-            
-            # Fast path: if not in high-accuracy mode and got a valid result, stop
-            if not high_accuracy and score_info.get('valid', False):
-                break
-        
-        if best is None:
-            return jsonify({
-                'success': False,
-                'error': 'Could not convert image to LaTeX',
-                'attempts': attempts
-            }), 400
-        
-        return jsonify({
-            'success': True,
-            'latex': best['latex'],
-            'preprocess_variant': best['variant'],
-            'confidence': best['confidence'],
-            'score': best['score'],
-            'message': 'Equation converted to LaTeX successfully',
-            'attempts': attempts if high_accuracy else None
-        }), 200
-    
-    except Exception as e:
-        import traceback
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'details': traceback.format_exc()
-        }), 500
+    return jsonify({
+        'success': False,
+        'error': 'Image conversion is disabled in this deployment.'
+    }), 501
 
 @app.route('/api/images', methods=['GET'])
 def get_images():
@@ -1550,4 +1630,6 @@ def serve_file(filename):
     return "File Not Found", 404
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=True)
+    port = int(os.getenv("PORT", 5000))
+    debug = os.getenv("FLASK_ENV", "development") == "development"
+    app.run(host="0.0.0.0", port=port, debug=debug)

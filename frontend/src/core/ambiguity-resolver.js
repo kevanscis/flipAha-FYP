@@ -355,6 +355,59 @@
   });
 
   // --------------------------------------------------------------------------
+  // Rule 7c: Function argument fraction grouping — cos(-1/2x)
+  // cos(-1/2x) → cos((-1/2)x)
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'func-fraction-grouping',
+    match(node) {
+      if (node.type !== 'function') return false;
+      if (node.args.length !== 1) return false;
+
+      const arg = node.args[0];
+
+      // Match: something like (-1)/(2x)
+      return arg.type === 'binary' &&
+            arg.op === '/' &&
+            arg.right &&
+            arg.right.type === 'implicit_multiply' &&
+            arg.right.factors.length > 1;
+    },
+
+    expand(node) {
+      const { ASTNode } = getParser();
+      const results = [];
+
+      // Original
+      results.push(node);
+
+      const arg = node.args[0];
+      const denomFactors = arg.right.factors;
+
+      const head = denomFactors[0];      // 2
+      const tail = denomFactors.slice(1); // x
+
+      // Build (-1/2)
+      const newFrac = ASTNode.binary('/', arg.left, head);
+
+      // Build (-1/2)x
+      let newArg;
+      if (tail.length === 0) {
+        newArg = newFrac;
+      } else {
+        newArg = ASTNode.implicitMul([newFrac, ...tail]);
+      }
+
+      // Wrap in function
+      const newFunc = ASTNode.func(node.name, [newArg], node.modifier, true);
+
+      results.push(newFunc);
+
+      return deduplicateASTs(results);
+    }
+  });
+
+  // --------------------------------------------------------------------------
   // Rule 8: sqrt alternative — x^(1/2) ↔ sqrt(x)
   // --------------------------------------------------------------------------
   ambiguityRules.push({
@@ -1759,6 +1812,62 @@
   // MAIN: GENERATE SUGGESTIONS FROM INPUT
   // ==========================================================================
 
+  function getCompactInverseTrigSuggestion(input) {
+    const raw = String(input || '').trim();
+    if (!raw) return '';
+
+    const compact = raw.toLowerCase().replace(/\s+/g, '');
+    const m = compact.match(/^(?:arc|a)?(sin|cos|tan|sec|csc|cot|cosec)([+\-].+)$/i);
+    if (!m) return '';
+
+    const fnRaw = String(m[1] || '').toLowerCase();
+    const fn = fnRaw === 'cosec' ? 'csc' : fnRaw;
+    const argRaw = String(m[2] || '').trim();
+    if (!argRaw) return '';
+
+    const normalizedArg = argRaw
+      .replace(/sqrt\s*\(?\s*([A-Za-z0-9]+)\s*\)?/gi, '\\sqrt{$1}')
+      .replace(/\btheta\b/gi, '\\theta')
+      .replace(/\bpi\b/gi, '\\pi');
+
+    return `\\${fn}^{-1}(${normalizedArg})`;
+  }
+
+  function getCompactTrigDivisionSuggestion(input) {
+    const raw = String(input || '').trim();
+    if (!raw) return '';
+
+    const compact = raw.toLowerCase().replace(/\s+/g, '');
+    const m = compact.match(/^([+\-]?\d+(?:\/\d+)?)?(sin|cos|tan|sec|csc|cot|cosec)([a-zα-ωπθ]+)\/([a-z0-9α-ωπθ]+)$/i);
+    if (!m) return '';
+
+    const coeffRaw = String(m[1] || '').trim();
+    const fnRaw = String(m[2] || '').toLowerCase();
+    const argNumRaw = String(m[3] || '').trim();
+    const argDenRaw = String(m[4] || '').trim();
+    if (!argNumRaw || !argDenRaw) return '';
+
+    const fn = fnRaw === 'cosec' ? 'csc' : fnRaw;
+    const normalizeAtom = (value) => String(value || '')
+      .replace(/theta/gi, '\\theta')
+      .replace(/pi/gi, '\\pi');
+
+    const coeffLatex = (() => {
+      if (!coeffRaw) return '';
+      if (coeffRaw.includes('/')) {
+        const [n, d] = coeffRaw.split('/');
+        if (n && d) return `\\frac{${n}}{${d}}`;
+      }
+      return coeffRaw;
+    })();
+
+    const argNum = normalizeAtom(argNumRaw);
+    const argDen = normalizeAtom(argDenRaw);
+    const trigPart = `\\${fn}(\\frac{${argNum}}{${argDen}})`;
+
+    return coeffLatex ? `${coeffLatex}${trigPart}` : trigPart;
+  }
+
   /**
    * Parse input and generate all alternative LaTeX interpretations.
    * @param {string} input — raw math text from student
@@ -1773,8 +1882,16 @@
       return [];
     }
 
+    const compactInverseSuggestion = getCompactInverseTrigSuggestion(input);
+    const compactTrigDivisionSuggestion = getCompactTrigDivisionSuggestion(input);
+
     const { ast, error } = parser.parseMath(input);
-    if (error || !ast) return [];
+    if (error || !ast) {
+      const early = [];
+      if (compactTrigDivisionSuggestion) early.push(compactTrigDivisionSuggestion);
+      if (compactInverseSuggestion) early.push(compactInverseSuggestion);
+      return early.slice(0, maxSuggestions);
+    }
 
     // Step 1: Render the default parse
     const defaultLatex = parser.astToLatex(ast);
@@ -1814,6 +1931,22 @@
       s => normalizeLatexForComparison(s) !== defaultNorm
     );
     orderedSuggestions.unshift(defaultLatex);
+
+    if (compactInverseSuggestion) {
+      const compactNorm = normalizeLatexForComparison(compactInverseSuggestion);
+      const hasCompact = orderedSuggestions.some(s => normalizeLatexForComparison(s) === compactNorm);
+      if (!hasCompact) {
+        orderedSuggestions.unshift(compactInverseSuggestion);
+      }
+    }
+
+    if (compactTrigDivisionSuggestion) {
+      const compactNorm = normalizeLatexForComparison(compactTrigDivisionSuggestion);
+      const hasCompact = orderedSuggestions.some(s => normalizeLatexForComparison(s) === compactNorm);
+      if (!hasCompact) {
+        orderedSuggestions.unshift(compactTrigDivisionSuggestion);
+      }
+    }
 
     return orderedSuggestions.slice(0, maxSuggestions);
   }

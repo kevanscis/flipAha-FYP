@@ -4,10 +4,11 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from werkzeug.security import generate_password_hash
 from database.db import get_db
+import os
 
 register_bp = Blueprint("register_bp", __name__)
 
-ADMIN_SECRET_CODE = "ADMIN123"
+ADMIN_SECRET_CODE = os.getenv("ADMIN_SECRET_CODE", "ADMIN123")
 
 @register_bp.route("/register", methods=["POST"])
 def register_user():

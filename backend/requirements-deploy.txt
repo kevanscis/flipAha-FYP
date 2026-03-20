@@ -1,0 +1,7 @@
+# Lightweight requirements for free-tier deployment (LITE_MODE=true)
+# Skips PyTorch, transformers, and OCR packages to stay under 512 MB RAM
+Flask==3.0.0
+Flask-CORS==4.0.0
+gunicorn==22.0.0
+pytz
+requests
