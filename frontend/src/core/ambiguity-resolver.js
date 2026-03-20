@@ -1833,6 +1833,41 @@
     return `\\${fn}^{-1}(${normalizedArg})`;
   }
 
+  function getCompactTrigDivisionSuggestion(input) {
+    const raw = String(input || '').trim();
+    if (!raw) return '';
+
+    const compact = raw.toLowerCase().replace(/\s+/g, '');
+    const m = compact.match(/^([+\-]?\d+(?:\/\d+)?)?(sin|cos|tan|sec|csc|cot|cosec)([a-zα-ωπθ]+)\/([a-z0-9α-ωπθ]+)$/i);
+    if (!m) return '';
+
+    const coeffRaw = String(m[1] || '').trim();
+    const fnRaw = String(m[2] || '').toLowerCase();
+    const argNumRaw = String(m[3] || '').trim();
+    const argDenRaw = String(m[4] || '').trim();
+    if (!argNumRaw || !argDenRaw) return '';
+
+    const fn = fnRaw === 'cosec' ? 'csc' : fnRaw;
+    const normalizeAtom = (value) => String(value || '')
+      .replace(/theta/gi, '\\theta')
+      .replace(/pi/gi, '\\pi');
+
+    const coeffLatex = (() => {
+      if (!coeffRaw) return '';
+      if (coeffRaw.includes('/')) {
+        const [n, d] = coeffRaw.split('/');
+        if (n && d) return `\\frac{${n}}{${d}}`;
+      }
+      return coeffRaw;
+    })();
+
+    const argNum = normalizeAtom(argNumRaw);
+    const argDen = normalizeAtom(argDenRaw);
+    const trigPart = `\\${fn}(\\frac{${argNum}}{${argDen}})`;
+
+    return coeffLatex ? `${coeffLatex}${trigPart}` : trigPart;
+  }
+
   /**
    * Parse input and generate all alternative LaTeX interpretations.
    * @param {string} input — raw math text from student
@@ -1848,10 +1883,14 @@
     }
 
     const compactInverseSuggestion = getCompactInverseTrigSuggestion(input);
+    const compactTrigDivisionSuggestion = getCompactTrigDivisionSuggestion(input);
 
     const { ast, error } = parser.parseMath(input);
     if (error || !ast) {
-      return compactInverseSuggestion ? [compactInverseSuggestion].slice(0, maxSuggestions) : [];
+      const early = [];
+      if (compactTrigDivisionSuggestion) early.push(compactTrigDivisionSuggestion);
+      if (compactInverseSuggestion) early.push(compactInverseSuggestion);
+      return early.slice(0, maxSuggestions);
     }
 
     // Step 1: Render the default parse
@@ -1898,6 +1937,14 @@
       const hasCompact = orderedSuggestions.some(s => normalizeLatexForComparison(s) === compactNorm);
       if (!hasCompact) {
         orderedSuggestions.unshift(compactInverseSuggestion);
+      }
+    }
+
+    if (compactTrigDivisionSuggestion) {
+      const compactNorm = normalizeLatexForComparison(compactTrigDivisionSuggestion);
+      const hasCompact = orderedSuggestions.some(s => normalizeLatexForComparison(s) === compactNorm);
+      if (!hasCompact) {
+        orderedSuggestions.unshift(compactTrigDivisionSuggestion);
       }
     }
 
