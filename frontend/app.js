@@ -1252,7 +1252,7 @@ async function handleSubmitQuestion(e) {
   submitBtn.disabled = true;
   questionInput.contentEditable = 'false';
   questionInput.classList.add('locked');
-  showResponseStatus('loading', 'Processing your question...');
+  responseMessage.style.display = 'none';
 
   // Implicit negative signal: if suggestions were shown but user typed without
   // clicking any of them, treat it as a rejection of all shown suggestions.
