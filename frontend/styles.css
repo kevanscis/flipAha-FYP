@@ -1070,22 +1070,52 @@ footer {
     display: inline;
 }
 
-#logoutButton {
+.nav-username {
+    display: inline;
+    color: #fff;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.profile-menu {
+    position: relative;
     display: none;
 }
 
-.nav-username {
-    display: none;
+.profile-menu-button {
+    padding-right: 14px;
+}
+
+.profile-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 150px;
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+    padding: 6px;
+    z-index: 1200;
+}
+
+.profile-dropdown-item {
+    width: 100%;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #333;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+    padding: 10px 12px;
+    display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
-    /* border-radius: 999px;
-    background: rgba(255, 255, 255, 0.2);
-    border: 2px solid rgba(255, 255, 255, 0.35); */
-    color: #fff;
-    font-weight: 700;
-    line-height: 1;
-    white-space: nowrap;
+    gap: 8px;
+}
+
+.profile-dropdown-item:hover {
+    background: #f5f5f5;
 }
 
 /* ==================== Dashboard Container Override ==================== */

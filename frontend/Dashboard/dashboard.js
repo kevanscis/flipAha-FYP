@@ -100,9 +100,92 @@ function goHome(){
   window.location.href = `${API_BASE_URL}/`;
 }
 
-function goLogout() {
-  window.location.href = `${API_BASE_URL}/login`;
+async function goLogout() {
+    localStorage.removeItem('flipaha_session_id');
+    await fetch(`${API_BASE_URL}/logout`, {
+        method: 'POST',
+        credentials: 'include'
+    });
+    window.location.href = `${API_BASE_URL}/login`;
 }
+
+function closeProfileDropdown() {
+    const profileDropdown = document.getElementById('profileDropdown');
+    const profileMenuButton = document.getElementById('profileMenuButton');
+    if (profileDropdown) profileDropdown.style.display = 'none';
+    if (profileMenuButton) profileMenuButton.setAttribute('aria-expanded', 'false');
+}
+
+function initializeProfileDropdown() {
+    const profileMenuButton = document.getElementById('profileMenuButton');
+    const profileMenu = document.getElementById('profileMenu');
+
+    if (!profileMenuButton || !profileMenu || profileMenuButton.dataset.bound === 'true') {
+        return;
+    }
+
+    profileMenuButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const profileDropdown = document.getElementById('profileDropdown');
+        if (!profileDropdown) return;
+        const isOpen = profileDropdown.style.display === 'block';
+        profileDropdown.style.display = isOpen ? 'none' : 'block';
+        profileMenuButton.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!profileMenu.contains(event.target)) {
+            closeProfileDropdown();
+        }
+    });
+
+    profileMenuButton.dataset.bound = 'true';
+}
+
+async function checkAuthStatus() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/me`, { credentials: 'include' });
+        const data = await response.json();
+
+        const authButtons = document.getElementById('authButtons');
+        const profileMenu = document.getElementById('profileMenu');
+        const usernameEl = document.getElementById('navUsername');
+        const imageHistoryButton = document.getElementById('imageHistoryButton');
+
+        if (!data.logged_in) {
+            if (authButtons) authButtons.style.display = 'block';
+            if (profileMenu) profileMenu.style.display = 'none';
+            if (imageHistoryButton) imageHistoryButton.style.display = 'none';
+            if (usernameEl) usernameEl.textContent = '';
+            closeProfileDropdown();
+            return;
+        }
+
+        if (authButtons) authButtons.style.display = 'none';
+        if (imageHistoryButton) imageHistoryButton.style.display = 'block';
+
+        const username = (data.username || '').trim();
+        if (profileMenu && usernameEl && username) {
+            usernameEl.textContent = username;
+            profileMenu.style.display = 'block';
+            initializeProfileDropdown();
+        } else {
+            if (profileMenu) profileMenu.style.display = 'none';
+            if (usernameEl) usernameEl.textContent = '';
+        }
+
+        closeProfileDropdown();
+    } catch (error) {
+        console.warn('Could not check auth status:', error);
+        try { document.getElementById('authButtons').style.display = 'block'; } catch {}
+        try { document.getElementById('profileMenu').style.display = 'none'; } catch {}
+        try { document.getElementById('imageHistoryButton').style.display = 'none'; } catch {}
+        try { document.getElementById('navUsername').textContent = ''; } catch {}
+        closeProfileDropdown();
+    }
+}
+
+checkAuthStatus();
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Active Users (Basic)

@@ -9,6 +9,103 @@ function goImage() {
   window.location.href = `${API_BASE_URL}/image`;
 }
 
+async function goLogout() {
+    localStorage.removeItem('flipaha_session_id');
+    await fetch(`${API_BASE_URL}/logout`, {
+        method: 'POST',
+        credentials: 'include'
+    });
+    window.location.href = `${API_BASE_URL}/login`;
+}
+
+function closeProfileDropdown() {
+    const profileDropdown = document.getElementById('profileDropdown');
+    const profileMenuButton = document.getElementById('profileMenuButton');
+    if (profileDropdown) profileDropdown.style.display = 'none';
+    if (profileMenuButton) profileMenuButton.setAttribute('aria-expanded', 'false');
+}
+
+function initializeProfileDropdown() {
+    const profileMenuButton = document.getElementById('profileMenuButton');
+    const profileMenu = document.getElementById('profileMenu');
+
+    if (!profileMenuButton || !profileMenu || profileMenuButton.dataset.bound === 'true') {
+        return;
+    }
+
+    profileMenuButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const profileDropdown = document.getElementById('profileDropdown');
+        if (!profileDropdown) return;
+        const isOpen = profileDropdown.style.display === 'block';
+        profileDropdown.style.display = isOpen ? 'none' : 'block';
+        profileMenuButton.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!profileMenu.contains(event.target)) {
+            closeProfileDropdown();
+        }
+    });
+
+    profileMenuButton.dataset.bound = 'true';
+}
+
+async function checkAuthStatus() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/me`, { credentials: 'include' });
+        const data = await response.json();
+
+        const dashboardButton = document.getElementById('dashboardButton');
+        const imageHistoryButton = document.getElementById('imageHistoryButton');
+        const authButtons = document.getElementById('authButtons');
+        const profileMenu = document.getElementById('profileMenu');
+        const usernameEl = document.getElementById('navUsername');
+
+        if (!data.logged_in) {
+            if (authButtons) authButtons.style.display = 'block';
+            if (profileMenu) profileMenu.style.display = 'none';
+            if (dashboardButton) dashboardButton.style.display = 'none';
+            if (imageHistoryButton) imageHistoryButton.style.display = 'none';
+            if (usernameEl) usernameEl.textContent = '';
+            localStorage.removeItem('flipaha_session_id');
+            closeProfileDropdown();
+            return;
+        }
+
+        if (authButtons) authButtons.style.display = 'none';
+        if (profileMenu) profileMenu.style.display = 'block';
+        if (imageHistoryButton) imageHistoryButton.style.display = 'block';
+
+        if (dashboardButton) {
+            dashboardButton.style.display = data.role === 'admin' ? 'block' : 'none';
+        }
+
+        if (usernameEl) {
+            const username = (data.username || '').trim();
+            if (username) {
+                usernameEl.textContent = username;
+                if (profileMenu) profileMenu.style.display = 'block';
+                initializeProfileDropdown();
+            } else {
+                usernameEl.textContent = '';
+                if (profileMenu) profileMenu.style.display = 'none';
+            }
+        }
+
+        localStorage.setItem('flipaha_session_id', `user_${data.user_id}`);
+        closeProfileDropdown();
+    } catch (error) {
+        console.warn('Could not check auth status:', error);
+        try { document.getElementById('authButtons').style.display = 'block'; } catch {}
+        try { document.getElementById('profileMenu').style.display = 'none'; } catch {}
+        try { document.getElementById('dashboardButton').style.display = 'none'; } catch {}
+        try { document.getElementById('imageHistoryButton').style.display = 'none'; } catch {}
+        try { document.getElementById('navUsername').textContent = ''; } catch {}
+        closeProfileDropdown();
+    }
+}
+
 // State management
 const state = {
     sessionId: null,
@@ -28,6 +125,8 @@ const state = {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
+    checkAuthStatus();
+
     // Load session from localStorage
     const savedSession = localStorage.getItem('flipaha_session_id');
     if (savedSession) {

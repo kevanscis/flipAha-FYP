@@ -93,6 +93,39 @@ function unlockChat() {
   questionInput.dataset.placeholder = 'Ask your math question... (e.g. 1/2, sin x, x^2)';
 }
 
+function closeProfileDropdown() {
+  const profileDropdownEl = document.getElementById('profileDropdown');
+  const profileMenuButtonEl = document.getElementById('profileMenuButton');
+  if (profileDropdownEl) profileDropdownEl.style.display = 'none';
+  if (profileMenuButtonEl) profileMenuButtonEl.setAttribute('aria-expanded', 'false');
+}
+
+function initializeProfileDropdown() {
+  const profileMenuButtonEl = document.getElementById('profileMenuButton');
+  const profileMenuEl = document.getElementById('profileMenu');
+
+  if (!profileMenuButtonEl || !profileMenuEl || profileMenuButtonEl.dataset.bound === 'true') {
+    return;
+  }
+
+  profileMenuButtonEl.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const profileDropdownEl = document.getElementById('profileDropdown');
+    if (!profileDropdownEl) return;
+    const isOpen = profileDropdownEl.style.display === 'block';
+    profileDropdownEl.style.display = isOpen ? 'none' : 'block';
+    profileMenuButtonEl.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!profileMenuEl.contains(event.target)) {
+      closeProfileDropdown();
+    }
+  });
+
+  profileMenuButtonEl.dataset.bound = 'true';
+}
+
 async function checkAuthStatus() {
   try {
     const res = await fetch(`${API_BASE_URL}/api/me`, {
@@ -103,20 +136,20 @@ async function checkAuthStatus() {
 
     if (!data.logged_in) {
       // User is not logged in: show login button, hide logout/dashboard and lock chat
-      const logoutEl = document.getElementById('logoutButton');
       const dashEl = document.getElementById('dashboardButton');
       const authEl = document.getElementById('authButtons');
       const histEl = document.getElementById('imageHistoryButton');
+      const profileMenuEl = document.getElementById('profileMenu');
       const usernameEl = document.getElementById('navUsername');
 
-      if (logoutEl) logoutEl.style.display = 'none';
       if (dashEl) dashEl.style.display = 'none';
       if (authEl) authEl.style.display = 'block';
       if (histEl) histEl.style.display = 'none';
+      if (profileMenuEl) profileMenuEl.style.display = 'none';
       if (usernameEl) {
-        usernameEl.style.display = 'none';
         usernameEl.textContent = '';
       }
+      closeProfileDropdown();
 
       // Clear any session_id so guests can't access user images
       localStorage.removeItem('flipaha_session_id');
@@ -125,29 +158,25 @@ async function checkAuthStatus() {
     } else {
       // Logged in: hide auth buttons, show logout and enable chat
       const authEl = document.getElementById('authButtons');
-      const logoutEl = document.getElementById('logoutButton');
       const dashEl = document.getElementById('dashboardButton');
       const histEl = document.getElementById('imageHistoryButton');
+      const profileMenuEl = document.getElementById('profileMenu');
       const usernameEl = document.getElementById('navUsername');
 
       if (authEl) authEl.style.display = 'none';
-      if (logoutEl) logoutEl.style.display = 'block';
       if (histEl) histEl.style.display = 'block';
       if (usernameEl) {
         const username = (data.username || '').trim();
         if (username) {
-          usernameEl.textContent = '';
-          const userIcon = document.createElement('i');
-          userIcon.className = 'fas fa-user';
-          userIcon.setAttribute('aria-hidden', 'true');
-          usernameEl.appendChild(userIcon);
-          usernameEl.appendChild(document.createTextNode(username));
-          usernameEl.style.display = 'inline-flex';
+          usernameEl.textContent = username;
+          if (profileMenuEl) profileMenuEl.style.display = 'block';
+          initializeProfileDropdown();
         } else {
-          usernameEl.style.display = 'none';
+          if (profileMenuEl) profileMenuEl.style.display = 'none';
           usernameEl.textContent = '';
         }
       }
+      closeProfileDropdown();
       unlockChat();
 
       // Tie session_id to the logged-in user so image history is per-user
@@ -167,6 +196,8 @@ async function checkAuthStatus() {
     // If auth check fails (network/server), keep chat locked for safety and show login
     console.warn('Auth check failed, leaving chat locked until login:', error);
     try { document.getElementById('authButtons').style.display = 'block'; } catch {}
+    try { document.getElementById('profileMenu').style.display = 'none'; } catch {}
+    try { closeProfileDropdown(); } catch {}
     lockChat();
   }
 }
@@ -183,7 +214,7 @@ async function goLogout() {
     credentials: 'include'
   });
 
-  window.location.reload();
+  window.location.href = `${API_BASE_URL}/login`;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////

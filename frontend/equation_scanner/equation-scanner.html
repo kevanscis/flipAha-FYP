@@ -36,8 +36,24 @@
                 <div class="header-nav">
                     <a class="nav-button" href="/"><i class="fas fa-comments"></i> Chat Tutor</a>
                     <button class="nav-button active" onclick="goImage()"><i class="fas fa-camera"></i> Equation Scanner</button>
+                    <div id="dashboardButton" style="display: none;">
+                        <a class="nav-button" href="/dashboard"><i class="fas fa-chart-bar"></i> Dashboard</a>
+                    </div>
                     <div id="imageHistoryButton">
                         <a class="nav-button" href="/imageHistory"><i class="fas fa-history"></i> Image History</a>
+                    </div>
+                    <div id="authButtons" style="display: none;">
+                        <a class="nav-button" href="/login"><i class="fas fa-sign-in-alt"></i> Login</a>
+                    </div>
+                    <div id="profileMenu" class="profile-menu" style="display: none;">
+                        <button id="profileMenuButton" class="nav-button profile-menu-button" type="button" aria-haspopup="true" aria-expanded="false">
+                            <i class="fas fa-user" aria-hidden="true"></i>
+                            <span id="navUsername" class="nav-username"></span>
+                            <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                        </button>
+                        <div id="profileDropdown" class="profile-dropdown" style="display: none;">
+                            <button class="profile-dropdown-item" onclick="goLogout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+                        </div>
                     </div>
                 </div>
             </div>

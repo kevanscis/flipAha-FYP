@@ -10,7 +10,40 @@ async function goLogout() {
         method: 'POST',
         credentials: 'include'
     });
-    window.location.reload();
+    window.location.href = '/login';
+}
+
+function closeProfileDropdown() {
+    const profileDropdown = document.getElementById('profileDropdown');
+    const profileMenuButton = document.getElementById('profileMenuButton');
+    if (profileDropdown) profileDropdown.style.display = 'none';
+    if (profileMenuButton) profileMenuButton.setAttribute('aria-expanded', 'false');
+}
+
+function initializeProfileDropdown() {
+    const profileMenuButton = document.getElementById('profileMenuButton');
+    const profileMenu = document.getElementById('profileMenu');
+
+    if (!profileMenuButton || !profileMenu || profileMenuButton.dataset.bound === 'true') {
+        return;
+    }
+
+    profileMenuButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const profileDropdown = document.getElementById('profileDropdown');
+        if (!profileDropdown) return;
+        const isOpen = profileDropdown.style.display === 'block';
+        profileDropdown.style.display = isOpen ? 'none' : 'block';
+        profileMenuButton.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!profileMenu.contains(event.target)) {
+            closeProfileDropdown();
+        }
+    });
+
+    profileMenuButton.dataset.bound = 'true';
 }
 
 // Check if user is admin and show/hide dashboard button
@@ -20,37 +53,33 @@ async function checkAdminStatus() {
         const data = await response.json();
         const dashboardButton = document.getElementById('dashboardButton');
         const authButtons = document.getElementById('authButtons');
-        const logoutButton = document.getElementById('logoutButton');
+        const profileMenu = document.getElementById('profileMenu');
         const usernameEl = document.getElementById('navUsername');
         
         if (!data.logged_in) {
             // User not logged in - show login, hide logout and dashboard
             authButtons.style.display = 'block';
-            logoutButton.style.display = 'none';
+            profileMenu.style.display = 'none';
             dashboardButton.style.display = 'none';
             if (usernameEl) {
-                usernameEl.style.display = 'none';
                 usernameEl.textContent = '';
             }
+            closeProfileDropdown();
         } else {
             // User is logged in - show logout, hide login
             authButtons.style.display = 'none';
-            logoutButton.style.display = 'block';
+            profileMenu.style.display = 'block';
             if (usernameEl) {
                 const username = (data.username || '').trim();
                 if (username) {
-                    usernameEl.textContent = '';
-                    const userIcon = document.createElement('i');
-                    userIcon.className = 'fas fa-user';
-                    userIcon.setAttribute('aria-hidden', 'true');
-                    usernameEl.appendChild(userIcon);
-                    usernameEl.appendChild(document.createTextNode(username));
-                    usernameEl.style.display = 'inline-flex';
+                    usernameEl.textContent = username;
+                    initializeProfileDropdown();
                 } else {
-                    usernameEl.style.display = 'none';
+                    profileMenu.style.display = 'none';
                     usernameEl.textContent = '';
                 }
             }
+            closeProfileDropdown();
             
             // Show dashboard only if admin
             if (data.role === 'admin') {
@@ -63,16 +92,16 @@ async function checkAdminStatus() {
         console.warn('Could not check admin status:', error);
         // Show login by default if check fails
         const authButtons = document.getElementById('authButtons');
-        const logoutButton = document.getElementById('logoutButton');
         const dashboardButton = document.getElementById('dashboardButton');
+        const profileMenu = document.getElementById('profileMenu');
         const usernameEl = document.getElementById('navUsername');
         authButtons.style.display = 'block';
-        logoutButton.style.display = 'none';
+        profileMenu.style.display = 'none';
         dashboardButton.style.display = 'none';
         if (usernameEl) {
-            usernameEl.style.display = 'none';
             usernameEl.textContent = '';
         }
+        closeProfileDropdown();
     }
 }
 

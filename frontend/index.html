@@ -44,10 +44,16 @@
                     <div id="authButtons" style="display: none;">
                         <a class="nav-button" href="/login"><i class="fas fa-sign-in-alt"></i> Login</a>
                     </div>
-                    <div id="logoutButton" style="display: none;">
-                        <button class="nav-button" onclick="goLogout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+                    <div id="profileMenu" class="profile-menu" style="display: none;">
+                        <button id="profileMenuButton" class="nav-button profile-menu-button" type="button" aria-haspopup="true" aria-expanded="false">
+                            <i class="fas fa-user" aria-hidden="true"></i>
+                            <span id="navUsername" class="nav-username"></span>
+                            <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                        </button>
+                        <div id="profileDropdown" class="profile-dropdown" style="display: none;">
+                            <button class="profile-dropdown-item" onclick="goLogout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+                        </div>
                     </div>
-                    <span id="navUsername" class="nav-username" style="display: none;"></span>
                 </div>
             </div>
             <p>Your Personal Online Math Tutor</p>
