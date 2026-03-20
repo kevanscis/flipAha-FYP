@@ -7,6 +7,7 @@ import json
 import subprocess
 import re
 import requests
+import math
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import uuid
@@ -53,6 +54,8 @@ CLOUD_LLM_BACKUP_BASE_URLS = [
     if url.strip()
 ]
 CLOUD_LLM_RETRIES = max(1, int(os.getenv("CLOUD_LLM_RETRIES", "2")))
+CHAT_CONTEXT_TURNS = max(0, int(os.getenv("CHAT_CONTEXT_TURNS", "4")))
+CHAT_CONTEXT_MAX_CHARS = max(200, int(os.getenv("CHAT_CONTEXT_MAX_CHARS", "1600")))
 
 
 def _get_llm_base_urls():
@@ -147,6 +150,225 @@ FALLBACK_RESPONSE = (
     "I can help with that. Please share the exact equation or expression you want to solve, "
     "and I will provide a clear step-by-step explanation."
 )
+
+
+def _sanitize_chat_history(history):
+    cleaned = []
+    for item in history or []:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "").strip().lower()
+        if role not in ("user", "assistant"):
+            continue
+        content = _normalize_response_text(item.get("content") or "")
+        if not content:
+            continue
+        cleaned.append({"role": role, "content": content[:600]})
+    return cleaned
+
+
+def _trim_chat_history(history):
+    cleaned = _sanitize_chat_history(history)
+    max_messages = CHAT_CONTEXT_TURNS * 2
+    if max_messages > 0:
+        cleaned = cleaned[-max_messages:]
+    else:
+        cleaned = []
+
+    # Apply overall character cap from newest to oldest
+    kept = []
+    char_budget = CHAT_CONTEXT_MAX_CHARS
+    for message in reversed(cleaned):
+        content = message["content"]
+        if len(content) > char_budget and kept:
+            continue
+        if len(content) > char_budget:
+            content = content[:char_budget]
+        kept.append({"role": message["role"], "content": content})
+        char_budget -= len(content)
+        if char_budget <= 0:
+            break
+
+    return list(reversed(kept))
+
+
+def _build_chat_messages(question, chat_history=None):
+    system_message = {
+        "role": "system",
+        "content": (
+            "You are a concise and accurate math tutor for O-Level students. "
+            "Give clear step-by-step explanations when asked to solve. "
+            "If the input is ambiguous, ask one short clarifying question. "
+            "IMPORTANT OUTPUT FORMAT: Return plain text only. "
+            "Do NOT use Markdown (no **, headings, bullet markdown) and do NOT use LaTeX wrappers like \\( \\), \\[ \\]."
+        )
+    }
+
+    history_messages = _trim_chat_history(chat_history)
+    user_message = {"role": "user", "content": question}
+    return [system_message, *history_messages, user_message], len(history_messages)
+
+
+def _format_pi_value(value):
+    if abs(value) < 1e-9:
+        return "0"
+    ratio = value / math.pi
+    rounded = round(ratio)
+    if abs(ratio - rounded) < 1e-9:
+        if rounded == 1:
+            return "π"
+        if rounded == -1:
+            return "-π"
+        return f"{rounded}π"
+    return f"{value:.6g}"
+
+
+def _parse_number_token(token):
+    token = str(token or "").strip()
+    if not token:
+        return None
+    if "/" in token:
+        left, right = token.split("/", 1)
+        try:
+            return float(left) / float(right)
+        except Exception:
+            return None
+    try:
+        return float(token)
+    except Exception:
+        return None
+
+
+def _parse_pi_bound(token):
+    token = str(token or "").strip().lower().replace("−", "-")
+    if not token:
+        return None
+    if "pi" in token:
+        sign = -1.0 if token.startswith("-") else 1.0
+        core = token.lstrip("+-").replace("pi", "")
+        if core == "":
+            factor = 1.0
+        else:
+            factor = _parse_number_token(core)
+        if factor is None:
+            return None
+        return sign * factor * math.pi
+    return _parse_number_token(token)
+
+
+def _periodic_solutions(base_values, period, lower, upper):
+    solutions = set()
+    if period <= 0:
+        return solutions
+
+    for base in base_values:
+        k_min = math.floor((lower - base) / period) - 1
+        k_max = math.ceil((upper - base) / period) + 1
+        for k in range(int(k_min), int(k_max) + 1):
+            value = base + k * period
+            if lower - 1e-9 <= value <= upper + 1e-9:
+                solutions.add(round(value, 12))
+    return solutions
+
+
+def solve_trig_squared_equation(question):
+    """Solve equations like a trig^2(x/d) + c = 0 over lower <= x <= upper."""
+    q = str(question or "").lower().replace("−", "-")
+    compact = q.replace(" ", "")
+    compact = compact.replace("theta", "x").replace("\\theta", "x")
+    compact = compact.replace("^", "")
+    compact = compact.replace("≤", "<=")
+
+    pattern = re.compile(
+        r"solve"
+        r"([+\-]?\d+(?:\.\d+)?(?:/\d+(?:\.\d+)?)?)?"
+        r"(sin|cos|tan)2"
+        r"\(x/([+\-]?\d+(?:\.\d+)?(?:/\d+(?:\.\d+)?)?)\)"
+        r"([+\-]\d+(?:\.\d+)?(?:/\d+(?:\.\d+)?)?)=0"
+        r"for(.+?)<=x<=(.+)$"
+    )
+    m = pattern.search(compact)
+    if not m:
+        return None
+
+    a = _parse_number_token(m.group(1) or "1")
+    trig = m.group(2)
+    d = _parse_number_token(m.group(3))
+    c = _parse_number_token(m.group(4))
+    lower = _parse_pi_bound(m.group(5))
+    upper = _parse_pi_bound(m.group(6))
+
+    if None in (a, d, c, lower, upper):
+        return None
+    if abs(a) < 1e-12 or abs(d) < 1e-12 or lower > upper:
+        return None
+
+    rhs = -c / a  # trig^2(x/d) = rhs
+    y_lower = lower / d
+    y_upper = upper / d
+    if y_lower > y_upper:
+        y_lower, y_upper = y_upper, y_lower
+
+    solutions_y = set()
+    if trig in ("sin", "cos"):
+        if rhs < 0 or rhs > 1:
+            return (
+                f"For real solutions, {trig}²(x/{d:.6g}) must be in [0, 1], "
+                f"but it equals {rhs:.6g}. So there are no real solutions in "
+                f"[{_format_pi_value(lower)}, {_format_pi_value(upper)}]."
+            )
+
+        root = math.sqrt(rhs)
+        if trig == "sin":
+            for target in (root, -root):
+                alpha = math.asin(max(-1.0, min(1.0, target)))
+                base_values = [alpha, math.pi - alpha]
+                solutions_y |= _periodic_solutions(base_values, 2 * math.pi, y_lower, y_upper)
+        else:  # cos
+            for target in (root, -root):
+                alpha = math.acos(max(-1.0, min(1.0, target)))
+                base_values = [alpha, -alpha]
+                solutions_y |= _periodic_solutions(base_values, 2 * math.pi, y_lower, y_upper)
+    else:  # tan
+        if rhs < 0:
+            return (
+                f"For real solutions, tan²(x/{d:.6g}) cannot be negative, "
+                f"but it equals {rhs:.6g}. So there are no real solutions in "
+                f"[{_format_pi_value(lower)}, {_format_pi_value(upper)}]."
+            )
+
+        root = math.sqrt(rhs)
+        for target in (root, -root):
+            alpha = math.atan(target)
+            solutions_y |= _periodic_solutions([alpha], math.pi, y_lower, y_upper)
+
+    if not solutions_y:
+        return f"No solutions in the interval [{_format_pi_value(lower)}, {_format_pi_value(upper)}]."
+
+    solutions_x = sorted(round(d * y, 12) for y in solutions_y if lower - 1e-9 <= d * y <= upper + 1e-9)
+    unique_x = []
+    for value in solutions_x:
+        if not unique_x or abs(value - unique_x[-1]) > 1e-9:
+            unique_x.append(value)
+
+    if not unique_x:
+        return f"No solutions in the interval [{_format_pi_value(lower)}, {_format_pi_value(upper)}]."
+
+    formatted = ", ".join(_format_pi_value(v) for v in unique_x)
+    rhs_str = f"{rhs:.6g}".rstrip("0").rstrip(".")
+    root_str = f"{math.sqrt(max(rhs, 0)):.6g}".rstrip("0").rstrip(".")
+    trig_symbol = {"sin": "sin", "cos": "cos", "tan": "tan"}[trig]
+
+    return (
+        f"From {a:.6g}{trig_symbol}²(x/{d:.6g}) + ({c:.6g}) = 0, we get {trig_symbol}²(x/{d:.6g}) = {rhs_str}. "
+        f"So {trig_symbol}(x/{d:.6g}) = ±{root_str}. "
+        f"Within {_format_pi_value(lower)} ≤ x ≤ {_format_pi_value(upper)}, the solutions are x = {formatted}."
+    )
+
+
+def generate_local_fallback_answer(question):
+    """Deterministic fallback for common solvable question patterns."""
+    return solve_trig_squared_equation(question)
 
 def _normalize_response_text(text):
     if text is None:
@@ -248,31 +470,17 @@ def evaluate_response_quality(question, answer):
         "answer": a,
     }
 
-def generate_llm_answer(question):
+def generate_llm_answer(question, chat_history=None):
     """
     Generate a response using a hosted ChatGPT-style endpoint.
     This requires no local model installation.
     """
+    messages, context_message_count = _build_chat_messages(question, chat_history)
     payload = {
         "model": CLOUD_LLM_MODEL,
         "stream": False,
         "temperature": 0.2,
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "You are a concise and accurate math tutor for O-Level students. "
-                    "Give clear step-by-step explanations when asked to solve. "
-                    "If the input is ambiguous, ask one short clarifying question. "
-                    "IMPORTANT OUTPUT FORMAT: Return plain text only. "
-                    "Do NOT use Markdown (no **, headings, bullet markdown) and do NOT use LaTeX wrappers like \\( \\), \\[ \\]."
-                )
-            },
-            {
-                "role": "user",
-                "content": question
-            }
-        ]
+        "messages": messages,
     }
 
     try:
@@ -282,11 +490,136 @@ def generate_llm_answer(question):
 
         return content, {
             **meta,
-            "used_fallback": False
+            "used_fallback": False,
+            "context_messages": context_message_count,
         }
     except Exception as e:
-        content = FALLBACK_RESPONSE
+        local_answer = generate_local_fallback_answer(question)
+        content = local_answer or FALLBACK_RESPONSE
         return content, {
+            "provider": "fallback-local-solver" if local_answer else "fallback-llm-unavailable",
+            "model": None,
+            "used_fallback": local_answer is None,
+            "used_local_solver": bool(local_answer),
+            "context_messages": context_message_count,
+            "error": str(e)
+        }
+
+
+def _clean_latex_candidate(text):
+    """Normalize model output into a single LaTeX expression string."""
+    s = _normalize_response_text(text)
+    s = s.replace("```latex", "").replace("```", "").strip()
+
+    # Remove common math delimiters if present.
+    s = re.sub(r"^\$\$(.*)\$\$$", r"\1", s)
+    s = re.sub(r"^\$(.*)\$$", r"\1", s)
+    s = re.sub(r"^\\\((.*)\\\)$", r"\1", s)
+    s = re.sub(r"^\\\[(.*)\\\]$", r"\1", s)
+
+    # If multiple lines are returned, keep the first non-empty one.
+    if "\n" in s:
+        lines = [line.strip() for line in s.split("\n") if line.strip()]
+        s = lines[0] if lines else ""
+
+    return s.strip()
+
+
+def _clean_plain_text_candidate(text):
+    """Normalize short plain-text intent returned by the model."""
+    s = _normalize_response_text(text)
+    s = s.replace("```", "").strip()
+    # Keep intent concise for input-box insertion.
+    if len(s) > 240:
+        s = s[:240].rstrip()
+    return s
+
+
+def generate_equation_draft(user_prompt):
+    """Generate plain-text intent + one LaTeX draft for insertion into chat input."""
+    payload = {
+        "model": CLOUD_LLM_MODEL,
+        "stream": False,
+        "temperature": 0.2,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You convert mixed natural-language math prompts into two outputs. "
+                    "Return ONLY valid JSON with keys: plain_text, latex. "
+                    "plain_text: short normal-language intent with no LaTeX; use empty string if none. "
+                    "latex: exactly ONE LaTeX equation/expression only, no markdown. "
+                    "Do not wrap latex in $...$, \\(...\\), or \\[...\\]. "
+                    "Prefer standard commands like \\frac, \\sqrt, \\sin, \\cos, \\tan. "
+                    "Examples: "
+                    "'Find all solutions to cos(x) = -1' -> {\"plain_text\":\"Find all solutions\",\"latex\":\"\\cos(x)=-1\"}; "
+                    "'What is arcsin(0.5)?' -> {\"plain_text\":\"Evaluate\",\"latex\":\"\\arcsin(0.5)\"}; "
+                    "'What angle has a sine of 0.866?' -> {\"plain_text\":\"Find the angle\",\"latex\":\"\\sin(x)=0.866\"}."
+                )
+            },
+            {
+                "role": "user",
+                "content": user_prompt
+            }
+        ]
+    }
+
+    try:
+        resp = requests.post(
+            f"{CLOUD_LLM_BASE_URL}/chat/completions",
+            json=payload,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0"
+            },
+            timeout=45
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        choices = data.get("choices") or []
+        first = choices[0] if choices else {}
+        message = first.get("message") or {}
+        content = (message.get("content") or "").strip()
+
+        parsed = None
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            # Try extracting JSON object from accidental wrappers.
+            m = re.search(r"\{[\s\S]*\}", content)
+            if m:
+                try:
+                    parsed = json.loads(m.group(0))
+                except json.JSONDecodeError:
+                    parsed = None
+
+        plain_text = ""
+        latex = ""
+        if isinstance(parsed, dict):
+            plain_text = _clean_plain_text_candidate(parsed.get("plain_text") or "")
+            latex = _clean_latex_candidate(parsed.get("latex") or "")
+
+        # Fallback for non-JSON model output.
+        if not latex:
+            latex = _clean_latex_candidate(content)
+
+        if not latex:
+            raise ValueError("Empty equation draft")
+
+        return {
+            "plain_text": plain_text,
+            "latex": latex
+        }, {
+            "provider": "pollinations",
+            "model": CLOUD_LLM_MODEL,
+            "used_fallback": False
+        }
+    except (requests.RequestException, TimeoutError, ValueError, json.JSONDecodeError) as e:
+        return {
+            "plain_text": "",
+            "latex": ""
+        }, {
             "provider": "fallback-llm-unavailable",
             "model": None,
             "used_fallback": True,
@@ -682,9 +1015,11 @@ def ask_question():
                 'error': 'Question is empty'
             }), 400
 
+        history_before = _trim_chat_history(session.get("chat_history") or [])
+
         # 3) Run answer and metadata classification in parallel to cut latency.
         with ThreadPoolExecutor(max_workers=2) as executor:
-            answer_future = executor.submit(generate_llm_answer, question)
+            answer_future = executor.submit(generate_llm_answer, question, history_before)
             metadata_future = executor.submit(classify_question_metadata, question)
             answer, llm_meta = answer_future.result()
             metadata = metadata_future.result()
@@ -693,10 +1028,22 @@ def ask_question():
         difficulty = metadata.get("difficulty", "medium")
         
         # Ensure quality before returning to client
+        original_answer = answer
+        quality_before_guard = evaluate_response_quality(question, answer)
+        quality_guard_triggered = not quality_before_guard["is_proper"]
+        if quality_guard_triggered:
+            answer = generate_local_fallback_answer(question) or FALLBACK_RESPONSE
+
         quality = evaluate_response_quality(question, answer)
-        if not quality["is_proper"]:
-            answer = FALLBACK_RESPONSE
-            quality = evaluate_response_quality(question, answer)
+
+        # 3b) Persist bounded chat context for lightweight conversational memory.
+        updated_history = _trim_chat_history([
+            *history_before,
+            {"role": "user", "content": question},
+            {"role": "assistant", "content": answer},
+        ])
+        session["chat_history"] = updated_history
+        session.modified = True
 
         # 4) Insert into DB
         question_id = str(uuid.uuid4())
@@ -733,6 +1080,12 @@ def ask_question():
             'difficulty': difficulty,
             'question_id': question_id,
             'llm': llm_meta,
+            'quality_guard': {
+                'triggered': quality_guard_triggered,
+                'issues_before_guard': quality_before_guard['issues'],
+                'score_before_guard': quality_before_guard['score'],
+                'answer_changed': answer != original_answer,
+            },
             'quality': {
                 'is_proper': quality['is_proper'],
                 'score': quality['score'],
