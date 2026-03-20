@@ -12,7 +12,7 @@ let lastShownSuggestions = [];   // track suggestions shown for ML feedback
 let lastSuggestionQuery = '';    // track the raw input that triggered suggestions
 
 // Configuration
-const API_BASE_URL = ''; // Relative — works in both dev and production
+const API_BASE_URL = 'http://localhost:5000';
 
 function goHome(){
   window.location.href = `${API_BASE_URL}/`;

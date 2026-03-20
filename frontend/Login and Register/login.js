@@ -1,4 +1,4 @@
-const API_BASE_URL = ''; // Relative — works in both dev and production
+const API_BASE_URL = 'http://localhost:5000';
 
 const form = document.getElementById('loginForm');
 const usernameInput = document.getElementById('username');
