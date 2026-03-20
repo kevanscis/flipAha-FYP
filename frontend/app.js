@@ -107,11 +107,16 @@ async function checkAuthStatus() {
       const dashEl = document.getElementById('dashboardButton');
       const authEl = document.getElementById('authButtons');
       const histEl = document.getElementById('imageHistoryButton');
+      const usernameEl = document.getElementById('navUsername');
 
       if (logoutEl) logoutEl.style.display = 'none';
       if (dashEl) dashEl.style.display = 'none';
       if (authEl) authEl.style.display = 'block';
       if (histEl) histEl.style.display = 'none';
+      if (usernameEl) {
+        usernameEl.style.display = 'none';
+        usernameEl.textContent = '';
+      }
 
       // Clear any session_id so guests can't access user images
       localStorage.removeItem('flipaha_session_id');
@@ -123,10 +128,26 @@ async function checkAuthStatus() {
       const logoutEl = document.getElementById('logoutButton');
       const dashEl = document.getElementById('dashboardButton');
       const histEl = document.getElementById('imageHistoryButton');
+      const usernameEl = document.getElementById('navUsername');
 
       if (authEl) authEl.style.display = 'none';
       if (logoutEl) logoutEl.style.display = 'block';
       if (histEl) histEl.style.display = 'block';
+      if (usernameEl) {
+        const username = (data.username || '').trim();
+        if (username) {
+          usernameEl.textContent = '';
+          const userIcon = document.createElement('i');
+          userIcon.className = 'fas fa-user';
+          userIcon.setAttribute('aria-hidden', 'true');
+          usernameEl.appendChild(userIcon);
+          usernameEl.appendChild(document.createTextNode(username));
+          usernameEl.style.display = 'inline-flex';
+        } else {
+          usernameEl.style.display = 'none';
+          usernameEl.textContent = '';
+        }
+      }
       unlockChat();
 
       // Tie session_id to the logged-in user so image history is per-user

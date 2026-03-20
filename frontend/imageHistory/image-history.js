@@ -21,16 +21,36 @@ async function checkAdminStatus() {
         const dashboardButton = document.getElementById('dashboardButton');
         const authButtons = document.getElementById('authButtons');
         const logoutButton = document.getElementById('logoutButton');
+        const usernameEl = document.getElementById('navUsername');
         
         if (!data.logged_in) {
             // User not logged in - show login, hide logout and dashboard
             authButtons.style.display = 'block';
             logoutButton.style.display = 'none';
             dashboardButton.style.display = 'none';
+            if (usernameEl) {
+                usernameEl.style.display = 'none';
+                usernameEl.textContent = '';
+            }
         } else {
             // User is logged in - show logout, hide login
             authButtons.style.display = 'none';
             logoutButton.style.display = 'block';
+            if (usernameEl) {
+                const username = (data.username || '').trim();
+                if (username) {
+                    usernameEl.textContent = '';
+                    const userIcon = document.createElement('i');
+                    userIcon.className = 'fas fa-user';
+                    userIcon.setAttribute('aria-hidden', 'true');
+                    usernameEl.appendChild(userIcon);
+                    usernameEl.appendChild(document.createTextNode(username));
+                    usernameEl.style.display = 'inline-flex';
+                } else {
+                    usernameEl.style.display = 'none';
+                    usernameEl.textContent = '';
+                }
+            }
             
             // Show dashboard only if admin
             if (data.role === 'admin') {
@@ -45,9 +65,14 @@ async function checkAdminStatus() {
         const authButtons = document.getElementById('authButtons');
         const logoutButton = document.getElementById('logoutButton');
         const dashboardButton = document.getElementById('dashboardButton');
+        const usernameEl = document.getElementById('navUsername');
         authButtons.style.display = 'block';
         logoutButton.style.display = 'none';
         dashboardButton.style.display = 'none';
+        if (usernameEl) {
+            usernameEl.style.display = 'none';
+            usernameEl.textContent = '';
+        }
     }
 }
 

@@ -1478,10 +1478,26 @@ def image_history_page():
 @app.route("/api/me")
 def get_current_user():
     if "user_id" in session:
+        username = None
+        conn = None
+        try:
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute("SELECT username FROM users WHERE user_id = ?", (session["user_id"],))
+            row = cursor.fetchone()
+            if row:
+                username = row[0]
+        except Exception:
+            username = None
+        finally:
+            if conn:
+                conn.close()
+
         return jsonify({
             "logged_in": True,
             "user_id": session["user_id"],
-            "role": session["role"] 
+            "role": session["role"],
+            "username": username
         }), 200
     return jsonify({"logged_in": False}), 200
 

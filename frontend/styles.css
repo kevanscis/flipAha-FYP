@@ -458,7 +458,7 @@ footer {
     background: #f8f9fa;
     color: #666;
     text-align: center;
-    padding: 16px;
+    padding: 8px;
     border-top: 1px solid #e0e0e0;
     font-size: 0.9rem;
 }
@@ -1072,6 +1072,20 @@ footer {
 
 #logoutButton {
     display: none;
+}
+
+.nav-username {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    /* border-radius: 999px;
+    background: rgba(255, 255, 255, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.35); */
+    color: #fff;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
 }
 
 /* ==================== Dashboard Container Override ==================== */
