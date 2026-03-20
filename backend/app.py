@@ -54,6 +54,8 @@ CLOUD_LLM_BACKUP_BASE_URLS = [
     if url.strip()
 ]
 CLOUD_LLM_RETRIES = max(1, int(os.getenv("CLOUD_LLM_RETRIES", "2")))
+CHAT_CONTEXT_TURNS = max(0, int(os.getenv("CHAT_CONTEXT_TURNS", "4")))
+CHAT_CONTEXT_MAX_CHARS = max(200, int(os.getenv("CHAT_CONTEXT_MAX_CHARS", "1600")))
 
 
 def _get_llm_base_urls():
@@ -148,6 +150,63 @@ FALLBACK_RESPONSE = (
     "I can help with that. Please share the exact equation or expression you want to solve, "
     "and I will provide a clear step-by-step explanation."
 )
+
+
+def _sanitize_chat_history(history):
+    cleaned = []
+    for item in history or []:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "").strip().lower()
+        if role not in ("user", "assistant"):
+            continue
+        content = _normalize_response_text(item.get("content") or "")
+        if not content:
+            continue
+        cleaned.append({"role": role, "content": content[:600]})
+    return cleaned
+
+
+def _trim_chat_history(history):
+    cleaned = _sanitize_chat_history(history)
+    max_messages = CHAT_CONTEXT_TURNS * 2
+    if max_messages > 0:
+        cleaned = cleaned[-max_messages:]
+    else:
+        cleaned = []
+
+    # Apply overall character cap from newest to oldest
+    kept = []
+    char_budget = CHAT_CONTEXT_MAX_CHARS
+    for message in reversed(cleaned):
+        content = message["content"]
+        if len(content) > char_budget and kept:
+            continue
+        if len(content) > char_budget:
+            content = content[:char_budget]
+        kept.append({"role": message["role"], "content": content})
+        char_budget -= len(content)
+        if char_budget <= 0:
+            break
+
+    return list(reversed(kept))
+
+
+def _build_chat_messages(question, chat_history=None):
+    system_message = {
+        "role": "system",
+        "content": (
+            "You are a concise and accurate math tutor for O-Level students. "
+            "Give clear step-by-step explanations when asked to solve. "
+            "If the input is ambiguous, ask one short clarifying question. "
+            "IMPORTANT OUTPUT FORMAT: Return plain text only. "
+            "Do NOT use Markdown (no **, headings, bullet markdown) and do NOT use LaTeX wrappers like \\( \\), \\[ \\]."
+        )
+    }
+
+    history_messages = _trim_chat_history(chat_history)
+    user_message = {"role": "user", "content": question}
+    return [system_message, *history_messages, user_message], len(history_messages)
 
 
 def _format_pi_value(value):
@@ -411,31 +470,17 @@ def evaluate_response_quality(question, answer):
         "answer": a,
     }
 
-def generate_llm_answer(question):
+def generate_llm_answer(question, chat_history=None):
     """
     Generate a response using a hosted ChatGPT-style endpoint.
     This requires no local model installation.
     """
+    messages, context_message_count = _build_chat_messages(question, chat_history)
     payload = {
         "model": CLOUD_LLM_MODEL,
         "stream": False,
         "temperature": 0.2,
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "You are a concise and accurate math tutor for O-Level students. "
-                    "Give clear step-by-step explanations when asked to solve. "
-                    "If the input is ambiguous, ask one short clarifying question. "
-                    "IMPORTANT OUTPUT FORMAT: Return plain text only. "
-                    "Do NOT use Markdown (no **, headings, bullet markdown) and do NOT use LaTeX wrappers like \\( \\), \\[ \\]."
-                )
-            },
-            {
-                "role": "user",
-                "content": question
-            }
-        ]
+        "messages": messages,
     }
 
     try:
@@ -445,7 +490,8 @@ def generate_llm_answer(question):
 
         return content, {
             **meta,
-            "used_fallback": False
+            "used_fallback": False,
+            "context_messages": context_message_count,
         }
     except Exception as e:
         local_answer = generate_local_fallback_answer(question)
@@ -455,6 +501,7 @@ def generate_llm_answer(question):
             "model": None,
             "used_fallback": local_answer is None,
             "used_local_solver": bool(local_answer),
+            "context_messages": context_message_count,
             "error": str(e)
         }
 
@@ -968,9 +1015,11 @@ def ask_question():
                 'error': 'Question is empty'
             }), 400
 
+        history_before = _trim_chat_history(session.get("chat_history") or [])
+
         # 3) Run answer and metadata classification in parallel to cut latency.
         with ThreadPoolExecutor(max_workers=2) as executor:
-            answer_future = executor.submit(generate_llm_answer, question)
+            answer_future = executor.submit(generate_llm_answer, question, history_before)
             metadata_future = executor.submit(classify_question_metadata, question)
             answer, llm_meta = answer_future.result()
             metadata = metadata_future.result()
@@ -986,6 +1035,15 @@ def ask_question():
             answer = generate_local_fallback_answer(question) or FALLBACK_RESPONSE
 
         quality = evaluate_response_quality(question, answer)
+
+        # 3b) Persist bounded chat context for lightweight conversational memory.
+        updated_history = _trim_chat_history([
+            *history_before,
+            {"role": "user", "content": question},
+            {"role": "assistant", "content": answer},
+        ])
+        session["chat_history"] = updated_history
+        session.modified = True
 
         # 4) Insert into DB
         question_id = str(uuid.uuid4())
