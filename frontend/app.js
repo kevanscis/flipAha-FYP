@@ -1293,7 +1293,23 @@ async function handleSubmitQuestion(e) {
 
     if (data.success) {
       addMessage({ text: data.answer, role: 'assistant' });
-      showResponseStatus('success', '✅ Response received!');
+
+      const usedLlmFallback = Boolean(data?.llm?.used_fallback);
+      const qualityGuardTriggered = Boolean(data?.quality_guard?.triggered);
+
+      if (usedLlmFallback) {
+        const shortErr = String(data?.llm?.error || '').slice(0, 140);
+        const reason = shortErr ? ` (${shortErr})` : '';
+        showResponseStatus('error', `⚠️ Cloud LLM unavailable, fallback reply used${reason}`);
+      } else if (qualityGuardTriggered) {
+        const issues = Array.isArray(data?.quality_guard?.issues_before_guard)
+          ? data.quality_guard.issues_before_guard.join(', ')
+          : '';
+        const details = issues ? ` (${issues})` : '';
+        showResponseStatus('error', `⚠️ Model reply was filtered by quality guard${details}`);
+      } else {
+        showResponseStatus('success', '✅ Response received!');
+      }
     } else {
       throw new Error(data.error || 'Failed to get response');
     }
@@ -2087,6 +2103,60 @@ function insertChipIntoDOM(replaceStart, replaceEnd, chip) {
   let pos = 0;
   let chipInserted = false;
 
+  const getVirtualChipBoundaryLength = (index) => {
+    const current = nodes[index];
+    const next = nodes[index + 1];
+    if (!current || !next) return 0;
+    if (!(current.classList && current.classList.contains('math-chip'))) return 0;
+    if (next.nodeType === Node.TEXT_NODE) {
+      const nextText = (next.textContent || '').replace(/\u200B/g, '');
+      if (!nextText || /^\s/.test(nextText)) return 0;
+      return 1;
+    }
+    if (next.classList && next.classList.contains('math-chip')) return 1;
+    return 0;
+  };
+
+  const normalizeOffsetToDom = (logicalOffset) => {
+    let logicalPos = 0;
+    let domPos = 0;
+
+    for (let index = 0; index < nodes.length; index += 1) {
+      const node = nodes[index];
+      if (node.nodeType === Node.TEXT_NODE) {
+        const logicalLen = (node.textContent || '').replace(/\u200B/g, '').length;
+        if (logicalOffset <= logicalPos + logicalLen) {
+          return domPos + Math.max(0, logicalOffset - logicalPos);
+        }
+        logicalPos += logicalLen;
+        domPos += logicalLen;
+        continue;
+      }
+
+      if (node.classList && node.classList.contains('math-chip')) {
+        const chipLen = (node.dataset.text || '').length;
+        if (logicalOffset <= logicalPos + chipLen) {
+          return domPos + Math.max(0, logicalOffset - logicalPos);
+        }
+        logicalPos += chipLen;
+        domPos += chipLen;
+
+        const virtualBoundary = getVirtualChipBoundaryLength(index);
+        if (virtualBoundary > 0) {
+          if (logicalOffset <= logicalPos + virtualBoundary) {
+            return domPos;
+          }
+          logicalPos += virtualBoundary;
+        }
+      }
+    }
+
+    return domPos;
+  };
+
+  const normalizedReplaceStart = normalizeOffsetToDom(Math.max(0, replaceStart || 0));
+  const normalizedReplaceEnd = normalizeOffsetToDom(Math.max(normalizedReplaceStart, replaceEnd || 0));
+
   for (const node of nodes) {
     if (node.nodeType === Node.TEXT_NODE) {
       // Get the logical text (without zero-width spaces)
@@ -2095,13 +2165,13 @@ function insertChipIntoDOM(replaceStart, replaceEnd, chip) {
       const nodeStart = pos;
       const nodeEnd = pos + logical.length;
 
-      if (nodeEnd <= replaceStart || nodeStart >= replaceEnd) {
+      if (nodeEnd <= normalizedReplaceStart || nodeStart >= normalizedReplaceEnd) {
         // Node is fully outside replacement range — keep as-is
         newChildren.push(node);
       } else {
         // This text node overlaps with the replacement range
-        const cutStart = Math.max(0, replaceStart - nodeStart);
-        const cutEnd = Math.min(logical.length, replaceEnd - nodeStart);
+        const cutStart = Math.max(0, normalizedReplaceStart - nodeStart);
+        const cutEnd = Math.min(logical.length, normalizedReplaceEnd - nodeStart);
 
         const beforeText = logical.slice(0, cutStart);
         const afterText = logical.slice(cutEnd);
@@ -2124,7 +2194,7 @@ function insertChipIntoDOM(replaceStart, replaceEnd, chip) {
       const nodeStart = pos;
       const nodeEnd = pos + chipText.length;
 
-      if (nodeEnd <= replaceStart || nodeStart >= replaceEnd) {
+      if (nodeEnd <= normalizedReplaceStart || nodeStart >= normalizedReplaceEnd) {
         // Chip fully outside — keep it
         newChildren.push(node);
       } else {

@@ -1833,19 +1833,19 @@
     return `\\${fn}^{-1}(${normalizedArg})`;
   }
 
-  function getCompactTrigDivisionSuggestion(input) {
+  function getCompactTrigDivisionSuggestions(input) {
     const raw = String(input || '').trim();
-    if (!raw) return '';
+    if (!raw) return [];
 
     const compact = raw.toLowerCase().replace(/\s+/g, '');
-    const m = compact.match(/^([+\-]?\d+(?:\/\d+)?)?(sin|cos|tan|sec|csc|cot|cosec)([a-zα-ωπθ]+)\/([a-z0-9α-ωπθ]+)$/i);
-    if (!m) return '';
+    const m = compact.match(/^([+\-]?\d+(?:\/\d+)?)?(sin|cos|tan|sec|csc|cot|cosec)([a-z0-9α-ωπθ]+)\/([a-z0-9α-ωπθ]+)$/i);
+    if (!m) return [];
 
     const coeffRaw = String(m[1] || '').trim();
     const fnRaw = String(m[2] || '').toLowerCase();
     const argNumRaw = String(m[3] || '').trim();
     const argDenRaw = String(m[4] || '').trim();
-    if (!argNumRaw || !argDenRaw) return '';
+    if (!argNumRaw || !argDenRaw) return [];
 
     const fn = fnRaw === 'cosec' ? 'csc' : fnRaw;
     const normalizeAtom = (value) => String(value || '')
@@ -1861,11 +1861,27 @@
       return coeffRaw;
     })();
 
+    const withCoeff = (expr) => coeffLatex ? `${coeffLatex}${expr}` : expr;
+
     const argNum = normalizeAtom(argNumRaw);
     const argDen = normalizeAtom(argDenRaw);
-    const trigPart = `\\${fn}(\\frac{${argNum}}{${argDen}})`;
+    const suggestions = [];
 
-    return coeffLatex ? `${coeffLatex}${trigPart}` : trigPart;
+    // Requested explicit division form: cos(2x)/3
+    suggestions.push(withCoeff(`\\frac{\\${fn}(${argNum})}{${argDen}}`));
+
+    // Main grouped-argument form: cos(2x/3)
+    suggestions.push(withCoeff(`\\${fn}(\\frac{${argNum}}{${argDen}})`));
+
+    // Power interpretation for compact forms like cos2x/3 -> cos^2(x/3)
+    const powerLike = argNumRaw.match(/^([2-9])([a-zα-ωπθ]+)$/i);
+    if (powerLike) {
+      const pow = powerLike[1];
+      const baseArg = normalizeAtom(powerLike[2]);
+      suggestions.unshift(withCoeff(`\\${fn}^{${pow}}(\\frac{${baseArg}}{${argDen}})`));
+    }
+
+    return Array.from(new Set(suggestions));
   }
 
   /**
@@ -1883,12 +1899,12 @@
     }
 
     const compactInverseSuggestion = getCompactInverseTrigSuggestion(input);
-    const compactTrigDivisionSuggestion = getCompactTrigDivisionSuggestion(input);
+    const compactTrigDivisionSuggestions = getCompactTrigDivisionSuggestions(input);
 
     const { ast, error } = parser.parseMath(input);
     if (error || !ast) {
       const early = [];
-      if (compactTrigDivisionSuggestion) early.push(compactTrigDivisionSuggestion);
+      if (compactTrigDivisionSuggestions.length) early.push(...compactTrigDivisionSuggestions);
       if (compactInverseSuggestion) early.push(compactInverseSuggestion);
       return early.slice(0, maxSuggestions);
     }
@@ -1940,11 +1956,14 @@
       }
     }
 
-    if (compactTrigDivisionSuggestion) {
-      const compactNorm = normalizeLatexForComparison(compactTrigDivisionSuggestion);
-      const hasCompact = orderedSuggestions.some(s => normalizeLatexForComparison(s) === compactNorm);
-      if (!hasCompact) {
-        orderedSuggestions.unshift(compactTrigDivisionSuggestion);
+    if (compactTrigDivisionSuggestions.length) {
+      for (let index = compactTrigDivisionSuggestions.length - 1; index >= 0; index -= 1) {
+        const compact = compactTrigDivisionSuggestions[index];
+        const compactNorm = normalizeLatexForComparison(compact);
+        const hasCompact = orderedSuggestions.some(s => normalizeLatexForComparison(s) === compactNorm);
+        if (!hasCompact) {
+          orderedSuggestions.unshift(compact);
+        }
       }
     }
 
