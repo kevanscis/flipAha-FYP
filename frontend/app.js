@@ -903,12 +903,28 @@ function renderMixedTextMath(rawText, bubbleDiv) {
 function getInputTextValue() {
   if (!questionInput) return '';
   let text = '';
-  questionInput.childNodes.forEach(node => {
+  const nodes = Array.from(questionInput.childNodes);
+  const getVirtualChipBoundary = (index) => {
+    const current = nodes[index];
+    const next = nodes[index + 1];
+    if (!current || !next) return '';
+    if (!(current.classList && current.classList.contains('math-chip'))) return '';
+    if (next.nodeType === Node.TEXT_NODE) {
+      const nextText = (next.textContent || '').replace(/\u200B/g, '');
+      if (!nextText || /^\s/.test(nextText)) return '';
+      return ' ';
+    }
+    if (next.classList && next.classList.contains('math-chip')) return ' ';
+    return '';
+  };
+
+  nodes.forEach((node, index) => {
     if (node.nodeType === Node.TEXT_NODE) {
-      text += node.textContent;
+      text += (node.textContent || '').replace(/\u200B/g, '');
     } else if (node.classList?.contains('math-chip')) {
       // Preserve existing chip text exactly as-is
       text += node.dataset.text || '';
+      text += getVirtualChipBoundary(index);
     }
   });
   return text;
@@ -1162,18 +1178,37 @@ function getCaretOffset() {
   }
   const range = sel.getRangeAt(0);
   let offset = 0;
-  for (const node of questionInput.childNodes) {
+  const nodes = Array.from(questionInput.childNodes);
+  const getVirtualChipBoundaryLength = (index) => {
+    const current = nodes[index];
+    const next = nodes[index + 1];
+    if (!current || !next) return 0;
+    if (!(current.classList && current.classList.contains('math-chip'))) return 0;
+    if (next.nodeType === Node.TEXT_NODE) {
+      const nextText = (next.textContent || '').replace(/\u200B/g, '');
+      if (!nextText || /^\s/.test(nextText)) return 0;
+      return 1;
+    }
+    if (next.classList && next.classList.contains('math-chip')) return 1;
+    return 0;
+  };
+
+  for (let index = 0; index < nodes.length; index += 1) {
+    const node = nodes[index];
     if (node === range.startContainer || node.contains(range.startContainer)) {
       if (node.nodeType === Node.TEXT_NODE) {
-        return offset + range.startOffset;
+        const raw = node.textContent || '';
+        const logicalPrefix = raw.slice(0, range.startOffset).replace(/\u200B/g, '');
+        return offset + logicalPrefix.length;
       }
       // Cursor is at the chip boundary
       return offset + (node.dataset ? (node.dataset.text || '').length : 0);
     }
     if (node.nodeType === Node.TEXT_NODE) {
-      offset += (node.textContent || '').length;
+      offset += (node.textContent || '').replace(/\u200B/g, '').length;
     } else if (node.classList && node.classList.contains('math-chip')) {
       offset += (node.dataset.text || '').length;
+      offset += getVirtualChipBoundaryLength(index);
     }
   }
   return offset;

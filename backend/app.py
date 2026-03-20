@@ -47,6 +47,97 @@ def get_stored_image(session_id, image_id):
     return image_store.get(session_id, {}).get(image_id)
 CLOUD_LLM_BASE_URL = os.getenv("CLOUD_LLM_BASE_URL", "https://text.pollinations.ai/openai").rstrip("/")
 CLOUD_LLM_MODEL = os.getenv("CLOUD_LLM_MODEL", "openai")
+CLOUD_LLM_BACKUP_BASE_URLS = [
+    url.strip().rstrip("/")
+    for url in os.getenv("CLOUD_LLM_BACKUP_BASE_URLS", "").split(",")
+    if url.strip()
+]
+CLOUD_LLM_RETRIES = max(1, int(os.getenv("CLOUD_LLM_RETRIES", "2")))
+
+
+def _get_llm_base_urls():
+    seen = set()
+    ordered = []
+    for url in [CLOUD_LLM_BASE_URL, *CLOUD_LLM_BACKUP_BASE_URLS]:
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        ordered.append(url)
+    return ordered
+
+
+def _extract_llm_content(response):
+    """Extract best-effort text from OpenAI-compatible or plain-text providers."""
+    payload = None
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+
+    if isinstance(payload, dict):
+        choices = payload.get("choices") or []
+        if choices:
+            first = choices[0] or {}
+            message = first.get("message") or {}
+            content = message.get("content")
+            if isinstance(content, list):
+                parts = []
+                for chunk in content:
+                    if isinstance(chunk, dict):
+                        text_part = chunk.get("text")
+                        if text_part:
+                            parts.append(str(text_part))
+                content = "".join(parts)
+            if content:
+                return str(content).strip()
+
+            fallback_text = first.get("text")
+            if fallback_text:
+                return str(fallback_text).strip()
+
+        for key in ("response", "output", "text", "content"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+    return (response.text or "").strip()
+
+
+def call_cloud_llm(payload, timeout=60):
+    """Call cloud LLM with retries and optional backup base URLs."""
+    request_payload = dict(payload or {})
+    request_payload.setdefault("model", CLOUD_LLM_MODEL)
+
+    errors = []
+    for base_url in _get_llm_base_urls():
+        endpoint = f"{base_url}/chat/completions"
+        for attempt in range(1, CLOUD_LLM_RETRIES + 1):
+            try:
+                resp = requests.post(
+                    endpoint,
+                    json=request_payload,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Accept": "application/json, text/plain;q=0.9, */*;q=0.8",
+                        "User-Agent": "Mozilla/5.0"
+                    },
+                    timeout=timeout
+                )
+                resp.raise_for_status()
+                content = _extract_llm_content(resp)
+                if not content:
+                    raise ValueError("Empty LLM response")
+                return content, {
+                    "provider": "pollinations",
+                    "model": request_payload.get("model"),
+                    "base_url": base_url,
+                    "attempt": attempt,
+                    "used_fallback": False,
+                }
+            except (requests.RequestException, TimeoutError, ValueError) as err:
+                errors.append(f"{base_url} (attempt {attempt}): {err}")
+
+    raise RuntimeError(" | ".join(errors) if errors else "Cloud LLM call failed")
 
 ########################################################################################################################
 # USE CASE 1
@@ -185,38 +276,16 @@ def generate_llm_answer(question):
     }
 
     try:
-        resp = requests.post(
-            f"{CLOUD_LLM_BASE_URL}/chat/completions",
-            json=payload,
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent": "Mozilla/5.0"
-            },
-            timeout=60
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-        choices = data.get("choices") or []
-        first = choices[0] if choices else {}
-        message = first.get("message") or {}
-        content = (message.get("content") or "").strip()
-
-        if not content:
-            raise ValueError("Empty LLM response")
+        content, meta = call_cloud_llm(payload, timeout=60)
 
         content = format_llm_answer_for_chat(content)
 
         return content, {
-            "provider": "pollinations",
-            "model": CLOUD_LLM_MODEL,
+            **meta,
             "used_fallback": False
         }
-    except (requests.RequestException, TimeoutError, ValueError) as e:
-        content = (
-            "Cloud LLM is unavailable right now. "
-            "Please try again in a moment."
-        )
+    except Exception as e:
+        content = FALLBACK_RESPONSE
         return content, {
             "provider": "fallback-llm-unavailable",
             "model": None,
@@ -983,25 +1052,14 @@ def llm_health_check():
             "max_tokens": 8,
             "temperature": 0
         }
-        resp = requests.post(
-            f"{CLOUD_LLM_BASE_URL}/chat/completions",
-            json=payload,
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent": "Mozilla/5.0"
-            },
-            timeout=20
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-        choices = data.get("choices") or []
-        ok = bool(choices)
+        content, meta = call_cloud_llm(payload, timeout=20)
+        ok = bool(content)
         return jsonify({
             'success': ok,
             'provider': 'pollinations',
-            'base_url': CLOUD_LLM_BASE_URL,
-            'configured_model': CLOUD_LLM_MODEL
+            'base_url': meta.get('base_url') or CLOUD_LLM_BASE_URL,
+            'configured_model': CLOUD_LLM_MODEL,
+            'response_preview': content[:64]
         }), 200
     except Exception as e:
         return jsonify({
