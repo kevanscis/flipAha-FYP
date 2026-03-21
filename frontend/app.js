@@ -551,6 +551,10 @@ function getCustomSuggestionLatex(queryTerm, queryTermText) {
     return v;
   };
 
+  const normalizeCompactTrigArg = (value) => String(value || '')
+    .replace(/theta/gi, '\\theta')
+    .replace(/pi/gi, '\\pi');
+
   if (compact === '<=' || compact === '≤') out.push('\\leq');
   if (compact === '>=' || compact === '≥') out.push('\\geq');
   if (compact === '!=' || compact === '≠') out.push('\\neq');
@@ -576,6 +580,16 @@ function getCustomSuggestionLatex(queryTerm, queryTermText) {
   }
 
   if (/^absolute$|^abs$|^\|[^|]*\|$/.test(compact)) out.push('\\left|x\\right|');
+
+  // Compact trig forms like cos2theta -> \cos(2\theta)
+  const compactTrigCallMatch = compact.match(/^(sin|cos|tan|sec|csc|cot|cosec)([a-z0-9α-ωπθ]+)$/i);
+  if (compactTrigCallMatch) {
+    const fn = compactTrigCallMatch[1].toLowerCase() === 'cosec' ? 'csc' : compactTrigCallMatch[1].toLowerCase();
+    const arg = normalizeCompactTrigArg(compactTrigCallMatch[2]);
+    if (arg) {
+      out.push(`\\${fn}(${arg})`);
+    }
+  }
 
   if (/^summation$|^sum$|^∑$/.test(compact)) {
     out.push('\\sum');
@@ -1724,12 +1738,65 @@ function handleInputChange() {
       .replace(/\s+/g, '');
     const strictSymbolIntent = ['<=', '≤', '>=', '≥', '!=', '≠'].includes(intentCompact);
     const strictHatIntent = /^hat$|^\^$|^[a-zα-ωπθ]+hat$|^[a-zα-ωπθ]+\^$/i.test(intentCompact);
+    const compactTrigGroupedArgIntent = /^(sin|cos|tan|sec|csc|cot|cosec)[a-z0-9α-ωπθ]+$/i.test(intentCompact)
+      && !intentCompact.includes('(')
+      && !intentCompact.includes(')');
+
+    const compactTrigGroupedArgSuggestion = (() => {
+      if (!compactTrigGroupedArgIntent) return '';
+      const compactFromRaw = String(queryTerm || '')
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/[{}]/g, '')
+        .replace(/\\/g, '');
+      const compactFromText = String(queryTermText || '')
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/[{}]/g, '')
+        .replace(/\\/g, '');
+      const source = compactFromRaw || compactFromText || intentCompact;
+      const m = source.match(/^(sin|cos|tan|sec|csc|cot|cosec)([a-z0-9α-ωπθ]+)$/i);
+      if (!m) return '';
+      const fn = m[1].toLowerCase() === 'cosec' ? 'csc' : m[1].toLowerCase();
+      const arg = String(m[2] || '')
+        .replace(/theta/gi, '\\theta')
+        .replace(/pi/gi, '\\pi');
+      if (!arg) return '';
+      return `\\${fn}(${arg})`;
+    })();
 
     // Filter out suggestions containing placeholder '?' (incomplete parse artifacts)
     let suggestions = grammarSuggestions.filter(s => !s.includes('?'));
     const customSuggestions = getCustomSuggestionLatex(queryTerm, queryTermText);
     if (customSuggestions.length) {
       suggestions = [...customSuggestions, ...suggestions];
+    }
+
+    if (compactTrigGroupedArgSuggestion) {
+      suggestions = [compactTrigGroupedArgSuggestion, ...suggestions];
+
+      const canonicalMatch = compactTrigGroupedArgSuggestion.match(/^\\(sin|cos|tan|sec|csc|cot|cosec)\((.+)\)$/i);
+      if (canonicalMatch) {
+        const normalizeCompactArg = (value) => String(value || '')
+          .replace(/\\left|\\right/g, '')
+          .replace(/[{}\s]/g, '')
+          .toLowerCase();
+
+        const canonicalFn = canonicalMatch[1].toLowerCase();
+        const canonicalArg = normalizeCompactArg(canonicalMatch[2]);
+
+        suggestions = suggestions.filter((s) => {
+          const suggestion = String(s || '');
+          const splitMatch = suggestion.match(
+            /^\\(sin|cos|tan|sec|csc|cot|cosec)(?:\\left)?\(([^()]*)\)(?:\\right)?(\\(?:theta|pi|alpha|beta|gamma|delta|lambda|mu|omega|sigma)|[A-Za-z])$/i
+          );
+          if (!splitMatch) return true;
+
+          const splitFn = splitMatch[1].toLowerCase();
+          const splitArg = normalizeCompactArg(`${splitMatch[2]}${splitMatch[3]}`);
+          return !(splitFn === canonicalFn && splitArg === canonicalArg);
+        });
+      }
     }
 
     if ((strictSymbolIntent || strictHatIntent) && customSuggestions.length) {
@@ -1887,7 +1954,7 @@ function handleInputChange() {
       };
       // Re-rank suggestions using XGBoost-style GBDT model,
       // but preserve strict symbol and trig-identity intent ordering.
-      const bypassRanking = strictSymbolIntent || strictHatIntent || hasTrigRatioIntent;
+      const bypassRanking = strictSymbolIntent || strictHatIntent || hasTrigRatioIntent || compactTrigGroupedArgIntent;
       if (!bypassRanking && typeof globalThis.suggestionRanker?.rankSuggestions === 'function') {
         try {
           suggestions = globalThis.suggestionRanker.rankSuggestions(queryTerm, suggestions);
@@ -2094,6 +2161,16 @@ function selectSuggestion(latex) {
 
   const currentValue = getInputTextValue();
   let { replaceStart, replaceEnd } = computeSuggestionReplacementRange(suggestionLatex, currentValue);
+
+  // If the suggestion itself starts with ')' and the user already has a
+  // closing paren immediately before the replacement window, consume that
+  // existing ')' to avoid duplicates like ")))^2".
+  if ((replaceStart || 0) > 0 && suggestionLatex.startsWith(')')) {
+    const prevChar = currentValue[(replaceStart || 0) - 1] || '';
+    if (prevChar === ')') {
+      replaceStart = Math.max(0, (replaceStart || 0) - 1);
+    }
+  }
 
   // Handle trailing paren balance
   const suffix = currentValue.slice(replaceEnd || 0);
