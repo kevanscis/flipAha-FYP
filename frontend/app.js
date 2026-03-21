@@ -1853,7 +1853,7 @@ function handleInputChange() {
     if (suggestions.length > 0) {
       const rawStart = start + termStartOffset;
       const rawEnd = rawStart + queryTerm.length;
-      const replaceableCharRegex = /[A-Za-z0-9_\\^{}()√∛∜α-ωΑ-Ωπθδλμσωβγ+\-−⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ°]/;
+      const replaceableCharRegex = /[A-Za-z0-9_\\^{}√∛∜α-ωΑ-Ωπθδλμσωβγ+\-−⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ°]/;
       let replaceStart = rawStart;
       let replaceEnd = rawEnd;
 
