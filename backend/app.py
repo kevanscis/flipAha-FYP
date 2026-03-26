@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 import uuid
 import io
 from database.db import get_db
+from image_processor import ImageProcessor
 from latex_converter import LatexConverter
 from werkzeug.utils import secure_filename
 
@@ -24,6 +25,7 @@ SINGAPORE_TZ = ZoneInfo("Asia/Singapore")
 app = Flask(__name__)
 
 # Initialize services for image processing and LaTeX conversion
+image_processor = ImageProcessor()
 latex_converter = LatexConverter()
 
 # Configuration for file uploads
@@ -1616,31 +1618,32 @@ def upload_image():
         file_data = file.read()
         image_id = str(uuid.uuid4())
         
-        # Disabled: image quality check and storage
-        # quality_result = image_processor.check_image_quality(file_data)
-        # warnings = quality_result.get('warnings', [])
-        # hint = None
-        # if warnings:
-        #     hint = '📸 Try a clearer photo for more accurate results.'
-        # store_image(session_id, image_id, file_data)
+        # Check image quality (blurry, dark, small, etc.)
+        quality_result = image_processor.check_image_quality(file_data)
         
-        # return jsonify({
-        #     'success': True,
-        #     'image_id': image_id,
-        #     'session_id': session_id,
-        #     'filename': secure_filename(file.filename),
-        #     'size': len(file_data),
-        #     'quality': {
-        #         'valid': quality_result.get('valid', True),
-        #         'warnings': warnings,
-        #         'hint': hint,
-        #         'metrics': quality_result.get('metrics', {})
-        #     }
-        # }), 200
+        # Build user-friendly warnings with a "Try a clearer photo" hint
+        warnings = quality_result.get('warnings', [])
+        hint = None
+        if warnings:
+            # Add a clear actionable hint for low-quality images
+            hint = '📸 Try a clearer photo for more accurate results.'
+        
+        # Store the image data for later retrieval
+        store_image(session_id, image_id, file_data)
+        
         return jsonify({
-            'success': False,
-            'error': 'Image upload/processing is disabled in this deployment.'
-        }), 501
+            'success': True,
+            'image_id': image_id,
+            'session_id': session_id,
+            'filename': secure_filename(file.filename),
+            'size': len(file_data),
+            'quality': {
+                'valid': quality_result.get('valid', True),
+                'warnings': warnings,
+                'hint': hint,
+                'metrics': quality_result.get('metrics', {})
+            }
+        }), 200
     except Exception as e:
         return jsonify({
             'success': False,
@@ -1653,10 +1656,110 @@ def convert_to_latex():
     Convert uploaded image to LaTeX
     JSON: {session_id, image_id, options?: {high_accuracy?: bool, preprocess?: 'auto'|'none'|'mild'|'binarize'}}
     """
-    return jsonify({
-        'success': False,
-        'error': 'Image conversion is disabled in this deployment.'
-    }), 501
+    try:
+        data = request.json or {}
+        session_id = data.get('session_id')
+        image_id = data.get('image_id')
+        options = data.get('options') or {}
+        
+        if not all([session_id, image_id]):
+            return jsonify({
+                'success': False,
+                'error': 'Missing required fields: session_id and image_id'
+            }), 400
+        
+        # Get stored image data
+        original_bytes = get_stored_image(session_id, image_id)
+        if not original_bytes:
+            return jsonify({
+                'success': False,
+                'error': 'Image not found. Please upload an image first.'
+            }), 404
+        
+        # Get options
+        high_accuracy = bool(options.get('high_accuracy'))
+        preprocess_mode = (options.get('preprocess') or 'auto').strip().lower()
+        
+        def pil_to_bytes(pil_img):
+            """Convert PIL image to bytes"""
+            buf = io.BytesIO()
+            pil_img.save(buf, format='PNG')
+            return buf.getvalue()
+        
+        # Prepare variants based on preprocessing mode
+        variants = []
+        if preprocess_mode == 'none':
+            variants = [('raw', original_bytes)]
+        elif preprocess_mode == 'mild':
+            variants = [('mild', pil_to_bytes(image_processor.preprocess_image(original_bytes, mode='mild')))]
+        elif preprocess_mode == 'binarize':
+            variants = [('binarize', pil_to_bytes(image_processor.preprocess_image(original_bytes, mode='binarize')))]
+        else:
+            # auto: try raw first (best for Pix2Tex), fall back to mild, and optionally binarize
+            variants = [('raw', original_bytes), ('mild', pil_to_bytes(image_processor.preprocess_image(original_bytes, mode='mild')))]
+            if high_accuracy:
+                variants.append(('binarize', pil_to_bytes(image_processor.preprocess_image(original_bytes, mode='binarize'))))
+        
+        best = None
+        attempts = []
+        
+        # Try each variant
+        for tag, img_bytes in variants:
+            attempt = latex_converter.convert_to_latex(img_bytes)
+            if not attempt.get('success'):
+                attempts.append({
+                    'variant': tag,
+                    'success': False,
+                    'error': attempt.get('error', 'Conversion failed')
+                })
+                continue
+            
+            score_info = latex_converter.score_latex(attempt.get('latex', ''))
+            attempts.append({
+                'variant': tag,
+                'success': True,
+                'latex': attempt.get('latex', ''),
+                'confidence': attempt.get('confidence', 0),
+                'score': score_info.get('score', 0)
+            })
+            
+            # Keep the best result
+            if best is None or score_info.get('score', 0) > best.get('score', 0):
+                best = {
+                    'variant': tag,
+                    'latex': attempt.get('latex', ''),
+                    'confidence': attempt.get('confidence', 0),
+                    'score': score_info.get('score', 0)
+                }
+            
+            # Fast path: if not in high-accuracy mode and got a valid result, stop
+            if not high_accuracy and score_info.get('valid', False):
+                break
+        
+        if best is None:
+            return jsonify({
+                'success': False,
+                'error': 'Could not convert image to LaTeX',
+                'attempts': attempts
+            }), 400
+        
+        return jsonify({
+            'success': True,
+            'latex': best['latex'],
+            'preprocess_variant': best['variant'],
+            'confidence': best['confidence'],
+            'score': best['score'],
+            'message': 'Equation converted to LaTeX successfully',
+            'attempts': attempts if high_accuracy else None
+        }), 200
+    
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'details': traceback.format_exc()
+        }), 500
 
 @app.route('/api/images', methods=['GET'])
 def get_images():
