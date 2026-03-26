@@ -25,15 +25,27 @@
     <!-- Custom styles -->
     <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body class="chat-page">
     <div class="container">
         <!-- Header -->
         <header>
-            <div class="header-top">
+            <div class="header-top mobile-nav-shell">
                 <h1>
                     <span class="flip">Flip</span><span class="aha">Aha</span>!
                 </h1>
-                <div class="header-nav">
+                <button
+                    id="mobileMenuToggle"
+                    class="mobile-menu-toggle"
+                    type="button"
+                    aria-label="Toggle navigation menu"
+                    aria-expanded="false"
+                    aria-controls="chatHeaderNav"
+                >
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+                <div class="header-nav" id="chatHeaderNav">
                     <button class="nav-button active"><i class="fas fa-comments"></i> Chat Tutor</button>
                     <div id="dashboardButton">
                         <a class="nav-button" href="/dashboard"><i class="fas fa-chart-bar"></i> Dashboard</a>
@@ -84,7 +96,7 @@
                         </button>
 
                         <div class="input-dropdown-wrapper">
-                            <div id="questionInput" class="question-input" contenteditable="true" data-placeholder="Ask your math question... (e.g. 1/2, sin x, x^2)" spellcheck="false"></div>
+                            <div id="questionInput" class="question-input" contenteditable="true" data-placeholder="Ask your math question!" spellcheck="false"></div>
 
                             <!-- Suggestions dropdown -->
                             <ul class="suggestion-list" id="suggestionList" style="display: none;"></ul>

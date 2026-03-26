@@ -26,11 +26,22 @@
     <div class="container scrollable-page">
         <!-- Header -->
         <header>
-            <div class="header-top">
+            <div class="header-top mobile-nav-shell">
                 <h1>
                     <span class="flip">Flip</span><span class="aha">Aha</span>!
                 </h1>
-                <div class="header-nav">
+                <button
+                    class="mobile-menu-toggle"
+                    type="button"
+                    aria-label="Toggle navigation menu"
+                    aria-expanded="false"
+                    aria-controls="historyHeaderNav"
+                >
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+                <div class="header-nav" id="historyHeaderNav">
                     <a class="nav-button" href="/"><i class="fas fa-comments"></i> Chat Tutor</a>
                     <div id="dashboardButton">
                         <a class="nav-button" href="/dashboard"><i class="fas fa-chart-bar"></i> Dashboard</a>

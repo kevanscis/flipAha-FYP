@@ -30,32 +30,31 @@
     <div class="container dashboard-container">
         <!-- Header -->
         <header>
-            <div class="header-top">
+            <div class="header-top mobile-nav-shell">
                 <h1>
                     <span class="flip">Flip</span><span class="aha">Aha</span>!
                 </h1>
-                <div class="header-nav">
+                <button
+                    class="mobile-menu-toggle"
+                    type="button"
+                    aria-label="Toggle navigation menu"
+                    aria-expanded="false"
+                    aria-controls="dashboardHeaderNav"
+                >
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+                <div class="header-nav" id="dashboardHeaderNav">
                     <a class="nav-button" href="/"><i class="fas fa-comments"></i> Chat Tutor</a>
                     <button class="nav-button active"><i class="fas fa-chart-bar"></i> Dashboard</button>
                     <div id="imageHistoryButton">
                         <a class="nav-button" href="/imageHistory"><i class="fas fa-history"></i> Image History</a>
                     </div>
-                    <div id="authButtons" style="display: none;">
-                        <a class="nav-button" href="/login"><i class="fas fa-sign-in-alt"></i> Login</a>
-                    </div>
-                    <div id="profileMenu" class="profile-menu" style="display: none;">
-                        <button id="profileMenuButton" class="nav-button profile-menu-button" type="button" aria-haspopup="true" aria-expanded="false">
-                            <i class="fas fa-user" aria-hidden="true"></i>
-                            <span id="navUsername" class="nav-username"></span>
-                            <i class="fas fa-chevron-down" aria-hidden="true"></i>
-                        </button>
-                        <div id="profileDropdown" class="profile-dropdown" style="display: none;">
-                            <button class="profile-dropdown-item" onclick="goLogout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
-                        </div>
-                    </div>
+                    <button class="nav-button" onclick="goLogout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
                 </div>
             </div>
-            <p>Analytics &amp; Insights</p>
+            <p>Your Personal Online Math Tutor</p>
         </header>
 
         <!-- Main Content -->
@@ -302,6 +301,7 @@
 
     <!-- JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+    <script src="/nav.js"></script>
     <script src="dashboard.js"></script>
 </body>
 </html>

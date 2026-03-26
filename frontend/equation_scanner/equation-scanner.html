@@ -29,11 +29,22 @@
     <div class="container">
         <!-- Header -->
         <header>
-            <div class="header-top">
+            <div class="header-top mobile-nav-shell">
                 <h1>
                     <span class="flip">Flip</span><span class="aha">Aha</span>!
                 </h1>
-                <div class="header-nav">
+                <button
+                    class="mobile-menu-toggle"
+                    type="button"
+                    aria-label="Toggle navigation menu"
+                    aria-expanded="false"
+                    aria-controls="scannerHeaderNav"
+                >
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+                <div class="header-nav" id="scannerHeaderNav">
                     <a class="nav-button" href="/"><i class="fas fa-comments"></i> Chat Tutor</a>
                     <button class="nav-button active" onclick="goImage()"><i class="fas fa-camera"></i> Equation Scanner</button>
                     <div id="dashboardButton" style="display: none;">
@@ -218,6 +229,7 @@
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/katex.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/contrib/auto-render.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+    <script src="/nav.js"></script>
     <script src="equation-scanner.js"></script>
     
     <!-- Lazy load Cropper.js when needed -->

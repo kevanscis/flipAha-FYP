@@ -90,7 +90,7 @@ function unlockChat() {
 
   questionInput.contentEditable = 'true';
   questionInput.classList.remove('locked');
-  questionInput.dataset.placeholder = 'Ask your math question... (e.g. 1/2, sin x, x^2)';
+  questionInput.dataset.placeholder = 'Ask your math question!';
 }
 
 function closeProfileDropdown() {
