@@ -255,6 +255,91 @@
     }
   });
 
+    // --------------------------------------------------------------------------
+    // Rule 5b: Division with function with implicit arg — 1/sin2x
+    // "1/sin2x" parses as frac(1, sin(2)) * x but could mean 1/sin(2x)
+    // --------------------------------------------------------------------------
+    ambiguityRules.push({
+      name: 'division-func-implicit-arg',
+      match(node) {
+        // Match binary division where denominator is implicit multiply with function as first factor
+        if (node.type !== 'binary' || node.op !== '/') return false;
+        if (!node.right || node.right.type !== 'implicit_multiply') return false;
+        const factors = node.right.factors;
+        if (factors.length < 2) return false;
+        const first = factors[0];
+        if (first.type !== 'function' || first.hasExplicitParens) return false;
+        return true;
+      },
+      expand(node) {
+        const { ASTNode } = getParser();
+        const results = [];
+        // Original: 1 / (sin(2)) * x (default parse)
+        results.push(node);
+        // Alternative: 1 / sin(2x)
+        const factors = node.right.factors;
+        const first = factors[0];
+        const rest = factors.slice(1);
+        // Combine function arg with rest as implicit multiply
+        if (first.args && first.args.length === 1 && rest.length > 0) {
+          const combinedArg = ASTNode.implicitMul([first.args[0], ...rest]);
+          const newFunc = ASTNode.func(first.name, [combinedArg], first.modifier, false);
+          const newDenom = newFunc;
+          const newFrac = ASTNode.binary('/', node.left, newDenom);
+          results.push(newFrac);
+        }
+        return deduplicateASTs(results);
+      }
+    });
+
+      // --------------------------------------------------------------------------
+      // Rule 5c: Division with group denominator containing implicit multiply — 1/(sin2x)
+      // "1/(sin2x)" parses as 1/(sin(2)x) but could mean 1/(sin(2x))
+      // --------------------------------------------------------------------------
+      ambiguityRules.push({
+        name: 'division-group-func-implicit-arg',
+        match(node) {
+          // Match binary division where denominator is a group containing implicit multiply with function as first factor
+          if (node.type !== 'binary' || node.op !== '/') return false;
+          if (!node.right || node.right.type !== 'group') return false;
+          const groupExpr = node.right.expr;
+          if (!groupExpr || groupExpr.type !== 'implicit_multiply') return false;
+          const factors = groupExpr.factors;
+          if (factors.length < 2) return false;
+          const first = factors[0];
+          if (first.type !== 'function' || first.hasExplicitParens) return false;
+          return true;
+        },
+        expand(node) {
+          const { ASTNode } = getParser();
+          const results = [];
+          // Original: 1/(sin(2)x) (default parse)
+          results.push(node);
+          const groupExpr = node.right.expr;
+          const factors = groupExpr.factors;
+          const first = factors[0];
+          const rest = factors.slice(1);
+          // Alternative: 1/(sin(2x))
+          if (first.args && first.args.length === 1 && rest.length > 0) {
+            const combinedArg = ASTNode.implicitMul([first.args[0], ...rest]);
+            const newFunc = ASTNode.func(first.name, [combinedArg], first.modifier, true);
+            const newGroup = ASTNode.group(newFunc);
+            const newFrac = ASTNode.binary('/', node.left, newGroup);
+            results.push(newFrac);
+
+            // Also suggest 1/(sin^2(x)) if the first argument is a single digit and rest is a single variable
+            if (first.args[0].type === 'number' && /^[2-9]$/.test(first.args[0].value) && rest.length === 1 && rest[0].type === 'variable') {
+              const power = first.args[0];
+              const newFuncSq = ASTNode.func(first.name, [rest[0]], ASTNode.number(power.value), true);
+              const newGroupSq = ASTNode.group(newFuncSq);
+              const newFracSq = ASTNode.binary('/', node.left, newGroupSq);
+              results.push(newFracSq);
+            }
+          }
+          return deduplicateASTs(results);
+        }
+      });
+
   // --------------------------------------------------------------------------
   // Rule 6: Log base ambiguity — log2x with subscript
   // Already handled partly by parser (log10(x) → subscript),
