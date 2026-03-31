@@ -1568,6 +1568,52 @@
     }
   });
 
+  // --------------------------------------------------------------------------
+  // Rule: sqrt(sin2x) ambiguity — sqrt(sin(2)x) vs sqrt(sin(2x)) vs sqrt(sin^2(x)) vs |sin(x)|
+  // --------------------------------------------------------------------------
+  ambiguityRules.push({
+    name: 'sqrt-func-implicit-arg',
+    match(node) {
+      // Match sqrt with implicit multiply as argument, first factor is function (no explicit parens)
+      if (node.type !== 'sqrt') return false;
+      const rad = node.radicand;
+      if (!rad || rad.type !== 'implicit_multiply' || rad.factors.length < 2) return false;
+      const first = rad.factors[0];
+      if (first.type !== 'function' || first.hasExplicitParens) return false;
+      if (!first.args || first.args.length !== 1) return false;
+      return true;
+    },
+    expand(node) {
+      const { ASTNode } = getParser();
+      const rad = node.radicand;
+      const first = rad.factors[0];
+      const rest = rad.factors.slice(1);
+      const results = [node]; // original: sqrt(sin(2)x) or sqrt(sin x y ...)
+
+      // Alternative 1: sqrt(sin(arg * rest...))
+      if (rest.length > 0) {
+        const combinedArg = ASTNode.implicitMul([first.args[0], ...rest]);
+        const newFunc = ASTNode.func(first.name, [combinedArg], first.modifier, true);
+        results.push(ASTNode.sqrt(newFunc));
+      }
+
+      // Alternative 2: sqrt(sin^2(x)) and |sin(x)| if rest is a single variable or constant
+      if (rest.length === 1 && (rest[0].type === 'variable' || rest[0].type === 'constant')) {
+        // sin^2(x)
+        results.push(ASTNode.sqrt(ASTNode.func(first.name, [rest[0]], ASTNode.number('2'), true)));
+        // |sin(x)|
+        results.push(ASTNode.abs(ASTNode.func(first.name, [rest[0]], null, true)));
+      }
+
+      // Alternative 3: sqrt(sin(x^2)) if rest is a single variable and first argument is a number
+      if (rest.length === 1 && (rest[0].type === 'variable' || rest[0].type === 'constant') && first.args[0].type === 'number') {
+        results.push(ASTNode.sqrt(ASTNode.func(first.name, [ASTNode.power(rest[0], first.args[0])], null, true)));
+      }
+
+      return deduplicateASTs(results);
+    }
+  });
+
   // ==========================================================================
   // COMPLETION RULES — suggest common expansions when no structural ambiguity
   // ==========================================================================
