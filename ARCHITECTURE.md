@@ -197,17 +197,17 @@ This document describes FlipAha's runtime architecture, main data flows, the thr
 │  │  • GET  /api/dashboard/suggestion-feedback              │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │                                                                  │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌────────────────┐  │
-│  │ ImageProcessor   │  │ LatexConverter   │  │ SessionManager │  │
-│  │                  │  │                  │  │  (in-memory)   │  │
-│  │ • Quality check  │  │ • Pix2Text (def) │  │ • 24hr timeout │  │
-│  │ • Preprocess     │  │ • Pix2Tex (fb)   │  │ • Image store  │  │
-│  │   (none/mild/    │  │ • TrOCR (fb)     │  │ • LaTeX data   │  │
-│  │    binarize)     │  │ • Lazy init      │  │ • Ratings      │  │
-│  │ • Crop           │  │ • Confidence     │  │                │  │
-│  │ • Base64 convert │  │ • Validation     │  │                │  │
-│  │                  │  │ • Scoring        │  │                │  │
-│  └─────────────────┘  └─────────────────┘  └────────────────┘  │
+│  ┌─────────────────┐  ┌─────────────────┐                  │
+│  │ ImageProcessor   │  │ LatexConverter   │                  │
+│  │                  │  │                  │                  │
+│  │ • Quality check  │  │ • Pix2Text (def) │                  │
+│  │ • Preprocess     │  │ • Pix2Tex (fb)   │                  │
+│  │   (none/mild/    │  │ • TrOCR (fb)     │                  │
+│  │    binarize)     │  │ • Lazy init      │                  │
+│  │ • Crop           │  │ • Confidence     │                  │
+│  │ • Base64 convert │  │ • Validation     │                  │
+│  │                  │  │ • Scoring        │                  │
+│  └─────────────────┘  └─────────────────┘                  │
 │                                                                  │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌────────────────┐  │
 │  │  Cloud LLM      │  │  Analytics      │  │  Auth          │  │
@@ -235,15 +235,22 @@ This document describes FlipAha's runtime architecture, main data flows, the thr
 │                        Storage Layer                             │
 │                                                                  │
 │  ┌──────────────────────┐  ┌──────────────────────────────────┐ │
-│  │   SQLite Database    │  │   In-Memory Stores (Client)      │ │
+│  │   SQLite Database    │  │   In-Memory & Session Stores     │ │
 │  │   (database/app.db)  │  │                                  │ │
-│  │                      │  │  • image_store (session images)  │ │
-│  │  Tables:             │  │  • SessionManager (24hr timeout) │ │
-│  │  • users             │  │  • AST cache (parsed trees)      │ │
-│  │  • user_activity     │  │  • ML model weights cache        │ │
-│  │  • questions         │  │  • HuggingFace/PyTorch cache    │ │
-│  │  • processing        │  │    (~/.cache/torch, ~/.cache/hf) │ │
-│  │  • suggestion_feedback│ │                                  │ │
+│  │                      │  │  SessionManager (24hr timeout):  │ │
+│  │  Tables:             │  │  • Manages session lifecycle     │ │
+│  │  • users             │  │  • image_store (images per      │ │
+│  │  • user_activity     │  │    session with metadata)        │ │
+│  │  • questions         │  │  • LaTeX data & ratings         │ │
+│  │  • processing        │  │  • Handles expiry/cleanup       │ │
+│  │  • suggestion_feedback│ │  • Thread-safe operations       │ │
+│  │  • image_feedback    │  │                                  │ │
+│  │                      │  │  Other caches:                   │ │
+│  │                      │  │  • AST cache (parsed trees)      │ │
+│  │                      │  │  • ML model weights cache        │ │
+│  │                      │  │  • HuggingFace/PyTorch cache    │ │
+│  │                      │  │    (~/.cache/torch, ~/.cache/hf) │ │
+│  │                      │  │                                  │ │
 │  │                      │  │  Client-Side:                    │ │
 │  │                      │  │  • localStorage (session_id)     │ │
 │  └──────────────────────┘  └──────────────────────────────────┘ │
