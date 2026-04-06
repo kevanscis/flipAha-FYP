@@ -1,6 +1,6 @@
 # FlipAha Architecture
 
-This document describes FlipAha's runtime architecture, main data flows, the two-layer suggestion engine, and supporting subsystems (authentication, analytics dashboard, database).
+This document describes FlipAha's runtime architecture, main data flows, the three-batch grammar-based suggestion engine (with GBDT ranking), and supporting subsystems (authentication, analytics dashboard, database).
 
 ---
 
@@ -18,7 +18,7 @@ This document describes FlipAha's runtime architecture, main data flows, the two
 - **Added** (March 16–20, 2026):
   - `grammar-parser.js` (48 KB) — PEG-style recursive descent parser with 280+ function/constant support
   - `ambiguity-resolver.js` (91 KB) — Multi-interpretation generation with ~10 ambiguity rules
-  - `suggestion-ranker.js` (25 KB) — Ranking by multiple signals (syntax, curriculum, history)
+  - `suggestion-ranker.js` (675 lines, ~25 KB) — **XGBoost-style GBDT** ensemble for ranking suggestions using 20 learned features
 
 **Rationale**: Grammar-based parsing provides:
 - Better semantic understanding of complex expressions
@@ -64,26 +64,33 @@ This document describes FlipAha's runtime architecture, main data flows, the two
 - **Rendering**: `astToLatex()` converts any AST node to valid LaTeX output
 - **Caching**: Parsed ASTs can be cached in-memory to avoid re-parsing identical inputs
 
-### Future Ranking: XGBoost & Gradient Boosted Decision Trees (GBDT)
+### Batch 3: GBDT-Powered Suggestion Ranking (Current Implementation)
 
-**Planned Enhancement (Post-April 2026):**
+**Implemented in `suggestion-ranker.js` (675 lines, ~25 KB):**
 
-- **Current State**: Batch 3 (Suggestion Ranker) uses hand-crafted scoring: syntax complexity, curriculum constraints, rule confidence, history matching
-- **Limitation**: Linear combination of signals; no learned feature interactions
-- **Proposed XGBoost/GBDT Integration**:
-  - **Training Data**: Collect user feedback on suggestion quality (existing `suggestion_feedback` table)
-  - **Features**:
-    - AST depth/complexity metrics
-    - Rule type that generated the suggestion (e.g., `func-implicit-mul`)
-    - Input length, symbol count, ambiguity degree
-    - User profile (curriculum level, subject history)
-    - Context (recent questions, topics)
-  - **Models**:
-    - **Option A**: XGBoost classifier (predict user acceptance of suggestion)
-    - **Option B**: LightGBM for faster inference on large suggestion sets
-    - **Option C**: GBDT ensemble combining multiple scoring perspectives
-  - **Deployment**: Lightweight model export (PMML or ONNX) for in-browser or lightweight server-side inference
-  - **Benefit**: Non-linear feature interactions, automatic importance weighting, better ranking accuracy over time
+- **Architecture**: XGBoost-style Gradient Boosted Decision Tree ensemble running entirely client-side
+- **Features Extracted** (20-dimensional vector):
+  - **Structural** (0–2): input length, suggestion length, length ratio
+  - **Edit Distance** (3): normalized Levenshtein distance
+  - **Content Flags** (4–9): explicit parens, fractions, powers, square roots, degrees, inverses
+  - **Input Type** (10–11): trig functions, logarithm detection
+  - **LaTeX Complexity** (12–19): command count, shared tokens, character overlap, nesting depth, subscripts, common angles, prefix matching
+- **Model Training**:
+  - **Algorithm**: Gradient boosting with MSE loss + L2 regularization (λ, default 1.0)
+  - **Hyperparameters**: 
+    - `learningRate` (η): shrinkage/step size, default 0.1
+    - `nTrees`: ensemble size (default 50 boosting rounds)
+    - `maxDepth`: max tree depth (default 2, very shallow for fast inference)
+    - `minSamplesLeaf`: leaf node minimum size
+  - **Split Finding**: XGBoost exact greedy algorithm with information gain (Hessian-weighted)
+  - **Regularization**: L2 penalty on leaf weights to prevent overfitting
+- **Training Data**: User feedback from `suggestion_feedback` table (thumbs-up / thumbs-down ratings)
+- **Inference**: Fast recursive tree traversal; trained GBDT trees can be serialized to JSON for browser execution
+- **Benefits**:
+  - Non-linear feature interactions (beyond hand-crafted scoring)
+  - Automatic importance weighting learned from user data
+  - Improves over time as more feedback is collected
+  - Completely client-side (no server ML required for inference)
 
 ---
 
@@ -121,13 +128,11 @@ This document describes FlipAha's runtime architecture, main data flows, the two
 │  │ • Generate alternative AST interpretations              │   │
 │  │ • Deduplicate by LaTeX output                           │   │
 │  │                                                          │   │
-│  │ Batch 3: Suggestion Ranker     (suggestion-ranker.js)  │   │
-│  │ • Score by: syntax complexity, curriculum fit,         │   │
-│  │   rule confidence, history                              │   │
-│  │ • Filter by confidence threshold                        │   │
+│  │ Batch 3: GBDT Suggestion Ranker (suggestion-ranker.js) │   │
+│  │ • 20-dim feature extraction (syntax, edit distance, ...) │  │
+│  │ • XGBoost-style gradient boosted decision trees         │   │
+│  │ • Score by: learnable non-linear feature interactions  │   │
 │  │ • Return top-N ranked suggestions                       │   │
-│  │                                                          │   │
-│  │ [Future: XGBoost/GBDT for advanced ranking]            │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │                                                                  │
 └──────────────────────────────────────────────────────────────────┘
@@ -640,7 +645,7 @@ SQLite database at `database/app.db`. Connection via `database/db.py` with WAL j
 |-----------------------------------|----------------|
 | `grammar-parser.js`               | PEG-style recursive descent parser — tokenizer, parser, AST builder, LaTeX renderer (48 KB; added March 20) |
 | `ambiguity-resolver.js`           | Multi-interpretation suggestion generation — detects ambiguities and expands AST alternatives (func-implicit-mul, power-exponent, fraction-denominator, log-base, ~10 rules) (91 KB; added March 20) |
-| `suggestion-ranker.js`            | Ranking and filtering — scores candidates by complexity, curriculum, rule confidence, history; filters by threshold (25 KB; added March 16) |
+| `suggestion-ranker.js`            | **XGBoost-style GBDT Ranker** — 20-dimensional feature extraction, gradient boosted decision tree ensemble, trained on user feedback (675 lines, ~25 KB; added March 16) |
 | `math-extractor.js`               | Extract math expressions from natural language, classify types |
 | `math-extractor-enhanced.js`      | Enhanced parser — keyword+operand separation for better permutations |
 | `permutation-engine.js`           | Legacy wrapper (kept for compatibility) |
@@ -696,11 +701,10 @@ An alternative/earlier React+Vite implementation of the equation scanner:
 │                Suggestion Engine (Client-Side)               │
 │                                                              │
 │  PEG Parser: Grammar Parser (tokenizer + AST builder)       │
-│  AST Processing: Ambiguity Resolver, Ranker                 │
+│  AST Processing: Ambiguity Resolver, GBDT Ranker             │
 │  • Batch 1: Parse input → build Abstract Syntax Tree (AST)  │
 │  • Batch 2: Detect ambiguities → expand AST alternatives    │
-│  • Batch 3: Score & rank candidates by multiple signals     │
-│  • [Future: XGBoost/GBDT for ensemble ranking]              │
+│  • Batch 3: XGBoost-style GBDT → score with 20 features     │
 └──────────────────────────────────────────────────────────────┘
                             │
                             ▼
@@ -709,8 +713,8 @@ An alternative/earlier React+Vite implementation of the equation scanner:
 │                                                              │
 │  OCR: Pix2Text 1.1.4  •  Pix2Tex  •  TrOCR (microsoft)    │
 │  Core: PyTorch ≥2.2  •  Transformers ≥4.37  •  OpenCV      │
-│  NumPy ≥1.26  •  Pillow 10.2                               │
-│  [Optional: XGBoost / LightGBM for ranking]                 │
+│  Ranking: XGBoost-style GBDT (client-side, gradient boosted)│
+│  Utils: NumPy ≥1.26  •  Pillow 10.2  •  Levenshtein         │
 └──────────────────────────────────────────────────────────────┘
                             │
                             ▼
