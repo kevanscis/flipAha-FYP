@@ -4,6 +4,51 @@ This document describes FlipAha's runtime architecture, main data flows, the two
 
 ---
 
+## Recent Updates (March–April 2026)
+
+### Suggestion Engine Refactored (March 16–20, 2026)
+
+**Migration from Rule-Based to Grammar-Based Parsing:**
+
+- **Removed** (deprecated March 19, 2026):
+  - Subject modules: `subjects/trig.js`, `subjects/logs.js`, `subjects/vectors.js`, `subjects/normal.js`, `subjects/fractions.js`
+  - Permutation rules: `permutation-rules/algebra-rules.js`, `permutation-rules/log-rules.js`, `permutation-rules/trig-rules.js`
+  - Old orchestration approach via `mathToLatex.js` pattern compilation
+
+- **Added** (March 16–20, 2026):
+  - `grammar-parser.js` (48 KB) — PEG-style recursive descent parser with 280+ function/constant support
+  - `ambiguity-resolver.js` (91 KB) — Multi-interpretation generation with ~10 ambiguity rules
+  - `suggestion-ranker.js` (25 KB) — Ranking by multiple signals (syntax, curriculum, history)
+
+**Rationale**: Grammar-based parsing provides:
+- Better semantic understanding of complex expressions
+- Structured handling of operator precedence
+- Systematic ambiguity detection (vs. hard-coded patterns)
+- Easier to extend and maintain
+
+### Chat Context Memory (March 27, 2026+)
+
+- **New environment variables**:
+  - `CHAT_CONTEXT_TURNS` (default: 4) — number of recent message pairs to retain
+  - `CHAT_CONTEXT_MAX_CHARS` (default: 1600) — character budget for context window
+- **Implementation** (`backend/app.py`):
+  - `_sanitize_chat_history()` — validates history format and caps message length
+  - `_trim_chat_history()` — enforces turn limit and character budget
+  - `_build_chat_messages()` — includes trimmed history in LLM prompt
+- **Benefit**: Maintains question–answer continuity without storing sessions server-side
+
+### UI Enhancements (March 20–27, 2026)
+
+- **Navbar improvements**:
+  - Display logged-in username (via `#navUsername` element)
+  - Dropdown menu for navigation
+  - Logout button with proper page redirects
+- **Responsiveness**: CSS improvements for mobile/tablet views
+- **Cleaning**: Removed status bar; consolidated styles into `frontend/styles.css`
+- **Commits**: `6c85f0f` (navbar layout), `b9a21bf` (navbar dropdown and logout), `265cb98` (responsiveness)
+
+---
+
 ## System Overview
 
 ```
@@ -194,7 +239,7 @@ Flask serves the frontend as static files. Each page is a separate HTML document
 
 ---
 
-## Data Flow: Suggestion Engine (Two-Layer)
+## Data Flow: Suggestion Engine (Grammar + Ambiguity Resolution)
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -204,78 +249,96 @@ Flask serves the frontend as static files. Each page is a separate HTML document
                            │
                            ▼
 ┌──────────────────────────────────────────────────────────────┐
-│                    LAYER 1: Rule-Based                        │
-│                   (mathToLatex.js orchestrator)               │
+│           BATCH 1: Grammar Parsing (grammar-parser.js)       │
 │                                                              │
-│  1. Normalise input                                          │
-│  2. Try trig suggestions (subjects/trig.js)                  │
-│     • parseTrigExpression() — 10 regex patterns              │
-│     • generateTrigSuggestions() — degrees, pi, Greek, etc.   │
-│     • getFuzzySuggestions() — Levenshtein fuzzy matching      │
-│  3. Try rule matching (subjects: logs, vectors, normal)      │
-│     • ~190 compiled [pattern → replacement] rules            │
-│     • Wildcards (%) recursively apply mathToLatex()          │
-│  4. Try fraction ambiguity (a/bx → two interpretations)     │
-│  5. Try permutation engine                                   │
-│     • parseExpression() (math-extractor-enhanced.js)         │
-│     • Route by type → log/trig/algebra permutation rules     │
-│     • Validate all results                                   │
-│  6. Deduplicate and return up to max suggestions             │
+│  1. Tokenize input                                           │
+│     • NUMBER, IDENTIFIER, FUNCTION, CONSTANT, OPERATOR      │
+│     • POWER(^), LPAREN, RPAREN, DEGREE(°), PIPE(|), etc.   │
+│  2. Recursive descent parser                                 │
+│     • expression() → term() → factor() → primary()          │
+│     • Operator precedence (power > mul/div > add/sub)       │
+│  3. Build Abstract Syntax Tree (AST)                         │
+│     • Nodes: number, variable, function, power, mult, add   │
+│     • Stores ambiguity metadata per node                    │
+│  4. Render AST to LaTeX                                      │
+│     • astToLatex() traverses tree and generates \frac, ^{}  │
 │                                                              │
-│  Result: LaTeX strings or empty                              │
-└───────────────┬──────────────────────────┬───────────────────┘
-                │                          │
-        [has results]              [empty — fallback]
-                │                          │
-                ▼                          ▼
-┌──────────────────┐   ┌───────────────────────────────────────┐
-│ Show suggestions │   │          LAYER 2: ML-Ranked           │
-│ directly         │   │         (suggestor.js)                │
-└──────────────────┘   │                                       │
-                       │  1. Extract primary math expression   │
-                       │     (math-extractor.js)               │
-                       │  2. Generate Layer 1 candidates       │
-                       │  3. Generate Layer 2 candidates       │
-                       │     (pattern-based: trig, num-id-num) │
-                       │  4. Deduplicate (keep highest score)  │
-                       │  5. Rank with blended scoring:        │
-                       │     • 35% type prior probability      │
-                       │     • 30% Levenshtein distance        │
-                       │     • 20% curriculum constraint       │
-                       │       (O-level penalty for advanced)  │
-                       │     • 5%  context match (history)     │
-                       │     • 10% logistic regression model   │
-                       │       (trigModel from layer2.csv)     │
-                       │  6. Filter by minConfidence (0.7)     │
-                       │  7. Return ranked suggestions         │
-                       └───────────────────────────────────────┘
+│  Output: AST node with rendered LaTeX                        │
+└───────────────┬──────────────────────────────────────────────┘
+                │
+                ▼
+┌──────────────────────────────────────────────────────────────┐
+│     BATCH 2: Ambiguity Detection (ambiguity-resolver.js)     │
+│                                                              │
+│  1. Detect ambiguous patterns in AST                         │
+│     • Rule: func-implicit-mul (sin2x → sin(2x)?, sin²x?)   │
+│     • Rule: power-exponent (e2x → e^(2x)?, e^2·x?)         │
+│     • Rule: fraction-denominator (a/bc → a/(bc)?, (a/b)c?) │
+│     • Rule: log-base (log234 → log_2(34)?, log₂₃(4)?, ...) │
+│     • ~8-10 ambiguity rules total                            │
+│  2. Generate alternative interpretations                     │
+│     • For each detected ambiguity, expand() → AST[]        │
+│     • Include original interpretation + alternatives        │
+│  3. Deduplicate and normalize                               │
+│     • Remove identical LaTeX outputs                         │
+│     • Preserve highest-quality alternatives (top ~5-15)    │
+│                                                              │
+│  Output: Array of {latex, ast, confidence, ruleId}          │
+└───────────────┬──────────────────────────────────────────────┘
+                │
+                ▼
+┌──────────────────────────────────────────────────────────────┐
+│      BATCH 3: Ranking & Filtering (suggestion-ranker.js)     │
+│                                                              │
+│  1. Score each candidate                                     │
+│     • Syntax complexity (simpler = higher score)             │
+│     • Curriculum context (O-level penalty for advanced)      │
+│     • Rule confidence (some rules more reliable)             │
+│     • History matching (contextual preference)               │
+│  2. Rank by combined score                                   │
+│  3. Filter by minConfidence threshold (0.6–0.7)             │
+│  4. Return top N suggestions (typically 3–8)                │
+│                                                              │
+│  Output: Ranked array of LaTeX suggestions                   │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-### Subject Modules (Layer 1)
+### Grammar Parser (Batch 1)
 
-| Module         | File                            | Coverage |
-|----------------|---------------------------------|----------|
-| Trigonometry   | `src/core/subjects/trig.js`     | sin/cos/tan/csc/sec/cot, inverses, degrees, pi fractions, Greek args, modifiers, fuzzy matching (~430 lines) |
-| Logarithms     | `src/core/subjects/logs.js`     | ln, log, log_e, lg, arbitrary bases (~45 rules) |
-| Vectors        | `src/core/subjects/vectors.js`  | vec, hat, bar, overrightarrow (~20 rules) |
-| Normal/General | `src/core/subjects/normal.js`   | Fractions, summation, differentiation, powers, inequalities, Greek letters, typo correction (~70 rules + utilities) |
+- **File**: `src/core/grammar-parser.js` (48 KB)
+- **Approach**: PEG-style recursive descent parser
+- **Features**:
+  - Tokenizer recognizing 280+ math functions/constants
+  - Operator precedence handling (power > multiply/divide > add/subtract)
+  - Parentheses and brace balancing
+  - Greek letters (α, β, θ, π, etc.) and mathematical constants (e, ℼ)
+  - Factorial, degree symbol, absolute value pipes
+- **Output**: Abstract Syntax Tree (AST) with ambiguity metadata
 
-### Permutation Rules (Layer 1)
+### Ambiguity Resolver (Batch 2)
 
-| Module  | File                                       | What It Generates |
-|---------|--------------------------------------------|-------------------|
-| Algebra | `permutation-rules/algebra-rules.js`       | `fx` → `f(x)` or `f*x`; `2x3` → `2*x*3` or `2*x^3`; `e^2x` → `e^(2x)` or `e^2*x` |
-| Logs    | `permutation-rules/log-rules.js`           | `234` → all base splits; `2x` → `log_2(x)`, `log(2x)`, `log(2)*x` |
-| Trig    | `permutation-rules/trig-rules.js`          | Digit/var/ambiguity/inverse/pi permutations for all 6 trig functions (~400 lines) |
+- **File**: `src/core/ambiguity-resolver.js` (91 KB, latest updated April 6, 2026)
+- **Approach**: Rule-based detection and multi-interpretation generation
+- **Ambiguity Rules** (~10):
+  - **func-implicit-mul**: `sin2x` → `sin(2x)` | `sin²(x)` | `sin(2)·x`
+  - **power-exponent**: `e2x` → `e^(2x)` | `e^2·x`
+  - **fraction-denominator**: `a/bx` → `a/(bx)` | `(a/b)·x`
+  - **log-base**: `log234` → `log₂(34)` | `log₂₃(4)` | `log(2·3·4)` | combinations
+  - **mult-order**: Treats `xy` ambiguities in various contexts
+  - And others for edge cases (Greek letters, modifiers, etc.)
+- **Output**: Array of alternative AST interpretations, deduplicated by LaTeX output
 
-### ML Model (Layer 2)
+### Suggestion Ranker (Batch 3)
 
-- **Type**: Multinomial logistic regression
-- **Training script**: `scripts/train_layer2_trig.mjs`
-- **Training data**: `src/core/layer2.csv` (169 rows of `input_text,target_latex`)
-- **Output**: `src/core/layer2-trig-model.js` (serialised weights)
-- **Classes**: 8 trig types (`trig_argument`, `trig_basic`, `trig_degree`, `trig_expression`, `trig_inverse`, `trig_power`, `trig_product`, `trig_ratio`)
-- **Features**: Character n-grams (1–3 chars, top 280) + 7 boolean features (`has_power`, `has_inverse`, `has_degree`, `has_ratio`, `has_product`, `has_expression`, `has_parentheses`)
+- **File**: `src/core/suggestion-ranker.js` (25 KB)
+- **Ranking Signals**:
+  - Syntax simplicity (length heuristic)
+  - Curriculum constraints (penalize out-of-scope functions)
+  - Rule confidence (some ambiguity rules more reliable)
+  - Historical context matching
+  - User input patterns
+- **Filtering**: Threshold-based filtering (default 0.6–0.7 confidence)
+- **Output**: Top 3–15 ranked suggestions with confidence scores
 
 ---
 
@@ -523,19 +586,15 @@ SQLite database at `database/app.db`. Connection via `database/db.py` with WAL j
 
 | File                              | Responsibility |
 |-----------------------------------|----------------|
+| `grammar-parser.js`               | PEG-style recursive descent parser — tokenizer, parser, AST builder, LaTeX renderer |
+| `ambiguity-resolver.js`           | Multi-interpretation suggestion generation — detects ambiguities and expands AST alternatives (func-implicit-mul, power-exponent, fraction-denominator, log-base, ~10 rules) |
+| `suggestion-ranker.js`            | Ranking and filtering — scores candidates by complexity, curriculum, rule confidence, history; filters by threshold |
 | `math-extractor.js`               | Extract math expressions from natural language, classify types |
 | `math-extractor-enhanced.js`      | Enhanced parser — keyword+operand separation for better permutations |
-| `permutation-engine.js`           | Re-export wrapper delegating to `mathToLatex.js` permutation generation |
-| `suggestor.js`                    | Layer 2 engine — candidate generation, blended ranking (5 signals), logistic regression integration |
-| `layer2-trig-model.js`            | Serialised logistic regression model (auto-generated, 8 trig classes, 280 n-gram vocab) |
-| `layer2.csv`                      | Training data (169 rows of input→LaTeX pairs) |
-| `subjects/trig.js`                | Trig subject module — parsing, suggestion generation, fuzzy matching |
-| `subjects/logs.js`                | Log rules (~45 pattern→replacement pairs) |
-| `subjects/vectors.js`             | Vector rules (~20 pattern→replacement pairs) |
-| `subjects/normal.js`              | General math rules (~70 rules), typo correction, fraction ambiguity |
-| `permutation-rules/algebra-rules.js` | Algebra permutations (function app, implicit mult, power ambiguity) |
-| `permutation-rules/log-rules.js`     | Log permutations (base splits, digit+var combinations) |
-| `permutation-rules/trig-rules.js`    | Trig permutations (digit/var/ambiguity/inverse/pi, ~400 lines) |
+| `permutation-engine.js`           | Legacy wrapper (kept for compatibility) |
+| `suggestor.js`                    | Legacy Layer 2 engine (may be deprecated; check if still used) |
+| `layer2-trig-model.js`            | Serialised logistic regression model (legacy, may not be used) |
+| `layer2.csv`                      | Training data (169 rows, legacy) |
 
 ### Frontend React App (`frontend/src/`)
 
@@ -582,8 +641,9 @@ An alternative/earlier React+Vite implementation of the equation scanner:
 ┌──────────────────────────────────────────────────────────────┐
 │                Suggestion Engine (Client-Side)               │
 │                                                              │
-│  Layer 1: Subject modules + Permutation rules + mathToLatex │
-│  Layer 2: Suggestor + Logistic regression + Levenshtein     │
+│  Batch 1: Grammar Parser (PEG-style recursive descent)      │
+│  Batch 2: Ambiguity Resolver (multi-interpretation gen)     │
+│  Batch 3: Suggestion Ranker (confidence-based ranking)      │
 │  Math Extractors: regex-based + enhanced keyword parser     │
 └──────────────────────────────────────────────────────────────┘
                             │
@@ -611,13 +671,24 @@ An alternative/earlier React+Vite implementation of the equation scanner:
 ## Key Design Decisions
 
 - **Server-rendered pages**: Flask serves frontend HTML directly (no separate dev server in production). A Vite dev workflow exists as an alternative.
-- **Two-layer suggestion engine**: Layer 1 (rule-based, fast) runs first; Layer 2 (ML-ranked, broader) activates only as a fallback when Layer 1 produces no results.
+- **Grammar-based suggestion engine** (Refactored March 2026): Replaced regex/rule-based pattern matching with a PEG-style recursive descent parser:
+  - **Batch 1 (Grammar Parser)**: Tokenizes input → parses using operator precedence → builds Abstract Syntax Tree (AST)
+  - **Batch 2 (Ambiguity Resolver)**: Detects inherent ambiguities in parse trees (~10 rules) → generates multiple interpretations → deduplicates by LaTeX output
+  - **Batch 3 (Suggestion Ranker)**: Scores by syntax complexity, curriculum fit, rule confidence, history → filters by confidence threshold → returns top suggestions
+  - Provides better handling of complex expressions (log-base ambiguities, power vs multiply, function application with implicit arguments)
+- **Lightweight chat memory** (Added March 27, 2026): Maintains recent conversation context with configurable turn limit (CHAT_CONTEXT_TURNS, default 4) and character budget (CHAT_CONTEXT_MAX_CHARS, default 1600)
 - **Client-side suggestions**: All suggestion logic runs in the browser — no server round-trip for autocomplete. The only server call is `/api/suggestions` via `Layer1.js` (Node subprocess), used as an alternative path.
-- **Cloud LLM for chat**: Uses Pollinations API (OpenAI-compatible) — no local LLM required. Configurable via `CLOUD_LLM_BASE_URL` and `CLOUD_LLM_MODEL` env vars.
+- **Cloud LLM for chat**: Uses Pollinations API (OpenAI-compatible) with configurable backup URLs and retry logic (CLOUD_LLM_RETRIES, default 2)
 - **OCR engine cascade**: Pix2Text (default) → Pix2Tex → TrOCR. Controlled by `LATEX_OCR_ENGINE` env var. Lazy-initialized on first use to keep server startup fast.
 - **Multi-variant conversion**: The `/api/convert` endpoint runs OCR on three preprocessing variants (raw, mild, binarize) and picks the best result by heuristic scoring.
 - **SQLite for persistence**: User accounts, question logs, and analytics are stored in SQLite with WAL mode. Image data remains in-memory (24hr session timeout).
 - **Role-based access**: Admin users access the analytics dashboard; regular users cannot. Admin registration requires a secret code.
+- **UI Enhancements** (March 2026+): 
+  - Displayed logged-in username in navbar
+  - Improved logout functionality with page redirects
+  - Responsive navbar with dropdown menu
+  - Removed status bar for cleaner UI
+  - Consolidated styling into centralized `style.css`
 - **LaTeX safety**: Both frontend implementations (vanilla JS and React) include sanitisation and auto-fix utilities for LaTeX rendering (brace balancing, delimiter stripping, MathJax error detection).
 
 ---
