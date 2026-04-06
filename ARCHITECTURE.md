@@ -47,6 +47,44 @@ This document describes FlipAha's runtime architecture, main data flows, the two
 - **Cleaning**: Removed status bar; consolidated styles into `frontend/styles.css`
 - **Commits**: `6c85f0f` (navbar layout), `b9a21bf` (navbar dropdown and logout), `265cb98` (responsiveness)
 
+### Core Data Structure: Abstract Syntax Tree (AST)
+
+**Current Implementation (March 20, 2026+):**
+
+- **What**: The AST is an intermediate representation built by `grammar-parser.js` that captures the semantic structure of mathematical input
+- **Structure**: Hierarchical tree where each node represents:
+  - Operands (numbers, variables, constants, functions)
+  - Operations (addition, multiplication, power, function application)
+  - Metadata (ambiguity flags, metadata for scoring)
+- **Generation**: Tokens → Recursive descent parser → AST
+- **Usage**:
+  - **Batch 1**: Grammar parser outputs AST
+  - **Batch 2**: Ambiguity resolver takes AST, expands nodes with multiple interpretations (func-implicit-mul, power-exponent, etc.)
+  - **Batch 3**: Ranker scores each alternative AST and returns top suggestions
+- **Rendering**: `astToLatex()` converts any AST node to valid LaTeX output
+- **Caching**: Parsed ASTs can be cached in-memory to avoid re-parsing identical inputs
+
+### Future Ranking: XGBoost & Gradient Boosted Decision Trees (GBDT)
+
+**Planned Enhancement (Post-April 2026):**
+
+- **Current State**: Batch 3 (Suggestion Ranker) uses hand-crafted scoring: syntax complexity, curriculum constraints, rule confidence, history matching
+- **Limitation**: Linear combination of signals; no learned feature interactions
+- **Proposed XGBoost/GBDT Integration**:
+  - **Training Data**: Collect user feedback on suggestion quality (existing `suggestion_feedback` table)
+  - **Features**:
+    - AST depth/complexity metrics
+    - Rule type that generated the suggestion (e.g., `func-implicit-mul`)
+    - Input length, symbol count, ambiguity degree
+    - User profile (curriculum level, subject history)
+    - Context (recent questions, topics)
+  - **Models**:
+    - **Option A**: XGBoost classifier (predict user acceptance of suggestion)
+    - **Option B**: LightGBM for faster inference on large suggestion sets
+    - **Option C**: GBDT ensemble combining multiple scoring perspectives
+  - **Deployment**: Lightweight model export (PMML or ONNX) for in-browser or lightweight server-side inference
+  - **Benefit**: Non-linear feature interactions, automatic importance weighting, better ranking accuracy over time
+
 ---
 
 ## System Overview
@@ -70,14 +108,26 @@ This document describes FlipAha's runtime architecture, main data flows, the two
 │  └──────────────┘ └──────────────┘ └──────────┘ └────────────┘ │
 │                                                                  │
 │  ┌──────────────────────────────────────────────────────────┐   │
-│  │            Suggestion Engine (client-side JS)            │   │
+│  │      Suggestion Engine (3-Batch Grammar-Based)           │   │
 │  │                                                          │   │
-│  │  Layer 1 (Rule-Based)           Layer 2 (ML-Ranked)     │   │
-│  │  • Subject modules (trig,       • Candidate generator   │   │
-│  │    logs, vectors, normal)       • Logistic regression   │   │
-│  │  • Permutation rules             model (trig ranking)   │   │
-│  │  • mathToLatex orchestrator     • Levenshtein scoring   │   │
-│  │  • math-extractor-enhanced      • Curriculum filtering  │   │
+│  │ Batch 1: Grammar Parser        (grammar-parser.js)      │   │
+│  │ • Tokenize & parse input                                │   │
+│  │ • Operator precedence handling                          │   │
+│  │ • Build AST (Abstract Syntax Tree)                      │   │
+│  │ • Render AST → LaTeX                                    │   │
+│  │                                                          │   │
+│  │ Batch 2: Ambiguity Resolver    (ambiguity-resolver.js) │   │
+│  │ • Detect ambiguous patterns in AST (~10 rules)         │   │
+│  │ • Generate alternative AST interpretations              │   │
+│  │ • Deduplicate by LaTeX output                           │   │
+│  │                                                          │   │
+│  │ Batch 3: Suggestion Ranker     (suggestion-ranker.js)  │   │
+│  │ • Score by: syntax complexity, curriculum fit,         │   │
+│  │   rule confidence, history                              │   │
+│  │ • Filter by confidence threshold                        │   │
+│  │ • Return top-N ranked suggestions                       │   │
+│  │                                                          │   │
+│  │ [Future: XGBoost/GBDT for advanced ranking]            │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │                                                                  │
 └──────────────────────────────────────────────────────────────────┘
@@ -156,15 +206,17 @@ This document describes FlipAha's runtime architecture, main data flows, the two
 │                        Storage Layer                             │
 │                                                                  │
 │  ┌──────────────────────┐  ┌──────────────────────────────────┐ │
-│  │   SQLite Database    │  │   In-Memory Stores               │ │
+│  │   SQLite Database    │  │   In-Memory Stores (Client)      │ │
 │  │   (database/app.db)  │  │                                  │ │
 │  │                      │  │  • image_store (session images)  │ │
 │  │  Tables:             │  │  • SessionManager (24hr timeout) │ │
-│  │  • users             │  │  • ML model cache                │ │
-│  │  • user_activity     │  │    (~/.cache/torch, HuggingFace) │ │
-│  │  • questions         │  │                                  │ │
-│  │  • processing        │  │  Client-Side:                    │ │
-│  │  • suggestion_feedback│ │  • localStorage (session_id)     │ │
+│  │  • users             │  │  • AST cache (parsed trees)      │ │
+│  │  • user_activity     │  │  • ML model weights cache        │ │
+│  │  • questions         │  │  • HuggingFace/PyTorch cache    │ │
+│  │  • processing        │  │    (~/.cache/torch, ~/.cache/hf) │ │
+│  │  • suggestion_feedback│ │                                  │ │
+│  │                      │  │  Client-Side:                    │ │
+│  │                      │  │  • localStorage (session_id)     │ │
 │  └──────────────────────┘  └──────────────────────────────────┘ │
 │                                                                  │
 └──────────────────────────────────────────────────────────────────┘
@@ -643,19 +695,22 @@ An alternative/earlier React+Vite implementation of the equation scanner:
 ┌──────────────────────────────────────────────────────────────┐
 │                Suggestion Engine (Client-Side)               │
 │                                                              │
-│  Batch 1: Grammar Parser (PEG-style recursive descent)      │
-│  Batch 2: Ambiguity Resolver (multi-interpretation gen)     │
-│  Batch 3: Suggestion Ranker (confidence-based ranking)      │
-│  Math Extractors: regex-based + enhanced keyword parser     │
+│  PEG Parser: Grammar Parser (tokenizer + AST builder)       │
+│  AST Processing: Ambiguity Resolver, Ranker                 │
+│  • Batch 1: Parse input → build Abstract Syntax Tree (AST)  │
+│  • Batch 2: Detect ambiguities → expand AST alternatives    │
+│  • Batch 3: Score & rank candidates by multiple signals     │
+│  • [Future: XGBoost/GBDT for ensemble ranking]              │
 └──────────────────────────────────────────────────────────────┘
                             │
                             ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                      ML / AI Layer                           │
 │                                                              │
-│  Pix2Text 1.1.4  •  Pix2Tex  •  TrOCR (microsoft)         │
-│  PyTorch ≥2.2  •  Transformers ≥4.37  •  OpenCV            │
-│  Pillow 10.2  •  NumPy ≥1.26                               │
+│  OCR: Pix2Text 1.1.4  •  Pix2Tex  •  TrOCR (microsoft)    │
+│  Core: PyTorch ≥2.2  •  Transformers ≥4.37  •  OpenCV      │
+│  NumPy ≥1.26  •  Pillow 10.2                               │
+│  [Optional: XGBoost / LightGBM for ranking]                 │
 └──────────────────────────────────────────────────────────────┘
                             │
                             ▼
@@ -664,7 +719,8 @@ An alternative/earlier React+Vite implementation of the equation scanner:
 │                                                              │
 │  SQLite (WAL mode)  •  In-memory image store                │
 │  Flask session cookies  •  Browser localStorage             │
-│  ML model cache (~/.cache/torch, HuggingFace)               │
+│  AST cache (parsed expressions)                             │
+│  ML model cache (~/.cache/torch, ~/.cache/huggingface)      │
 └──────────────────────────────────────────────────────────────┘
 ```
 
