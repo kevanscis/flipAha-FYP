@@ -92,6 +92,30 @@ This document describes FlipAha's runtime architecture, main data flows, the thr
   - Improves over time as more feedback is collected
   - Completely client-side (no server ML required for inference)
 
+### GBDT Model Training Pipeline
+
+**Training Script: `frontend/scripts/train_ranker.mjs`**
+
+- **Purpose**: Offline training pipeline that reads user feedback from SQLite and produces a deployable JSON model
+- **Data Source**: 
+  - `suggestion_feedback` table: user thumbs-up/down ratings on suggestions
+  - `questions` table: question context and metadata
+  - Constructs training pairs: `(raw_input, suggestion_latex, rating)` → features + label
+- **Training Process**:
+  1. Load `GBDTRanker`, `extractFeatures`, `FEATURE_NAMES` from `suggestion-ranker.js`
+  2. Query SQLite for feedback entries with sufficient data
+  3. Extract 20-dimensional feature vector for each (input, suggestion) pair
+  4. Train gradient boosted ensemble using MSE loss + L2 regularization
+  5. Serialize trained trees + hyperparameters to JSON
+- **Performance**:
+  - Extremely fast: ~50 shallow trees (depth=2) with 20 features
+  - Inference per suggestion: <1ms per candidate
+- **Model Export**:
+  - `frontend/scripts/train_ranker.mjs --db backend/database/app.db --out frontend/src/core/ranker-model.json`
+  - Output: JSON-serialized decision trees + model metadata
+  - Can be versioned in git for reproducibility
+- **Cold Start**: Ships with hand-crafted initial trees if no user feedback data exists yet
+
 ---
 
 ## System Overview
