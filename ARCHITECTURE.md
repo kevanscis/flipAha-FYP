@@ -10,10 +10,10 @@ This document describes FlipAha's runtime architecture, main data flows, the two
 
 **Migration from Rule-Based to Grammar-Based Parsing:**
 
-- **Removed** (deprecated March 19, 2026):
-  - Subject modules: `subjects/trig.js`, `subjects/logs.js`, `subjects/vectors.js`, `subjects/normal.js`, `subjects/fractions.js`
-  - Permutation rules: `permutation-rules/algebra-rules.js`, `permutation-rules/log-rules.js`, `permutation-rules/trig-rules.js`
-  - Old orchestration approach via `mathToLatex.js` pattern compilation
+- **Permanently removed** (commit `24ce4f0`, March 19, 2026):
+  - Subject modules: `subjects/trig.js`, `subjects/logs.js`, `subjects/vectors.js`, `subjects/normal.js`, `subjects/fractions.js` — **no longer exist in codebase**
+  - Permutation rules: `permutation-rules/algebra-rules.js`, `permutation-rules/log-rules.js`, `permutation-rules/trig-rules.js` — **no longer exist in codebase**
+  - Old orchestration approach via `mathToLatex.js` pattern compilation and Rule-Based Layer 1 / ML Layer 2 architecture
 
 - **Added** (March 16–20, 2026):
   - `grammar-parser.js` (48 KB) — PEG-style recursive descent parser with 280+ function/constant support
@@ -586,15 +586,17 @@ SQLite database at `database/app.db`. Connection via `database/db.py` with WAL j
 
 | File                              | Responsibility |
 |-----------------------------------|----------------|
-| `grammar-parser.js`               | PEG-style recursive descent parser — tokenizer, parser, AST builder, LaTeX renderer |
-| `ambiguity-resolver.js`           | Multi-interpretation suggestion generation — detects ambiguities and expands AST alternatives (func-implicit-mul, power-exponent, fraction-denominator, log-base, ~10 rules) |
-| `suggestion-ranker.js`            | Ranking and filtering — scores candidates by complexity, curriculum, rule confidence, history; filters by threshold |
+| `grammar-parser.js`               | PEG-style recursive descent parser — tokenizer, parser, AST builder, LaTeX renderer (48 KB; added March 20) |
+| `ambiguity-resolver.js`           | Multi-interpretation suggestion generation — detects ambiguities and expands AST alternatives (func-implicit-mul, power-exponent, fraction-denominator, log-base, ~10 rules) (91 KB; added March 20) |
+| `suggestion-ranker.js`            | Ranking and filtering — scores candidates by complexity, curriculum, rule confidence, history; filters by threshold (25 KB; added March 16) |
 | `math-extractor.js`               | Extract math expressions from natural language, classify types |
 | `math-extractor-enhanced.js`      | Enhanced parser — keyword+operand separation for better permutations |
 | `permutation-engine.js`           | Legacy wrapper (kept for compatibility) |
 | `suggestor.js`                    | Legacy Layer 2 engine (may be deprecated; check if still used) |
 | `layer2-trig-model.js`            | Serialised logistic regression model (legacy, may not be used) |
 | `layer2.csv`                      | Training data (169 rows, legacy) |
+| ~~`subjects/`~~ **REMOVED**        | **Permanently deleted March 19, 2026**: trig.js, logs.js, vectors.js, normal.js, fractions.js |
+| ~~`permutation-rules/`~~ **REMOVED** | **Permanently deleted March 19, 2026**: algebra-rules.js, log-rules.js, trig-rules.js |
 
 ### Frontend React App (`frontend/src/`)
 
