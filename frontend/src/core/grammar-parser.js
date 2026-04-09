@@ -42,6 +42,7 @@
     'cosec', 'cosech',
     'sinh', 'cosh', 'tanh',
     'asin', 'acos', 'atan',
+    'squareroot', 'cuberoot',
     'sqrt', 'cbrt',
     'sin', 'cos', 'tan', 'sec', 'csc', 'cot',
     'log', 'ln', 'lg', 'exp', 'abs',
@@ -127,6 +128,7 @@
     '\\sin', '\\cos', '\\tan', '\\sec', '\\csc', '\\cot',
     '\\cosec',
     '\\log', '\\ln', '\\lg', '\\exp',
+    '\\squareroot', '\\cuberoot',
     '\\sqrt', '\\cbrt',
     '\\lim', '\\sum', '\\prod', '\\int',
     '\\det', '\\mod', '\\abs',
@@ -506,8 +508,12 @@
         const lower = word.toLowerCase();
 
         // Alias words that should not be split by greedy function matching.
-        if (lower === 'root') {
+        if (lower === 'root' || lower === 'squareroot') {
           tokens.push({ type: TokenType.FUNCTION, value: 'sqrt', pos: wordStart });
+          continue;
+        }
+        if (lower === 'cuberoot') {
+          tokens.push({ type: TokenType.FUNCTION, value: 'cbrt', pos: wordStart });
           continue;
         }
         if (lower === 'absolute') {
@@ -950,7 +956,8 @@
       const funcName = funcTok.value;
 
       // Special case: sqrt with optional index
-      if (funcName === 'sqrt' || funcName === 'cbrt') {
+      if (funcName === 'sqrt' || funcName === 'squareroot' || funcName === '\\sqrt' || funcName === '\\squareroot' || 
+          funcName === 'cbrt' || funcName === 'cuberoot' || funcName === '\\cbrt' || funcName === '\\cuberoot') {
         return parseSqrt(funcName);
       }
 
@@ -1037,7 +1044,7 @@
 
     // --- sqrt / cbrt parsing ---
     function parseSqrt(funcName) {
-      let index = funcName === 'cbrt' ? ASTNode.number('3') : null;
+      let index = (funcName === 'cbrt' || funcName === 'cuberoot' || funcName === '\\cbrt' || funcName === '\\cuberoot') ? ASTNode.number('3') : null;
 
       // sqrt[3]{x} or sqrt[n]{x}
       if (!isAtEnd() && current().value === '[') {
