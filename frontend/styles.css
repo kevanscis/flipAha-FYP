@@ -175,6 +175,28 @@ header p {
     animation: pulse 1.5s ease-in-out infinite;
 }
 
+.loading-cancel-btn {
+    display: block;
+    margin-top: 10px;
+    padding: 6px 12px;
+    border: 1px solid #b45309;
+    border-radius: 8px;
+    background: #fff7ed;
+    color: #9a3412;
+    font-size: 0.82rem;
+    font-style: normal;
+    cursor: pointer;
+}
+
+.loading-cancel-btn:hover {
+    background: #ffedd5;
+}
+
+.loading-cancel-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
 .edit-latex-btn {
     margin-top: 10px;
     padding: 6px 12px;

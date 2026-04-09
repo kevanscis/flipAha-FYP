@@ -10,6 +10,7 @@ let usedSuggestion = false;
 let suppressSuggestionForValue = '';
 let lastShownSuggestions = [];   // track suggestions shown for ML feedback
 let lastSuggestionQuery = '';    // track the raw input that triggered suggestions
+let activeQuestionAbortController = null;
 
 // Configuration
 const API_BASE_URL = 'http://localhost:5000';
@@ -35,6 +36,11 @@ function goChat() {
 }
 function goImage() {
   window.location.href = `${API_BASE_URL}/image`;
+}
+
+function cancelActiveQuestionRequest() {
+  if (!activeQuestionAbortController) return;
+  activeQuestionAbortController.abort();
 }
 
 function lockChat() {
@@ -605,6 +611,17 @@ function getCustomSuggestionLatex(queryTerm, queryTermText) {
     out.push(`\\log_{${logBaseCompact[1]}}(${logBaseCompact[2]})`);
   }
 
+  // Numeric fraction shorthand: 1/2 -> \frac{1}{2}
+  // (Signed prefixes are handled upstream so "-1/2" can keep '-' in text.)
+  const numericFractionMatch = compact.match(/^([+\-]?\d+(?:\.\d+)?)\/([+\-]?\d+(?:\.\d+)?)$/);
+  if (numericFractionMatch) {
+    const numerator = numericFractionMatch[1];
+    const denominator = numericFractionMatch[2];
+    if (denominator !== '0' && denominator !== '+0' && denominator !== '-0') {
+      out.push(`\\frac{${numerator}}{${denominator}}`);
+    }
+  }
+
   return out;
 }
 
@@ -1008,6 +1025,18 @@ function createMessageElement(message) {
     renderMixedTextMath(message?.text, bubbleDiv);
   } else if (message.role === 'loading') {
     bubbleDiv.textContent = message.text;
+    if (message.cancelable) {
+      const cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.className = 'loading-cancel-btn';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.addEventListener('click', () => {
+        cancelBtn.disabled = true;
+        cancelBtn.textContent = 'Cancelling...';
+        cancelActiveQuestionRequest();
+      });
+      bubbleDiv.appendChild(cancelBtn);
+    }
   } else if (message.role === 'assistant') {
     // Render assistant responses with LaTeX to KaTeX conversion
     renderAssistantMessage(message?.text, bubbleDiv);
@@ -1037,6 +1066,23 @@ function addMessage(message) {
   const messageElement = createMessageElement(message);
   messagesContainer.appendChild(messageElement);
   scrollToBottom();
+  return messageElement;
+}
+
+function removeLoadingMessage(loadingMsgIndex, loadingMessageElement) {
+  if (loadingMessageElement && loadingMessageElement.parentNode === messagesContainer) {
+    messagesContainer.removeChild(loadingMessageElement);
+  }
+
+  if (messages[loadingMsgIndex] && messages[loadingMsgIndex].role === 'loading') {
+    messages.splice(loadingMsgIndex, 1);
+    return;
+  }
+
+  const fallbackIndex = messages.findIndex((m) => m && m.role === 'loading');
+  if (fallbackIndex !== -1) {
+    messages.splice(fallbackIndex, 1);
+  }
 }
 
 function scrollToBottom() {
@@ -1331,12 +1377,15 @@ async function handleSubmitQuestion(e) {
   }
 
   // Add loading message
+  const requestController = new AbortController();
+  activeQuestionAbortController = requestController;
   const loadingMsgIndex = messages.length;
-  addMessage({ text: 'Thinking...', role: 'loading' });
+  const loadingMessageElement = addMessage({ text: 'Thinking...', role: 'loading', cancelable: true });
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/questions`, {
       method: 'POST',
+      signal: requestController.signal,
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json'
@@ -1354,8 +1403,7 @@ async function handleSubmitQuestion(e) {
     const data = await response.json();
 
     // Remove loading message
-    messages.splice(loadingMsgIndex, 1);
-    messagesContainer.removeChild(messagesContainer.lastChild);
+    removeLoadingMessage(loadingMsgIndex, loadingMessageElement);
 
     if (data.success) {
       addMessage({ text: data.answer, role: 'assistant' });
@@ -1383,14 +1431,16 @@ async function handleSubmitQuestion(e) {
     console.error('Error:', error);
     
     // Remove loading message
-    if (messages[loadingMsgIndex] && messages[loadingMsgIndex].role === 'loading') {
-      messages.splice(loadingMsgIndex, 1);
-      messagesContainer.removeChild(messagesContainer.lastChild);
+    removeLoadingMessage(loadingMsgIndex, loadingMessageElement);
+
+    if (error && error.name === 'AbortError') {
+      showResponseStatus('error', 'Request cancelled.');
+    } else {
+      addMessage({ text: 'Sorry, I encountered an error. Please try again.', role: 'assistant' });
+      showResponseStatus('error', 'Error: ' + error.message);
     }
-    
-    addMessage({ text: 'Sorry, I encountered an error. Please try again.', role: 'assistant' });
-    showResponseStatus('error', 'Error: ' + error.message);
   } finally {
+    activeQuestionAbortController = null;
     loading = false;
     submitBtn.disabled = false;
     questionInput.contentEditable = 'true';
@@ -1720,20 +1770,31 @@ function handleInputChange() {
         queryTermText = latexToSmartText(queryTerm);
       }
     }
+
+    // If the user is typing a unary sign prefix (e.g. -sinx, +sqrtx),
+    // generate suggestions from the unsigned core term and then re-apply
+    // the minus sign to suggestions so intent is preserved.
+    const unaryPrefixMatch = String(queryTerm || '').match(/^\s*([+\-−](?:\s*[+\-−])*)\s*(.*)$/);
+    const unaryPrefixRaw = unaryPrefixMatch ? String(unaryPrefixMatch[1] || '').replace(/\s+/g, '').replace(/−/g, '-') : '';
+    const unaryCoreTerm = unaryPrefixMatch ? String(unaryPrefixMatch[2] || '').trim() : '';
+    const unaryMinusCount = (unaryPrefixRaw.match(/-/g) || []).length;
+    const unaryNetSign = unaryPrefixRaw ? (unaryMinusCount % 2 === 1 ? '-' : '+') : '';
+    const queryTermForSuggestions = unaryCoreTerm || queryTerm;
+    const queryTermTextForSuggestions = unaryCoreTerm || queryTermText || queryTerm;
     
     // Match rules directly with LaTeX input (use extracted term, not full query)
     // --- Grammar-based suggestions (ambiguity resolver) ---
     let grammarSuggestions = [];
     if (typeof globalThis.ambiguityResolver?.generateSuggestions === 'function') {
       try {
-        grammarSuggestions = globalThis.ambiguityResolver.generateSuggestions(queryTerm, 8)
-          .filter(s => s && s !== queryTerm && !searchValue.includes(s));
+        grammarSuggestions = globalThis.ambiguityResolver.generateSuggestions(queryTermForSuggestions, 8)
+          .filter(s => s && s !== queryTermForSuggestions && !searchValue.includes(s));
       } catch (e) {
         console.warn('Grammar parser error:', e);
       }
     }
 
-    const intentCompact = String(queryTermText || queryTerm || '')
+    const intentCompact = String(queryTermTextForSuggestions || queryTermForSuggestions || '')
       .toLowerCase()
       .replace(/\s+/g, '');
     const strictSymbolIntent = ['<=', '≤', '>=', '≥', '!=', '≠'].includes(intentCompact);
@@ -1744,12 +1805,12 @@ function handleInputChange() {
 
     const compactTrigGroupedArgSuggestion = (() => {
       if (!compactTrigGroupedArgIntent) return '';
-      const compactFromRaw = String(queryTerm || '')
+      const compactFromRaw = String(queryTermForSuggestions || '')
         .toLowerCase()
         .replace(/\s+/g, '')
         .replace(/[{}]/g, '')
         .replace(/\\/g, '');
-      const compactFromText = String(queryTermText || '')
+      const compactFromText = String(queryTermTextForSuggestions || '')
         .toLowerCase()
         .replace(/\s+/g, '')
         .replace(/[{}]/g, '')
@@ -1767,7 +1828,7 @@ function handleInputChange() {
 
     // Filter out suggestions containing placeholder '?' (incomplete parse artifacts)
     let suggestions = grammarSuggestions.filter(s => !s.includes('?'));
-    const customSuggestions = getCustomSuggestionLatex(queryTerm, queryTermText);
+    const customSuggestions = getCustomSuggestionLatex(queryTermForSuggestions, queryTermTextForSuggestions);
     if (customSuggestions.length) {
       suggestions = [...customSuggestions, ...suggestions];
     }
@@ -1803,7 +1864,7 @@ function handleInputChange() {
       suggestions = customSuggestions.slice();
     }
 
-    const trigRatioCompact = String(queryTermText || queryTerm || '')
+    const trigRatioCompact = String(queryTermTextForSuggestions || queryTermForSuggestions || '')
       .replace(/\\/g, '')
       .replace(/\s+/g, '')
       .toLowerCase();
@@ -1860,7 +1921,7 @@ function handleInputChange() {
       .replace(/³/g, '3')
       .replace(/\^\{?(-?1)\}?/g, '^-1');
 
-    const inverseIntentSource = normalizeInverseIntentSource(queryTermText || queryTerm || '');
+    const inverseIntentSource = normalizeInverseIntentSource(queryTermTextForSuggestions || queryTermForSuggestions || '');
     const inverseIntentMatch = inverseIntentSource.match(/^(?:arc|a)?(sin|cos|tan|sec|csc|cot|cosec)(?:\^-1|-1)(?:\((.*)\)|([a-z0-9_\\πθα-ω.+\-*/^{}]+))?$/i);
     if (inverseIntentMatch) {
       const rawFunc = String(inverseIntentMatch[1] || '').toLowerCase();
@@ -1887,7 +1948,7 @@ function handleInputChange() {
       }
     }
 
-    const compactSquareSource = String(queryTermText || queryTerm || '')
+    const compactSquareSource = String(queryTermTextForSuggestions || queryTermForSuggestions || '')
       .replace(/\s+/g, '')
       .replace(/⁻¹/g, '^-1')
       .replace(/²/g, '^2')
@@ -1906,13 +1967,16 @@ function handleInputChange() {
     }
 
     const trigNames = ['sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'cosec'];
-    const alphaTail = (queryTermText || queryTerm || '').match(/[A-Za-z]+$/);
+    const alphaTail = (queryTermTextForSuggestions || queryTermForSuggestions || '').match(/[A-Za-z]+$/);
     const trigPrefix = alphaTail ? alphaTail[0].toLowerCase() : '';
     const typingTrigPrefix = trigPrefix && trigNames.some(name => name.startsWith(trigPrefix));
 
     if (typingTrigPrefix) {
       suggestions = suggestions.filter(s => /(?:^|\\)(sin|cos|tan|sec|csc|cot|cosec)\b/i.test(String(s)));
     }
+
+    // Keep any leading sign in the raw input text; suggestions should stay
+    // focused on the unsigned core term (e.g. "-10" suggests "10^2").
 
     suggestions = Array.from(new Set(suggestions));
     console.log('Suggestions found:', suggestions); // Debug
@@ -1925,7 +1989,7 @@ function handleInputChange() {
       let replaceEnd = rawEnd;
 
       const rawToken = searchValue.slice(rawStart, rawEnd);
-      const hasUnarySignPrefix = /^\s*[+\-−](?:\s*[+\-−])*/.test(rawToken);
+      const unarySignMatch = rawToken.match(/^\s*[+\-−](?:\s*[+\-−])*/);
 
       while (replaceStart < replaceEnd && !replaceableCharRegex.test(searchValue[replaceStart] || '')) {
         replaceStart += 1;
@@ -1934,8 +1998,10 @@ function handleInputChange() {
         replaceEnd -= 1;
       }
 
-      if (hasUnarySignPrefix) {
-        replaceStart = rawStart;
+      if (unarySignMatch) {
+        // Keep explicit leading unary signs in place and only replace
+        // the unsigned core token (e.g. +10 / -10).
+        replaceStart = rawStart + unarySignMatch[0].length;
       }
 
       if (replaceStart >= replaceEnd) {
