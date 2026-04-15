@@ -40,7 +40,7 @@ NUM_STUDENTS = 40
 NUM_TEACHERS = 2
 DAYS_SPAN = 90  # how many days of history to generate
 
-TOPICS = ["trigonometry", "algebra", "logarithms", "fractions", "vectors", "calculus", "statistics"]
+TOPICS = ["Trigonometry", "Algebra", "Logarithms", "Fractions", "Vectors", "Calculus", "Statistics"]
 TOPIC_WEIGHTS = [25, 30, 15, 10, 8, 7, 5]  # weighted distribution
 
 INPUT_METHODS = ["typing", "suggestion", "image"]
