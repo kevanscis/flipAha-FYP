@@ -1436,7 +1436,6 @@ def health_check():
 
 from analytics import *
 
-
 app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
 
 # Load routes in another folder

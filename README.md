@@ -170,20 +170,49 @@ python test_backend.py
 
 ```
 flipAha-FYP/
-├── app.py
-├── requirements.txt
+├── ARCHITECTURE.md
+├── README.md
 ├── backend/
+│   ├── app.py
+│   ├── analytics.py
 │   ├── image_processor.py
 │   ├── latex_converter.py
-│   └── session_manager.py
+│   ├── login.py
+│   ├── register.py
+│   ├── requirements.txt
+│   ├── session_manager.py
+│   └── database/
+│       ├── db.py
+│       ├── schema.py
+│       └── seed.py
 └── frontend/
-    ├── vite.config.js
+    ├── app.js
+    ├── index.html
+    ├── nav.js
+    ├── styles.css
+    ├── Dashboard/
+    │   ├── dashboard.css
+    │   ├── dashboard.html
+    │   └── dashboard.js
+    ├── equation_scanner/
+    │   ├── equation-scanner.html
+    │   └── equation-scanner.js
+    ├── imageHistory/
+    │   ├── image-history.html
+    │   └── image-history.js
+    ├── Login and Register/
+    │   ├── login.html
+    │   ├── login.js
+    │   ├── register.html
+    │   └── register.js
+    ├── scripts/
+    │   └── train_ranker.mjs
     └── src/
-        ├── App.jsx
-        └── components/
-            ├── ImageUploader.jsx
-            ├── LatexEditor.jsx
-            └── ImageGallery.jsx
+        ├── index.css
+        └── core/
+            ├── ambiguity-resolver.js
+            ├── grammar-parser.js
+            └── suggestion-ranker.js
 ```
 
 ## Architecture
