@@ -68,11 +68,25 @@ The frontend is served directly from the Flask backend (no separate build needed
 Optional - set before running the backend:
 
 ```bash
+# App/server
+export PORT=5000
+export FLASK_ENV=development
+export SECRET_KEY=change-me
+
 # Choose OCR engine (default: pix2text)
 export LATEX_OCR_ENGINE=pix2text
 
 # Or to use the older Pix2Tex model:
 export LATEX_OCR_ENGINE=pix2tex
+
+# Optional: lighter runtime mode
+export LITE_MODE=true
+
+# Optional: allow a production frontend origin
+export CORS_ORIGIN=https://your-frontend.example
+
+# Optional: admin registration secret
+export ADMIN_SECRET_CODE=ADMIN123
 
 # Run with environment variable set
 python backend/app.py
@@ -80,7 +94,13 @@ python backend/app.py
 
 ### Frontend API Configuration
 
-If the backend is on a different host/port, edit `frontend/equation-scanner.js`:
+If the backend is on a different host/port, update `API_BASE_URL` in these files:
+
+- `frontend/app.js`
+- `frontend/equation_scanner/equation-scanner.js`
+- `frontend/Dashboard/dashboard.js`
+- `frontend/Login and Register/login.js`
+- `frontend/Login and Register/register.js`
 
 ```javascript
 const API_BASE_URL = 'http://localhost:5000';  // Change this
@@ -114,22 +134,45 @@ Tips for better accuracy:
 Health:
 
 - `GET /health`
+- `GET /api/llm/health`
+
+Auth/session:
+
+- `POST /register`
+- `POST /login`
+- `POST /logout`
+- `GET /api/me`
 
 Chat:
 
 - `POST /api/questions`
+- `POST /api/equation-draft`
+- `POST /api/suggestions`
+- `POST /api/suggestion-feedback`
+- `GET /api/suggestion-feedback/training-data`
+- `GET /api/suggestion-feedback/scores`
+- `POST /api/response-quality`
+- `POST /api/log-input-method`
 
 Equation Scanner:
 
-- `POST /api/session`
 - `POST /api/upload`
-- `POST /api/crop`
 - `POST /api/convert`
 - `GET /api/images`
-- `GET /api/image/:id`
 - `DELETE /api/image/:id`
-- `PUT /api/latex`
-- `POST /api/rate`
+- `POST /api/scan-feedback`
+
+Dashboard (admin):
+
+- `GET /api/dashboard/active-users`
+- `GET /api/dashboard/active-trend`
+- `GET /api/dashboard/new-returning`
+- `GET /api/dashboard/question-volume`
+- `GET /api/dashboard/input-method-trends`
+- `GET /api/dashboard/topic-frequency`
+- `GET /api/dashboard/question-difficulty`
+- `GET /api/dashboard/suggestion-feedback`
+- `GET /api/dashboard/image-feedback`
 
 ## Troubleshooting
 
@@ -139,18 +182,15 @@ First, double-check the backend is actually running.
 
 If the backend is running but your browser still shows connection refused to `localhost`, some macOS setups resolve `localhost` to IPv6 (`::1`) while the Flask dev server is only reachable on IPv4.
 
-- Keep the repo default as-is for portability.
-- On macOS, create a local-only override file (it is already gitignored):
-    - Create `frontend/.env.local` with:
-        - `VITE_API_BASE_URL=http://127.0.0.1:5000`
-
-Then restart the frontend dev server so Vite reloads env vars.
+- Update `API_BASE_URL` constants in the frontend files (see Configuration above) to use:
+    - `http://127.0.0.1:5000`
+- Restart the backend and reload the browser.
 
 ### “Failed to fetch” / network errors
 
 - Confirm backend is running: `curl http://localhost:5000/health`
 - If that fails but you believe the backend is running, try: `curl http://127.0.0.1:5000/health`
-- Confirm frontend API base URL is correct (`VITE_API_BASE_URL`)
+- Confirm frontend API base URL is correct (`API_BASE_URL` in frontend JS files)
 - If port 5000 is stuck: `lsof -ti :5000 | xargs kill -9`
 
 ### Model is slow / hangs on first conversion
@@ -160,10 +200,11 @@ Then restart the frontend dev server so Vite reloads env vars.
 
 ## Testing
 
-Backend smoke test:
+Quick backend smoke checks:
 
 ```bash
-python test_backend.py
+curl http://127.0.0.1:5000/health
+curl http://127.0.0.1:5000/api/llm/health
 ```
 
 ## Project Structure
@@ -218,29 +259,6 @@ flipAha-FYP/
 ## Architecture
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for diagrams and data flow.
-
-Copy `.env.example` files:
-```bash
-cp .env.example .env
-cp frontend/.env.example frontend/.env
-```
-
-## 🔧 Troubleshooting
-
-### Model Loading Issues
-- First-time download takes 1-2 minutes
-- Requires ~2GB RAM
-- Falls back to TrOCR if Pix2Tex unavailable
-
-### Connection Issues
-- **CORS Error**: Verify backend on port 5000, frontend on 5173
-- **Connection Refused**: Start backend before frontend
-- **Module Not Found**: Run `pip install -r requirements.txt`
-
-### Image Upload Issues
-- Check file size (max 10MB)
-- Verify format (PNG, JPG, etc.)
-- Review quality warnings
 
 ## 🚀 Deployment
 
